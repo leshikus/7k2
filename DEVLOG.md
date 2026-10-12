@@ -209,3 +209,64 @@ stand-in, since the project does not own them.
   `sync(obj, model)`. `main.gd` loads `res://scripts/models/model_library.gd`
   when it exists. Objects with a model skip their cards; overlays still come
   from `render()`.
+
+## Low-poly 3D models (12 Oct 2026)
+
+Plan: `docs/3D_MODELS_PLAN.md`. Every sprite the game draws in the world now has a
+low-poly 3D replacement, built by headless Blender scripts from CC0 packs and
+procedural geometry. Licences are listed in `assets/models/CREDITS.md`. The game
+is meant to be sold, so only CC0 sources are used.
+
+- **Pipeline.** Blender 4.2 LTS runs headless with the scripts in `tools/blender/`.
+  `sources.py fetch` downloads the CC0 packs to `../sk2assets/src` and checks
+  each OpenGameArt page still says CC0. `build_all.py` rebuilds all ~250 models
+  into `assets/models/` (about 25 MB). Nothing is edited by hand.
+- **One rig, many skins.** All humanoids (36 human units, 8 riders, 11 Greater
+  Beings, 6 humanoid Fryhtans and the gorilla) are KayKit's 41-bone rig. Each is
+  assembled from KayKit body parts with heads shrunk 32% from chibi proportions,
+  plus procedural race headgear (nasal helms, galeas with crests, kabuto, nemes,
+  turbans, fur caps …), weapons and shields. Meshes are re-UV'd onto a 32-role
+  palette, so a race is one 512×128 texture; the palette's alpha channel marks the
+  nation-colour cells.
+- **Shared animations.** `anims/humanoid.glb` holds 95 KayKit clips plus 11
+  generated `Ride_*` clips (seated straddling legs + upper-body attack).
+  `UnitModels` maps each sprite action (S, M, A1–A3, D) to a clip and shows or
+  hides weapons per action (e.g. Normans swap sword and shield for a crossbow on
+  A2). Attack clips are time-scaled to the sprite action's length, so the hit lands
+  on the frame the simulation delivers it. Walk speed matches ground speed.
+- **Mounts and carts.** Quaternius' farm-animal rig gives five horse coats, two
+  elephants (reshaped cow with trunk, ears, tusks, caparison, howdah), the
+  rhinoceros and Chi Lin. Riders sit on a bone attachment at the saddle point
+  stored in `mounts/mounts.json`. The chariot, caravan and wagon are rigid carts
+  with spinning wheels, pulled by animated horses.
+- **Fryhtans and animals.** New skins on the humanoid rig: Kharshuf (plant-man),
+  Bregma (brain-blob on tentacles), Kerassos (horned), Minotauros (bull head,
+  tail, great axe), Grokken (bulked rock giant throwing boulders), Ezpinez (gold
+  insect knight), Exovum (white raptor). Bheema (bee) and Tarmes (crab rig) use
+  Quaternius' cute-monster rigs; the Jaguara uses the cat rig with pounce and death
+  clips keyed in Blender.
+- **Siege weapons** (12, including the Fryhtan bio-weapons): rigid models whose
+  catapult arm, cannon barrel recoil and mega-saw are animated in code against the
+  attack's progress. **Projectiles** (arrows, javelins, bolts, axes, stones,
+  cannonballs, fireballs, spit, shuriken, sparks) fly an arc and point along it.
+- **Buildings.** 9 firm types × 4 architectural styles (NE timber and stone, ME
+  Mediterranean, EA pagoda, MA domes), 12 race stables and Seats of Power
+  (cathedral, classical temple, pagoda, domed temple, stepped pyramid), 24 town
+  houses, 12 town walls (fence, wall, fortified × style), Fryhtan lairs, hive,
+  mound and the other Fryhtan buildings. Each is scaled to its footprint
+  (`buildings/footprints.json`) and rises from the ground while being built.
+  Towns fill every house slot of the original layout with a cluster of houses.
+- **Nature.** The original's 15 tree species (purple bush, bamboo, flowering,
+  autumn, willow, cypress, palm …) at three growth stages, bushes, boulders and
+  mountains stretched to each rock's footprint.
+- **Effects.** Building explosions, fires and smoke, spell flashes and Hanuman's
+  tornado are `CPUParticles3D` (the Compatibility renderer).
+- **Look.** Models use a self-lit shader with a fixed sun (the scene has no
+  lights, like the pre-lit sprites). Models load in background threads at start.
+- **Tests.** `tests/model_gallery.tscn` renders any set of units in any action
+  from the game camera (`codes=… act=S|M|A1|…|cycle shot=…`). All headless tests
+  and the input test pass.
+
+Mineral deposits are 3D piles too (`make_site`). Still drawn from the original art: ground decals (building foundations,
+lakes, rubble), the lightning bolt and rain overlays, and the
+HUD's portraits and icons.

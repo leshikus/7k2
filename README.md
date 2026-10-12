@@ -87,10 +87,14 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   terrain textures, town houses, trees, raw-material sites, unit portraits, JPEG
   screens and WAV music.
 * A 3D world with blended terrain (shader), hill shading, trees, fog of war and a
-  diamond minimap. Until 3D models exist, the original's bitmaps stand in as
-  camera-facing cards; at the original's view angle the picture is pixel-identical
-  to the original 2D projection. The camera turns in quarter turns; free rotation
-  and tilt are settings on `CameraRig` for when models replace the sprites.
+  diamond minimap. The camera turns in quarter turns; free rotation and tilt are
+  settings on `CameraRig`.
+* Low-poly 3D models for every unit, Fryhtan, Greater Being, siege weapon,
+  projectile, building, town, tree and rock, with skeletal animations for walking,
+  attacks and deaths, and particle effects for fires, explosions and spells. They
+  are built from CC0 packs and procedural geometry by `tools/blender/`
+  (`assets/models/CREDITS.md`). Objects without a model fall back to the original's
+  bitmaps, drawn as camera-facing cards.
 * All 12 human races with their infantry, special units, civilians and Greater
   Beings; 7 Fryhtan species with their lairs; computer-run Fryhtan kingdoms;
   siege weapons.
@@ -128,6 +132,9 @@ scripts/sim/      defs.gd (rules/constants), game.gd (world, time, links, fog,
                   nation.gd, ai.gd, world_map.gd (grid, A*), iso.gd (projection)
 scripts/view/     terrain shader, fog, ground layer, trees, placement preview
 scripts/ui/       start menu, HUD, minimap, selection box
+scripts/models/   model_library.gd (3D models for View3D), unit_models.gd (clips, weapons)
+assets/models/    generated low-poly glTF models and their credits
+tools/blender/    headless Blender scripts that build assets/models from CC0 packs
 scripts/main.gd   scene root: camera, input, orders, music
 tests/            headless tests (require the game data)
 ```

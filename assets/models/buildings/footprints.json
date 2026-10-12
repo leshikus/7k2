@@ -1,0 +1,298 @@
+{
+"ALCHEMY": [
+6,
+6
+],
+"ANIMAL": [
+6,
+6
+],
+"BASE_CARTH": [
+6,
+6
+],
+"BASE_CELTIC": [
+6,
+6
+],
+"BASE_CHINESE": [
+6,
+6
+],
+"BASE_EGYPTIAN": [
+6,
+6
+],
+"BASE_GREEK": [
+6,
+6
+],
+"BASE_INDIAN": [
+6,
+6
+],
+"BASE_JAPANESE": [
+6,
+6
+],
+"BASE_MONGOL": [
+6,
+6
+],
+"BASE_NORMAN": [
+6,
+6
+],
+"BASE_PERSIAN": [
+6,
+6
+],
+"BASE_ROMAN": [
+6,
+6
+],
+"BASE_VIKING": [
+6,
+6
+],
+"BEE": [
+5,
+5
+],
+"CAMP_EA": [
+6,
+6
+],
+"CAMP_MA": [
+6,
+6
+],
+"CAMP_ME": [
+6,
+6
+],
+"CAMP_NE": [
+6,
+6
+],
+"FACTORY_EA": [
+6,
+6
+],
+"FACTORY_MA": [
+6,
+6
+],
+"FACTORY_ME": [
+6,
+6
+],
+"FACTORY_NE": [
+6,
+6
+],
+"FORTRESS": [
+4,
+4
+],
+"FORT_EA": [
+6,
+6
+],
+"FORT_MA": [
+6,
+6
+],
+"FORT_ME": [
+6,
+6
+],
+"FORT_NE": [
+6,
+6
+],
+"INCUBAT": [
+6,
+6
+],
+"INN_EA": [
+5,
+5
+],
+"INN_MA": [
+5,
+5
+],
+"INN_ME": [
+5,
+5
+],
+"INN_NE": [
+5,
+5
+],
+"LAIR": [
+6,
+6
+],
+"LISHORR": [
+2,
+2
+],
+"MAGIC": [
+5,
+5
+],
+"MARKET_EA": [
+5,
+5
+],
+"MARKET_MA": [
+5,
+5
+],
+"MARKET_ME": [
+5,
+5
+],
+"MARKET_NE": [
+5,
+5
+],
+"MINE_EA": [
+6,
+6
+],
+"MINE_MA": [
+6,
+6
+],
+"MINE_ME": [
+6,
+6
+],
+"MINE_NE": [
+6,
+6
+],
+"OFF_BLD1": [
+6,
+6
+],
+"OFF_BLD2": [
+6,
+6
+],
+"OFF_BLD3": [
+6,
+6
+],
+"OFF_BLD4": [
+5,
+5
+],
+"RESEARCH_EA": [
+5,
+5
+],
+"RESEARCH_MA": [
+5,
+5
+],
+"RESEARCH_ME": [
+5,
+5
+],
+"RESEARCH_NE": [
+5,
+5
+],
+"SPY_EA": [
+5,
+5
+],
+"SPY_MA": [
+5,
+5
+],
+"SPY_ME": [
+5,
+5
+],
+"SPY_NE": [
+5,
+5
+],
+"STABLE_CARTH": [
+6,
+6
+],
+"STABLE_CELTIC": [
+6,
+6
+],
+"STABLE_CHINESE": [
+6,
+6
+],
+"STABLE_EGYPTIAN": [
+6,
+6
+],
+"STABLE_GREEK": [
+6,
+6
+],
+"STABLE_INDIAN": [
+6,
+6
+],
+"STABLE_JAPANESE": [
+6,
+6
+],
+"STABLE_MONGOL": [
+6,
+6
+],
+"STABLE_NORMAN": [
+6,
+6
+],
+"STABLE_PERSIAN": [
+6,
+6
+],
+"STABLE_ROMAN": [
+6,
+6
+],
+"STABLE_VIKING": [
+6,
+6
+],
+"TERMITE": [
+5,
+5
+],
+"WAR_EA": [
+6,
+6
+],
+"WAR_MA": [
+6,
+6
+],
+"WAR_ME": [
+6,
+6
+],
+"WAR_NE": [
+6,
+6
+],
+"WLISHORR": [
+2,
+2
+]
+}
