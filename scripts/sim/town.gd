@@ -198,7 +198,7 @@ func town_shoot() -> void:
 	var c := center_loc()
 	var best: Unit = null
 	var best_d := 6.0 + 3.0
-	for u in g.units:
+	for u in g.units_near(c, best_d + 4.0):
 		if u.dead or u.inside_firm or not g.is_hostile(self, u):
 			continue
 		if nation_id == 0 and u.nation_id > 0 and resistance_to(u.nation_id) < 1.0:

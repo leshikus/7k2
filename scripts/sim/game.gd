@@ -33,6 +33,8 @@ var reveal_all := false
 var over := false
 var _accum := 0.0
 
+const GRID_SHIFT := 3                 # unit grid blocks of 8 x 8 locations
+var unit_grid := {}                   # Vector2i block -> Array[Unit], rebuilt every frame
 var fog := PackedByteArray()        # 0 unexplored, 1 explored, 2 visible (player)
 var terrain_view: TerrainView
 var ground_layer: GroundLayer
@@ -967,11 +969,25 @@ func is_hostile(a: GameObj, b: GameObj) -> bool:
 
 
 ## Nearest hostile unit (or, for Fryhtans, any human object) within `range`.
+## Units outside buildings whose cell lies within `r` of `c` (a superset: callers
+## still check the exact distance). Uses the grid built at the start of the frame.
+func units_near(c: Vector2, r: float) -> Array:
+	var out: Array = []
+	var b0 := Vector2i(floori(c.x - r) >> GRID_SHIFT, floori(c.y - r) >> GRID_SHIFT)
+	var b1 := Vector2i(floori(c.x + r) >> GRID_SHIFT, floori(c.y + r) >> GRID_SHIFT)
+	for by in range(b0.y, b1.y + 1):
+		for bx in range(b0.x, b1.x + 1):
+			var l = unit_grid.get(Vector2i(bx, by))
+			if l != null:
+				out.append_array(l)
+	return out
+
+
 func find_enemy_near(obj: GameObj, range: float) -> GameObj:
 	var best: GameObj = null
 	var best_d := range + 0.01
 	var c := obj.center_loc()
-	for u in units:
+	for u in units_near(c, range + 2.0):
 		if u.dead or u.inside_firm or u == obj or u.has_meta("hidden") or not is_hostile(obj, u):
 			continue
 		var d := c.distance_to(u.center_loc())
@@ -1066,10 +1082,16 @@ var unit_cells := {}       # cell -> number of standing units, rebuilt every fra
 func sim_frame() -> void:
 	frame += 1
 	unit_cells.clear()
+	unit_grid.clear()
 	for u in units:
 		if not u.dead and u.inside_firm == null:
 			var c := u.cell()
 			unit_cells[c] = unit_cells.get(c, 0) + 1
+			var b := Vector2i(c.x >> GRID_SHIFT, c.y >> GRID_SHIFT)
+			if unit_grid.has(b):
+				unit_grid[b].append(u)
+			else:
+				unit_grid[b] = [u]
 	for u in units.duplicate():
 		if is_instance_valid(u):
 			u.sim_frame()
@@ -1460,8 +1482,10 @@ func military_strength(nid: int) -> float:
 	return s
 
 
-## A kingdom left without towns or buildings for 60 days surrenders: its
-## remaining troops disband (NationBase::think_surrender / defeated()).
+## A kingdom that has lost all its towns and buildings and stays without them for
+## 60 days surrenders: its remaining troops disband (NationBase::think_surrender /
+## defeated()). Armies that start without a home (scenario invaders) are exempt
+## until they win one; they live as long as they have units.
 func _check_homeless() -> void:
 	for n in nations:
 		if not n.alive:
@@ -1471,6 +1495,9 @@ func _check_homeless() -> void:
 			has_base = towns.any(func(t): return t.nation_id == n.id)
 		if has_base:
 			n.homeless_days = 0
+			n.had_base = true
+			continue
+		if not n.had_base:
 			continue
 		n.homeless_days += 1
 		if n.homeless_days < 60:

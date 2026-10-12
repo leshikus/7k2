@@ -86,7 +86,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"king": _id(n.king), "tech": n.tech, "research_progress": n.research_progress,
 		"relations": _int_keys_to_str(n.relations), "prayer_points": n.prayer_points,
 		"income_year": n.income_year, "expense_year": n.expense_year,
-		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points,
+		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 	}
 	if n.ai:
 		d["ai"] = {"war_target": n.ai.war_target, "war_start_day": n.ai.war_start_day, "aggression": n.ai.aggression}
@@ -194,6 +194,8 @@ static func load_into(g: Game, slot: String) -> String:
 		n.is_fryhtan = nd.get("is_fryhtan", false)
 		n.monster_code = nd.get("monster_code", "")
 		n.live_points = float(nd.get("live_points", 0.0))
+		n.had_base = bool(nd.get("had_base", true))
+		n.homeless_days = int(nd.get("homeless_days", 0))
 		if n.is_ai:
 			n.ai = FryhtanAI.new(n, g) if n.is_fryhtan else NationAI.new(n, g)
 			var ad: Dictionary = nd.get("ai", {})

@@ -26,6 +26,9 @@ var _last_close := -999
 func next_day(day: int) -> void:
 	if not n.alive or (day + n.id * 3) % 7 != 0:
 		return
+	if my_towns().is_empty() and my_firms().is_empty():
+		_homeless(day)
+		return
 	_garrisons()
 	_economy(day)
 	_expand(day)
@@ -418,6 +421,53 @@ func _military(day: int) -> void:
 				if f.code in Firm.MILITARY_FIRMS and not f.under_construction and f.soldiers.size() < f.capacity():
 					u.order_enter(f)
 					break
+
+
+## An army without a home (a scenario's invaders, or the remains of a beaten
+## kingdom): win a base by wearing down the nearest independent town until it
+## surrenders, otherwise make war on the nearest kingdom it is not at peace with.
+func _homeless(day: int) -> void:
+	var army := g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.inside_firm == null and u.can_attack())
+	if army.is_empty():
+		return
+	var c := Vector2.ZERO
+	for u in army:
+		c += u.center_loc()
+	c /= army.size()
+	if attack_target != null and is_instance_valid(attack_target) and not attack_target.dead and attack_target.nation_id != n.id:
+		for u in army:
+			if u.order == Unit.Order.IDLE and u.rank != Defs.Rank.KING:
+				u.order_attack(attack_target)
+		return
+	var best: GameObj = null
+	var best_d := INF
+	for t in g.towns:
+		if t.nation_id == 0 and not t.dead:
+			var d := c.distance_to(t.center_loc())
+			if d < best_d:
+				best_d = d
+				best = t
+	if best == null or best_d > 60.0:
+		# no village to take nearby: attack the closest rival not at peace with us
+		for o in g.nations:
+			if o.id == n.id or not o.alive or n.relation(o.id) >= Defs.Relation.PEACE:
+				continue
+			for obj in g.firms + g.towns:
+				if obj.nation_id == o.id and not obj.dead:
+					var d := c.distance_to(obj.center_loc())
+					if d < best_d:
+						best_d = d
+						best = obj
+		if best != null and best.nation_id > 0 and n.relation(best.nation_id) != Defs.Relation.WAR:
+			g.declare_war(n.id, best.nation_id)
+			war_target = best.nation_id
+			war_start_day = day
+	attack_target = best
+	if best == null:
+		return
+	for u in army:
+		if u.rank != Defs.Rank.KING or army.size() == 1:
+			u.order_attack(best)
 
 
 func _pick_target() -> GameObj:

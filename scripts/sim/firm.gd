@@ -246,7 +246,7 @@ func _tower_shoot() -> void:
 	var g := Game.inst
 	var best: Unit = null
 	var best_d: float = spec[1]
-	for u in g.units:
+	for u in g.units_near(center_loc(), spec[1] + maxf(w, h)):
 		if u.dead or u.inside_firm or not g.is_hostile(self, u):
 			continue
 		var d := distance_to(u)

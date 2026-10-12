@@ -23,6 +23,7 @@ var monster_code := ""        # its species (unit sprite code)
 var live_points := 0.0        # Fryhtan currency for breeding, gained by killing
 var god_summoned := false
 var homeless_days := 0        # days without any town or building
+var had_base := false         # has owned a town or building (scenario armies start without)
 
 # yearly statistics, reset every January
 var income_year := 0.0

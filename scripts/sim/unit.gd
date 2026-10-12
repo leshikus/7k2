@@ -397,6 +397,9 @@ func _target_gone() -> bool:
 		return true
 	if target is Unit and (target as Unit).inside_firm != null:
 		return true
+	# a town or building that has just surrendered to us
+	if target.nation_id == nation_id and nation_id != 0:
+		return true
 	return false
 
 
@@ -426,16 +429,21 @@ func _do_attack() -> bool:
 		return false
 	repath_timer -= 1
 	if repath_timer <= 0 or path_i >= path.size():
-		repath_timer = 15
+		repath_timer = 15 + obj_id % 7
 		var dest: Vector2i
 		if target is Unit:
 			dest = (target as Unit).cell()
 		else:
 			dest = Game.inst.world.adjacent_to_rect(target.footprint(), cell())
-		_path_to(dest)
-		if path.is_empty() and dist > float(att["range"]):
-			stop()
-			return false
+		# keep the current path while it still leads near the target: a path search
+		# per attacker every few frames dominated big battles
+		var moved := float((dest - goal).length_squared())
+		var far := float((dest - cell()).length_squared())
+		if path_i >= path.size() or moved > 4.0 + far * 0.04:
+			_path_to(dest)
+			if path.is_empty() and dist > float(att["range"]):
+				stop()
+				return false
 	_step_move()
 	return true
 
