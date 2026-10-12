@@ -70,6 +70,8 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | B | Build menu for the selected unit |
 | WASD / arrows / screen edge | Scroll |
 | Mouse wheel | Zoom |
+| Q / E | Turn the view a quarter turn |
+| R / F | Tilt the view (locked to the original angle while sprites are used) |
 | Space | Pause, `+` / `-` change speed |
 | Ctrl+1–9, 1–9 | Assign / recall unit groups |
 | H | Centre on your king |
@@ -84,8 +86,11 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   `STD.SET`, palettes, RLE sprite and building bitmaps with nation-colour remapping,
   terrain textures, town houses, trees, raw-material sites, unit portraits, JPEG
   screens and WAV music.
-* Isometric world with blended terrain (shader), hill shading, trees, fog of war
-  and a diamond minimap.
+* A 3D world with blended terrain (shader), hill shading, trees, fog of war and a
+  diamond minimap. Until 3D models exist, the original's bitmaps stand in as
+  camera-facing cards; at the original's view angle the picture is pixel-identical
+  to the original 2D projection. The camera turns in quarter turns; free rotation
+  and tilt are settings on `CameraRig` for when models replace the sprites.
 * All 12 human races with their infantry, special units, civilians and Greater
   Beings; 7 Fryhtan species with their lairs; computer-run Fryhtan kingdoms;
   siege weapons.

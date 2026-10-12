@@ -175,3 +175,37 @@ of the running game.
   hit point a day instead of driving the kingdom into debt. The AI closes at most one
   useless building a month and keeps towers and forts unless deeply in debt. This
   stopped Carthage in Jaws selling off its 17 Testudos in the first months.
+
+## Rendering moved to 3D (12 Oct 2026, night)
+
+The world is now a 3D scene (`scripts/view3d/`). The original sprites are only a
+stand-in, since the project does not own them.
+
+- **Simulation and drawing are separated.** Every object's `_draw()` became
+  `render(cv)`, which draws onto whatever canvas it is given. The 2D nodes stay
+  in the tree but hidden. `View3D` replays their `render()` into a
+  `DrawRecorder` each frame.
+- **Cards and decals.** Bitmaps become camera-facing `Sprite3D` cards standing on
+  the object's ground anchor, drawn without depth test and sorted by that anchor,
+  which reproduces the original draw order. Ground art (foundations, deposits,
+  lakes, rubble) becomes flat decals. Lines, bars and labels go to a screen
+  overlay (`View3DOverlay`).
+- **Terrain and fog.** The terrain is a plane using the 2D terrain shader. Fog is a
+  last full-screen pass that darkens each pixel by the fog of the ground under it,
+  as the 2D fog layer did.
+- **Pixel-identical at the original angle.** Screenshots of the same game match
+  the 2D renderer on 100% of pixels (within 8 levels): fogged, revealed, terrain
+  and objects.
+- **Camera.** `CameraRig` keeps the 2D camera's API (`iso_pos`, `zoom`, `offset`).
+  It is a free orbit camera, limited for now: `yaw_step` = 90° (Q/E) and pitch
+  locked at 30° (R/F within `pitch_min`..`pitch_max`). `--free-camera` lifts the
+  limits for testing; `--yaw=<deg>` starts turned.
+  - `CameraRig.direction_map()` remaps unit facings so sprites face their way of
+    travel after a turn.
+- **Picking.** Mouse rays hit the ground plane. Units are picked by their
+  projected figure, everything else by the ground location. The input test
+  drives the real scene and passes. Headless tests now set a 1280×800 window.
+- **Model hook.** `View3D.model_provider` takes any object with `make(obj)` and
+  `sync(obj, model)`. `main.gd` loads `res://scripts/models/model_library.gd`
+  when it exists. Objects with a model skip their cards; overlays still come
+  from `render()`.

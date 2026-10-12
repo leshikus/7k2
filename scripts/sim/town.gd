@@ -640,22 +640,26 @@ func _check_empty() -> void:
 # ------------------------------------------------------------------- draw ---
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	var base := Iso.to_screen(Vector2(x1, y1)) - position
 	var col := nation_color()
 	if selected:
 		var p := PackedVector2Array([
 			base, Iso.to_screen(Vector2(x1 + 6, y1)) - position,
 			Iso.to_screen(Vector2(x1 + 6, y1 + 6)) - position, Iso.to_screen(Vector2(x1, y1 + 6)) - position, base])
-		draw_polyline(p, col.lightened(0.3), 2.0)
+		cv.draw_polyline(p, col.lightened(0.3), 2.0)
 		for f in linked_firms:
-			draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, f.nation_color().lightened(0.3), 1.5)
+			cv.draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, f.nation_color().lightened(0.3), 1.5)
 	var slots: Array = layout.get("slots", [])
 	_pick_layout()
 	var wall_origin := Iso.to_screen(Vector2(x1, y1)) - position
 	var wb := Assets.town_wall(race, wall_level, wall_hp if wall_level > 0 else 1.0, wall_max_hp() if wall_level > 0 else 1.0, "B")
 	if not wb.is_empty():
-		draw_texture(wb[0], wall_origin + wb[1])
-	_draw_planned_wall(wall_origin, "B")
+		cv.draw_texture(wb[0], wall_origin + wb[1])
+	_draw_planned_wall(cv, wall_origin, "B")
 	for s in slots:
 		# Slot positions are world pixels from the town's top-left location (Town::draw).
 		var slot_loc := Vector2(x1 + s["x"] / 32.0, y1 + s["y"] / 32.0)
@@ -666,30 +670,30 @@ func _draw() -> void:
 				if not hb.is_empty():
 					# TownBuild::draw: the slot is the building's centre; anchor half its size back
 					var anchor := Iso.to_screen(slot_loc - hb[2] * 0.5) - position
-					draw_texture(hb[0], anchor + hb[1])
+					cv.draw_texture(hb[0], anchor + hb[1])
 			"PLANT":
 				if not Assets.town_plants.is_empty():
 					var tex: Texture2D = Assets.town_plants[(obj_id + int(s["x"])) % Assets.town_plants.size()]
 					# PlantBitmap::draw_at: centred, base 15px below the slot point
-					draw_texture(tex, at + Vector2(-tex.get_width() / 2, -tex.get_height() + 15))
+					cv.draw_texture(tex, at + Vector2(-tex.get_width() / 2, -tex.get_height() + 15))
 			"FLAG":
 				# Animated race flag in the owner's colour (Town::draw_flag); none for independents.
 				if nation_id > 0:
 					var flag := Assets.spict("FLAG%02d0%d" % [_race_id(), (Game.inst.frame / 3 + obj_id) % 10], col)
 					if flag:
-						draw_texture(flag, at + Vector2(-9, -97))
+						cv.draw_texture(flag, at + Vector2(-9, -97))
 	var wf := Assets.town_wall(race, wall_level, wall_hp if wall_level > 0 else 1.0, wall_max_hp() if wall_level > 0 else 1.0, "F")
 	if not wf.is_empty():
-		draw_texture(wf[0], wall_origin + wf[1])
-	_draw_planned_wall(wall_origin, "F")
+		cv.draw_texture(wf[0], wall_origin + wf[1])
+	_draw_planned_wall(cv, wall_origin, "F")
 	if selected and wall_level > 0:
-		draw_hp_bar(Vector2(0, -56), 60)
+		draw_hp_bar_on(cv, Vector2(0, -56), 60)
 	var font := ThemeDB.fallback_font
 	var label := "%s (%d)" % [town_name, population]
 	var size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, 13)
 	var lp := Vector2(-size.x / 2.0, -70)
-	draw_rect(Rect2(lp + Vector2(-4, -12), Vector2(size.x + 8, 16)), Color(0, 0, 0, 0.55))
-	draw_string(font, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col.lightened(0.4))
+	cv.draw_rect(Rect2(lp + Vector2(-4, -12), Vector2(size.x + 8, 16)), Color(0, 0, 0, 0.55))
+	cv.draw_string(font, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col.lightened(0.4))
 
 
 func _race_id() -> int:
@@ -699,7 +703,7 @@ func _race_id() -> int:
 	return 1
 
 
-func draw_ground(ci: CanvasItem) -> void:
+func draw_ground(ci) -> void:
 	var tex := Assets.picture("I_TPICT1.RES", layout.get("ground", "TOWNGD1"))
 	if tex:
 		# TOWN_ADJ_OFFSET_X/Y in otowndrw.cpp: x of the bottom-left corner, y of the top corner
@@ -707,9 +711,9 @@ func draw_ground(ci: CanvasItem) -> void:
 
 
 ## A wall under construction is shown as a see-through outline of the wall being built.
-func _draw_planned_wall(origin: Vector2, part: String) -> void:
+func _draw_planned_wall(cv, origin: Vector2, part: String) -> void:
 	if target_wall_level <= wall_level:
 		return
 	var w := Assets.town_wall(race, target_wall_level, 1.0, 1.0, part)
 	if not w.is_empty():
-		draw_texture(w[0], origin + w[1], Color(1, 1, 1, 0.35 + 0.4 * wall_progress / MAX_WALL_PROGRESS))
+		cv.draw_texture(w[0], origin + w[1], Color(1, 1, 1, 0.35 + 0.4 * wall_progress / MAX_WALL_PROGRESS))

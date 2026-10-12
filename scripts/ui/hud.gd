@@ -14,7 +14,7 @@ signal load_requested
 const PANEL_W := 300
 
 var game: Game
-var camera: Camera2D
+var camera: CameraRig
 
 var top_label: RichTextLabel
 var speed_buttons: Array[Button] = []
@@ -39,7 +39,7 @@ var _last_sel_key := ""
 var _messages: Array = []
 
 
-func setup(g: Game, cam: Camera2D) -> void:
+func setup(g: Game, cam: CameraRig) -> void:
 	game = g
 	camera = cam
 	_build_ui()

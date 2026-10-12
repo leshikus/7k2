@@ -104,8 +104,8 @@ func is_visible_to_player() -> bool:
 	return false
 
 
-func draw_hp_bar(at: Vector2, width: float) -> void:
+func draw_hp_bar_on(cv, at: Vector2, width: float) -> void:
 	var f := clampf(hp / max_hp, 0.0, 1.0)
-	draw_rect(Rect2(at - Vector2(width * 0.5, 0), Vector2(width, 4)), Color(0, 0, 0, 0.7))
+	cv.draw_rect(Rect2(at - Vector2(width * 0.5, 0), Vector2(width, 4)), Color(0, 0, 0, 0.7))
 	var c := Color(0.2, 0.9, 0.2) if f > 0.5 else (Color(0.95, 0.8, 0.1) if f > 0.25 else Color(0.95, 0.2, 0.1))
-	draw_rect(Rect2(at - Vector2(width * 0.5 - 1, -1), Vector2((width - 2) * f, 2)), c)
+	cv.draw_rect(Rect2(at - Vector2(width * 0.5 - 1, -1), Vector2((width - 2) * f, 2)), c)

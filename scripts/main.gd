@@ -3,11 +3,14 @@ extends Node
 
 const EDGE_SCROLL := 6
 const PAN_SPEED := 900.0
+const MODEL_LIBRARY := "res://scripts/models/model_library.gd"
 
 var menu: MainMenu
 var game: Game
 var hud: Hud
-var camera: Camera2D
+var camera: CameraRig
+var view3d: View3D
+var overlay_layer: CanvasLayer
 var ghost: BuildGhost
 var select_layer: CanvasLayer
 var select_box: SelectBox
@@ -59,6 +62,13 @@ func _ready() -> void:
 			game.speed = a.substr(13).to_float()
 		elif a.begins_with("--demo=") and game:
 			_demo(a.substr(7))
+		elif a.begins_with("--yaw=") and camera:
+			camera.turn(roundi(a.substr(6).to_float() / 90.0))
+			camera.yaw = camera._yaw_target
+		elif a.begins_with("--free-camera") and camera:
+			camera.yaw_step = 0.0
+			camera.pitch_min = 15.0
+			camera.pitch_max = 89.0
 		elif a == "--reveal" and game:
 			game.reveal_all = true
 			game._update_fog()
@@ -84,7 +94,7 @@ func _demo(what: String) -> void:
 				for u in mine:
 					if u: u.order_attack(m)
 				m.order_attack(mine[i])
-			camera.position = Iso.to_screen(Vector2(c) + Vector2(3, 2))
+			camera.iso_pos = Iso.to_screen(Vector2(c) + Vector2(3, 2))
 			camera.zoom = Vector2(1.4, 1.4)
 			_set_selection(mine.filter(func(u): return u != null))
 			var grid := GridOverlay.new()
@@ -114,7 +124,7 @@ func _demo(what: String) -> void:
 			var grid := GridOverlay.new()
 			grid.rect = Rect2i(base - Vector2i(2, 2), Vector2i(32, 10))
 			game.add_child(grid)
-			camera.position = Iso.to_screen(Vector2(base) + Vector2(14, 3))
+			camera.iso_pos = Iso.to_screen(Vector2(base) + Vector2(14, 3))
 			camera.zoom = Vector2(0.7, 0.7)
 		"towns":
 			# one town of every race, selected, over the location grid
@@ -147,12 +157,12 @@ func _demo(what: String) -> void:
 			var grid := GridOverlay.new()
 			grid.rect = area
 			game.add_child(grid)
-			camera.position = Iso.to_screen(Vector2(base) + Vector2(24, 7))
+			camera.iso_pos = Iso.to_screen(Vector2(base) + Vector2(24, 7))
 			camera.zoom = Vector2(0.6, 0.6)
 			for a in OS.get_cmdline_user_args():
 				if a.begins_with("--focus="):
 					var t: Town = made[a.substr(8).to_int()]
-					camera.position = Iso.to_screen(t.center_loc() + Vector2(2, 0))
+					camera.iso_pos = Iso.to_screen(t.center_loc() + Vector2(2, 0))
 					camera.zoom = Vector2(1.5, 1.5)
 		"dirs":
 			# eight soldiers each walking one way, to check sprite facings
@@ -176,7 +186,7 @@ func _demo(what: String) -> void:
 				u.order_move(c + steps[i] * 7)
 				dbg.pairs.append([u, Vector2(c + steps[i] * 7)])
 			game.add_child(dbg)
-			camera.position = Iso.to_screen(Vector2(c))
+			camera.iso_pos = Iso.to_screen(Vector2(c))
 			camera.zoom = Vector2(1.3, 1.3)
 		"destroy":
 			# a burning camp and a building being destroyed, for effect checks
@@ -190,10 +200,10 @@ func _demo(what: String) -> void:
 			var fort: Firm = game.firms.filter(func(x): return x.code == "FORT" and x.nation_id == p.id)[0]
 			var timer := get_tree().create_timer(1.0)
 			timer.timeout.connect(func(): fort.die(null))
-			camera.position = Iso.to_screen((c1.center_loc() + fort.center_loc()) * 0.5)
+			camera.iso_pos = Iso.to_screen((c1.center_loc() + fort.center_loc()) * 0.5)
 			camera.zoom = Vector2(0.8, 0.8)
 		"overview":
-			camera.position = Iso.to_screen(Vector2(game.world.w, game.world.h) * 0.5)
+			camera.iso_pos = Iso.to_screen(Vector2(game.world.w, game.world.h) * 0.5)
 			camera.zoom = Vector2(0.4, 0.4)
 		"rocks":
 			# close-up of the largest mountain group
@@ -202,7 +212,7 @@ func _demo(what: String) -> void:
 				if rk.tex and (best == null or rk.w * rk.h > best.w * best.h):
 					best = rk
 			if best:
-				camera.position = Iso.to_screen(Vector2(best.x1 + best.w / 2.0, best.y1 + best.h / 2.0))
+				camera.iso_pos = Iso.to_screen(Vector2(best.x1 + best.w / 2.0, best.y1 + best.h / 2.0))
 				camera.zoom = Vector2(0.9, 0.9)
 		"fryhtan":
 			for i in 3000:
@@ -212,7 +222,7 @@ func _demo(what: String) -> void:
 				var lairs: Array = game.firms.filter(func(f): return f.nation_id == fry[0].id)
 				if not lairs.is_empty():
 					var newest: Firm = lairs.back()
-					camera.position = Iso.to_screen(newest.center_loc())
+					camera.iso_pos = Iso.to_screen(newest.center_loc())
 					_set_selection([newest])
 			camera.zoom = Vector2(0.75, 0.75)
 		"god":
@@ -226,15 +236,15 @@ func _demo(what: String) -> void:
 			var god2 := game.spawn_unit(rg["unit"], p.id, c + Vector2i(4, -2), 100.0)
 			god2.cast_power()
 			_set_selection([god])
-			camera.position = Iso.to_screen(Vector2(c))
+			camera.iso_pos = Iso.to_screen(Vector2(c))
 			camera.zoom = Vector2(1.2, 1.2)
 		"storm":
 			game.weather.cloud_str = 10
 			game.weather.cloud_type = Weather.RAIN_CLOUD | Weather.LIGHTNING_CLOUD
 			game.weather.cloud_len = 99
 			var home: Town = game.towns.filter(func(t): return t.nation_id == p.id)[0]
-			camera.position = Iso.to_screen(home.center_loc())
-			get_tree().create_timer(1.6).timeout.connect(func(): game._lightning_strike(); _on_lightning(camera.position + Vector2(-120, 60)))
+			camera.iso_pos = Iso.to_screen(home.center_loc())
+			get_tree().create_timer(1.6).timeout.connect(func(): game._lightning_strike(); _on_lightning(camera.iso_pos + Vector2(-120, 60)))
 		"spies":
 			var home: Town = game.towns.filter(func(t): return t.nation_id == p.id)[0]
 			home.loyalty = 80.0
@@ -246,7 +256,7 @@ func _demo(what: String) -> void:
 			if s1 and not indep.is_empty():
 				game.spy_enter(s1, indep[0])
 			_set_selection([col])
-			camera.position = Iso.to_screen(col.center_loc())
+			camera.iso_pos = Iso.to_screen(col.center_loc())
 			hud.toggle_spies()
 		"gallery":
 			# every work building in all four architectural styles, for visual checks
@@ -273,7 +283,7 @@ func _demo(what: String) -> void:
 					var f := game.spawn_firm(codes[ci], p.id, race_code, at, true)
 					if f:
 						f.anim_index = 2 % maxi(1, f.build["frames"].size())
-			camera.position = Iso.to_screen(Vector2(base) + Vector2(22, 14))
+			camera.iso_pos = Iso.to_screen(Vector2(base) + Vector2(22, 14))
 			camera.zoom = Vector2(0.55, 0.55)
 			if "--outline" in OS.get_cmdline_user_args():
 				_set_selection(game.firms.filter(func(x): return x.nation_id == p.id))
@@ -303,12 +313,14 @@ func _show_menu() -> void:
 
 
 func _teardown() -> void:
-	for n in [hud, game, camera, select_layer, menu]:
+	for n in [hud, game, camera, view3d, overlay_layer, select_layer, menu]:
 		if n and is_instance_valid(n):
 			n.queue_free()
 	hud = null
 	game = null
 	camera = null
+	view3d = null
+	overlay_layer = null
 	menu = null
 	ghost = null
 	build_code = ""
@@ -363,10 +375,23 @@ var _shake := 0.0
 ## Camera, HUD and input layers around a started or loaded game.
 func _attach_game() -> void:
 	_last_autosave_year = game.day / 365
-	camera = Camera2D.new()
+	camera = CameraRig.new()
 	add_child(camera)
 	camera.make_current()
 	sfx.camera = camera
+	# the world is shown in 3D; the simulation's 2D nodes only provide the drawing
+	game.visible = false
+	view3d = View3D.new()
+	add_child(view3d)
+	overlay_layer = CanvasLayer.new()
+	overlay_layer.layer = 0
+	var overlay := View3DOverlay.new()
+	overlay_layer.add_child(overlay)
+	add_child(overlay_layer)
+	view3d.setup(game, camera, overlay)
+	# 3D models replacing the sprite cards, when the model library is present
+	if ResourceLoader.exists(MODEL_LIBRARY):
+		view3d.model_provider = load(MODEL_LIBRARY).new()
 	game.shake.connect(func(strength): _shake = maxf(_shake, strength))
 	game.sound_event.connect(func(k, c, a, wp): sfx.play_event(k, c, a, wp))
 	var p := game.player()
@@ -374,15 +399,16 @@ func _attach_game() -> void:
 	if home.is_empty():
 		home = game.firms.filter(func(f): return f.nation_id == p.id)
 	if not home.is_empty():
-		camera.position = Iso.to_screen(home[0].center_loc()) + Vector2(150, 0)
+		camera.iso_pos = Iso.to_screen(home[0].center_loc()) + Vector2(150, 0)
 	ghost = BuildGhost.new()
 	game.add_child(ghost)
 	ghost.visible = false
+	view3d.extra_nodes = [ghost]
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(game, camera)
 	hud.build_requested.connect(_begin_build)
-	hud.center_on.connect(func(l): camera.position = Iso.to_screen(l))
+	hud.center_on.connect(func(l): camera.iso_pos = Iso.to_screen(l))
 	hud.menu_new_game.connect(_show_menu)
 	hud.move_selected_to.connect(func(l):
 		var own: Array = game.selected.filter(func(o): return o is Unit and o.nation_id == game.player_id and not o.dead and o.inside_firm == null)
@@ -466,11 +492,9 @@ func _process(delta: float) -> void:
 			v.y -= 1
 		elif mp.y > vs.y - EDGE_SCROLL:
 			v.y += 1
-	camera.position += v * PAN_SPEED * delta / camera.zoom.x
-	var w := game.world.w
-	var h := game.world.h
-	camera.position.x = clampf(camera.position.x, -h * Iso.HALF_W, w * Iso.HALF_W)
-	camera.position.y = clampf(camera.position.y, 0.0, (w + h) * Iso.HALF_H)
+	if v != Vector2.ZERO:
+		camera.pan(v * PAN_SPEED * delta)
+	camera.clamp_to(game.world.w, game.world.h)
 	_update_ghost()
 	if _shake > 0.1:
 		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake
@@ -505,7 +529,7 @@ func _update_rain_sound() -> void:
 
 
 func _on_lightning(world_pos: Vector2) -> void:
-	var view := Rect2(camera.position - get_viewport().get_visible_rect().size / camera.zoom * 0.6, get_viewport().get_visible_rect().size / camera.zoom * 1.2)
+	var view := Rect2(camera.iso_pos - get_viewport().get_visible_rect().size / camera.zoom * 0.6, get_viewport().get_visible_rect().size / camera.zoom * 1.2)
 	if not view.has_point(world_pos):
 		return
 	rain_layer.lightning_flash()
@@ -524,7 +548,24 @@ func _on_lightning(world_pos: Vector2) -> void:
 
 
 func _world_mouse() -> Vector2:
-	return get_viewport().get_canvas_transform().affine_inverse() * _mouse_pos
+	return Iso.to_screen(camera.screen_to_loc(_mouse_pos))
+
+
+## The object under the mouse: units by their on-screen figure, then whatever
+## building, town or site stands on the ground location under the cursor.
+func _pick() -> GameObj:
+	var best: GameObj = null
+	var best_d := 26.0 * camera.zoom.x
+	for u in game.units:
+		if u.dead or u.inside_firm or not u.visible:
+			continue
+		var d := _mouse_pos.distance_to(camera.iso_to_screen(u.position) + Vector2(0, -6) * camera.zoom.x)
+		if d < best_d:
+			best_d = d
+			best = u
+	if best:
+		return best
+	return game.object_at_screen(_world_mouse())
 
 
 func _mouse_loc() -> Vector2:
@@ -674,6 +715,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				hud._set_speed(minf(4.0, game.speed * 2.0))
 			KEY_MINUS, KEY_KP_SUBTRACT:
 				hud._set_speed(maxf(1.0, game.speed / 2.0))
+			KEY_Q:
+				camera.turn(-1)
+			KEY_E:
+				camera.turn(1)
+			KEY_R:
+				camera.tilt(5.0)
+			KEY_F:
+				camera.tilt(-5.0)
 			KEY_H:
 				_center_home()
 			KEY_N:
@@ -701,7 +750,7 @@ func _center_home() -> void:
 	var p := game.player()
 	if p.king and is_instance_valid(p.king) and not p.king.dead:
 		var at: Vector2 = p.king.inside_firm.center_loc() if p.king.inside_firm else p.king.center_loc()
-		camera.position = Iso.to_screen(at)
+		camera.iso_pos = Iso.to_screen(at)
 
 
 func _set_selection(objs: Array) -> void:
@@ -722,7 +771,7 @@ func _set_selection(objs: Array) -> void:
 
 
 func _click_select(add: bool) -> void:
-	var o := game.object_at_screen(_world_mouse())
+	var o := _pick()
 	if o == null:
 		if not add:
 			_set_selection([])
@@ -743,28 +792,26 @@ var _last_click_ms := -1000
 
 ## Double-click: every own unit of the clicked type that is on screen.
 func _select_same_type() -> void:
-	var o := game.object_at_screen(_world_mouse())
+	var o := _pick()
 	if not (o is Unit) or o.nation_id != game.player_id:
 		_click_select(false)
 		return
 	var view := get_viewport().get_visible_rect()
-	var xf := get_viewport().get_canvas_transform()
 	var picked: Array = []
 	for u in game.units:
 		if u.nation_id == game.player_id and not u.dead and u.inside_firm == null and u.sprite_code == o.sprite_code:
-			if view.has_point(xf * u.global_position):
+			if view.has_point(camera.iso_to_screen(u.position)):
 				picked.append(u)
 	_set_selection(picked)
 
 
 func _box_select(a: Vector2, b: Vector2, add: bool) -> void:
 	var r := Rect2(a, b - a).abs()
-	var xf := get_viewport().get_canvas_transform()
 	var picked: Array = game.selected.duplicate() if add else []
 	for u in game.units:
 		if u.nation_id != game.player_id or u.dead or u.inside_firm:
 			continue
-		if r.has_point(xf * (u.global_position + Vector2(0, 6))) and not (u in picked):
+		if r.has_point(camera.iso_to_screen(u.position) + Vector2(0, 6) * camera.zoom.x) and not (u in picked):
 			picked.append(u)
 	_set_selection(picked)
 
@@ -775,7 +822,7 @@ func _command(force_attack: bool) -> void:
 	if own.is_empty():
 		return
 	sfx.play_event("S", own[0].sprite_code, "ACK")
-	var target := game.object_at_screen(_world_mouse())
+	var target := _pick()
 	# spies slip into enemy and independent towns and buildings instead of attacking
 	var spies_sel: Array = own.filter(func(u): return u.is_spy)
 	if target and not spies_sel.is_empty() and target.nation_id != game.player_id and (target is Town or target is Firm):

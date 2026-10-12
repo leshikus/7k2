@@ -738,18 +738,22 @@ func _origin() -> Vector2:
 
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	var col := nation_color()
 	var o := _origin()
 	if selected:
-		_draw_footprint(col.lightened(0.3))
+		_draw_footprint(cv, col.lightened(0.3))
 		for t in linked_towns:
-			draw_line(Vector2.ZERO, Iso.to_screen(t.center_loc()) - position, Color(1, 0.9, 0.3, 0.7), 2.0)
+			cv.draw_line(Vector2.ZERO, Iso.to_screen(t.center_loc()) - position, Color(1, 0.9, 0.3, 0.7), 2.0)
 		for f in linked_firms:
 			if f.nation_id == nation_id:
-				draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, Color(0.5, 0.8, 1.0, 0.7), 2.0)
+				cv.draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, Color(0.5, 0.8, 1.0, 0.7), 2.0)
 	var frames: Array = build.get("frames", [])
 	if frames.is_empty():
-		_draw_footprint(col)
+		_draw_footprint(cv, col)
 		return
 	# Frame 1 is the whole building; later frames only hold the animated parts
 	# drawn on top of it (Firm::draw_frame in the original).
@@ -769,32 +773,32 @@ func _draw() -> void:
 		var b := Assets.firm_bitmap(build, rec, col)
 		if b.is_empty() or b[2] == 4:
 			continue
-		draw_texture(b[0], o + b[1], mod)
+		cv.draw_texture(b[0], o + b[1], mod)
 	# Construction flags at the four corners (Firm::draw_full_size).
 	if under_construction:
 		var flag := Assets.spict("FLAG-S0", col)
 		if flag:
 			for corner in [Vector2(x1, y1), Vector2(x1 + w, y1), Vector2(x1, y1 + h), Vector2(x1 + w, y1 + h)]:
-				draw_texture(flag, Iso.to_screen(corner) - position + Vector2(-4, -25))
+				cv.draw_texture(flag, Iso.to_screen(corner) - position + Vector2(-4, -25))
 	if selected or hp < max_hp or under_construction:
-		draw_hp_bar(o + Vector2(0, -24), 60)
+		draw_hp_bar_on(cv, o + Vector2(0, -24), 60)
 	if under_construction:
 		var bar := Rect2(o + Vector2(-30, -34), Vector2(60, 5))
-		draw_rect(bar, Color(0, 0, 0, 0.7))
-		draw_rect(Rect2(bar.position + Vector2(1, 1), Vector2(58 * progress / 100.0, 3)), Color(0.4, 0.7, 1.0))
+		cv.draw_rect(bar, Color(0, 0, 0, 0.7))
+		cv.draw_rect(Rect2(bar.position + Vector2(1, 1), Vector2(58 * progress / 100.0, 3)), Color(0.4, 0.7, 1.0))
 
 
-func _draw_footprint(col: Color) -> void:
+func _draw_footprint(cv, col: Color) -> void:
 	var p := PackedVector2Array([
 		Iso.to_screen(Vector2(x1, y1)) - position, Iso.to_screen(Vector2(x1 + w, y1)) - position,
 		Iso.to_screen(Vector2(x1 + w, y1 + h)) - position, Iso.to_screen(Vector2(x1, y1 + h)) - position,
 	])
 	p.append(p[0])
-	draw_polyline(p, col, 2.0)
+	cv.draw_polyline(p, col, 2.0)
 
 
 ## Ground bitmap drawn by the ground layer under every object.
-func draw_ground(ci: CanvasItem) -> void:
+func draw_ground(ci) -> void:
 	var g: int = build.get("ground", 0)
 	if g <= 0:
 		return

@@ -9,6 +9,7 @@ var ok := true
 
 
 func _ready() -> void:
+	get_window().size = Vector2i(1280, 800)
 	main = load("res://scenes/main.tscn").instantiate()
 	add_child(main)
 	await get_tree().process_frame
@@ -43,7 +44,7 @@ func _sim(frames: int) -> void:
 
 
 func _screen(world_pos: Vector2) -> Vector2:
-	return get_viewport().get_canvas_transform() * world_pos
+	return main.camera.iso_to_screen(world_pos)
 
 
 func _mouse(button: int, pos: Vector2, pressed: bool, ctrl := false, shift := false) -> void:
@@ -91,7 +92,8 @@ func _press_hud_button(prefix: String) -> bool:
 
 
 func _center_on(loc: Vector2) -> void:
-	main.camera.position = Iso.to_screen(loc)
+	main.camera.focus_on(loc)
+	main.camera.apply()
 	main.camera.zoom = Vector2.ONE
 	await _frames(3)
 
@@ -104,7 +106,7 @@ func _run() -> void:
 	# 1. click-select the general
 	var sp0 := _screen(gen.position + Vector2(-6, 0))
 	await _mouse(MOUSE_BUTTON_LEFT, sp0, false)
-	print("  dbg: gen.pos=", gen.position, " screen=", sp0, " world_mouse=", game.get_global_mouse_position(), " vp_mouse=", get_viewport().get_mouse_position(), " cam=", main.camera.position, " vp=", get_viewport().get_visible_rect().size)
+	print("  dbg: gen.pos=", gen.position, " screen=", sp0, " world_mouse=", main._world_mouse(), " vp_mouse=", get_viewport().get_mouse_position(), " cam=", main.camera.iso_pos, " vp=", get_viewport().get_visible_rect().size)
 	await _click(MOUSE_BUTTON_LEFT, sp0)
 	_check(game.selected == [gen], "left-click selects the general")
 	main.hud.refresh_selection(true)

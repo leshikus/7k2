@@ -20,7 +20,7 @@ func center_loc() -> Vector2:
 	return Vector2(x1 + w * 0.5, y1 + h * 0.5)
 
 
-func draw_ground(ci: CanvasItem) -> void:
+func draw_ground(ci) -> void:
 	if mine != null or row.is_empty():
 		return
 	var ic := Assets.raw_icon(row["MAP_PTR"])

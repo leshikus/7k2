@@ -6,7 +6,7 @@ signal jump_to(loc: Vector2)
 signal order_to(loc: Vector2)
 
 var game: Game
-var camera: Camera2D
+var camera: CameraRig
 var _img: Image
 var _tex: ImageTexture
 var _timer := 0.0
@@ -15,7 +15,7 @@ var _base := PackedByteArray()
 const TERRAIN_COLORS := [Color(0.25, 0.42, 0.16), Color(0.42, 0.55, 0.22), Color(0.52, 0.42, 0.28)]
 
 
-func setup(g: Game, cam: Camera2D) -> void:
+func setup(g: Game, cam: CameraRig) -> void:
 	game = g
 	camera = cam
 	var w := g.world.w
@@ -92,8 +92,8 @@ func _draw() -> void:
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if camera:
 		var vp := get_viewport_rect().size / camera.zoom
-		var corners := [camera.position + Vector2(-vp.x, -vp.y) * 0.5, camera.position + Vector2(vp.x, -vp.y) * 0.5,
-			camera.position + Vector2(vp.x, vp.y) * 0.5, camera.position + Vector2(-vp.x, vp.y) * 0.5]
+		var corners := [camera.iso_pos + Vector2(-vp.x, -vp.y) * 0.5, camera.iso_pos + Vector2(vp.x, -vp.y) * 0.5,
+			camera.iso_pos + Vector2(vp.x, vp.y) * 0.5, camera.iso_pos + Vector2(-vp.x, vp.y) * 0.5]
 		var pts := PackedVector2Array()
 		for c in corners:
 			pts.append(xf * Iso.to_loc(c))

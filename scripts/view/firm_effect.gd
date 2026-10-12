@@ -38,8 +38,12 @@ func sim_frame() -> void:
 
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	if done or recs.is_empty():
 		return
 	var b := Assets.die_bitmap(recs[frame_i])
 	if not b.is_empty():
-		draw_texture(b[0], b[1])
+		cv.draw_texture(b[0], b[1])

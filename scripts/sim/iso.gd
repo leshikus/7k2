@@ -5,6 +5,9 @@ class_name Iso
 const HALF_W := 32.0
 const HALF_H := 16.0
 
+## Screen facing to draw for each world direction (set by the 3D camera as it turns).
+static var dir_map := PackedInt32Array([0, 1, 2, 3, 4, 5, 6, 7])
+
 
 static func to_screen(loc: Vector2) -> Vector2:
 	return Vector2((loc.x - loc.y) * HALF_W, (loc.x + loc.y) * HALF_H)

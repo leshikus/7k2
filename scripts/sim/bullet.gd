@@ -46,8 +46,12 @@ func sim_frame() -> void:
 
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	var fr := Assets.sprite_frame(sprite_code, "M", dir, frame, color)
 	if not fr.is_empty():
-		draw_texture(fr[0], fr[1] - Vector2(0, -16))
+		cv.draw_texture(fr[0], fr[1] - Vector2(0, -16))
 	else:
-		draw_circle(Vector2.ZERO, 2, Color.BLACK)
+		cv.draw_circle(Vector2.ZERO, 2, Color.BLACK)

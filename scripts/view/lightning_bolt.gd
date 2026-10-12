@@ -26,6 +26,10 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	var a := clampf(life / 0.35, 0.0, 1.0)
-	draw_polyline(points, Color(0.7, 0.8, 1.0, a * 0.5), 6.0)
-	draw_polyline(points, Color(1, 1, 1, a), 2.0)
+	cv.draw_polyline(points, Color(0.7, 0.8, 1.0, a * 0.5), 6.0)
+	cv.draw_polyline(points, Color(1, 1, 1, a), 2.0)

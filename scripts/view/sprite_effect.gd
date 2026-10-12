@@ -30,6 +30,10 @@ func sim_frame() -> void:
 
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	var fr := Assets.sprite_frame(code, action, 0, frame_i / 3, color)
 	if not fr.is_empty():
-		draw_texture(fr[0], fr[1])
+		cv.draw_texture(fr[0], fr[1])

@@ -8,5 +8,9 @@ var variant := 0
 
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	if tex:
-		draw_texture(tex, ofs)
+		cv.draw_texture(tex, ofs)

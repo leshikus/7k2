@@ -651,21 +651,25 @@ func _dying() -> void:
 # --------------------------------------------------------------------- draw ---
 
 func _draw() -> void:
+	render(self)
+
+
+func render(cv) -> void:
 	if inside_firm:
 		return
 	var col := nation_color()
 	if selected and not dead:
-		_draw_selection(col)
+		_draw_selection(cv, col)
 	var act := action
-	var d := dir
+	var d := Iso.dir_map[dir]
 	if dead:
 		act = "D"
 		if not Assets.has_action(sprite_code, "D"):
 			act = "S"
-		d = 0 if act == "D" else dir
+		d = 0 if act == "D" else Iso.dir_map[dir]
 	var fr := Assets.sprite_frame(sprite_code, act, d, anim_frame, col)
 	if fr.is_empty() and act != "S":
-		fr = Assets.sprite_frame(sprite_code, "S", dir, 0, col)
+		fr = Assets.sprite_frame(sprite_code, "S", Iso.dir_map[dir], 0, col)
 	if not fr.is_empty():
 		var tex: Texture2D = fr[0]
 		var mod := Color(1, 1, 1, clampf(1.0 - (death_frames - 40) / 20.0, 0.0, 1.0)) if dead else Color.WHITE
@@ -673,26 +677,26 @@ func _draw() -> void:
 			mod = Color(0.6, 0.8, 1.3)
 		elif invulnerable_until > Game.inst.frame:
 			mod = Color(1.25, 1.2, 0.8)
-		draw_texture(tex, fr[1], mod)
+		cv.draw_texture(tex, fr[1], mod)
 	else:
-		draw_circle(Vector2(0, 16), 8, col)
+		cv.draw_circle(Vector2(0, 16), 8, col)
 	if dead:
 		return
 	if rank >= Defs.Rank.GENERAL:
 		var top := Vector2(0, -48)
-		draw_line(top, top + Vector2(0, -14), Color(0.3, 0.2, 0.1), 2.0)
+		cv.draw_line(top, top + Vector2(0, -14), Color(0.3, 0.2, 0.1), 2.0)
 		var flag := PackedVector2Array([top + Vector2(0, -14), top + Vector2(12, -10), top + Vector2(0, -6)])
-		draw_colored_polygon(flag, col)
+		cv.draw_colored_polygon(flag, col)
 		if rank == Defs.Rank.KING:
-			draw_circle(top + Vector2(0, -16), 3, Color(1, 0.85, 0.2))
+			cv.draw_circle(top + Vector2(0, -16), 3, Color(1, 0.85, 0.2))
 	if selected or hp < max_hp:
-		draw_hp_bar(Vector2(0, -44), 28)
+		draw_hp_bar_on(cv, Vector2(0, -44), 28)
 
 
-func _draw_selection(col: Color) -> void:
+func _draw_selection(cv, col: Color) -> void:
 	var pts := PackedVector2Array()
 	for i in 16:
 		var a := TAU * i / 16.0
 		pts.append(Vector2(cos(a) * 18, 16 + sin(a) * 9))
 	pts.append(pts[0])
-	draw_polyline(pts, col.lightened(0.3), 1.5)
+	cv.draw_polyline(pts, col.lightened(0.3), 1.5)

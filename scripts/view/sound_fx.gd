@@ -7,7 +7,7 @@ const POOL := 8
 const HEARING := 1100.0      # screen pixels from the view centre
 
 var enabled := true
-var camera: Camera2D
+var camera: CameraRig
 var _players: Array[AudioStreamPlayer] = []
 var _recent := {}            # wave name -> msec last played
 
@@ -39,7 +39,7 @@ func play(wave: String, world_pos = null) -> void:
 		return
 	var vol := -6.0
 	if world_pos != null and camera:
-		var d: float = (world_pos - camera.position).length() * camera.zoom.x
+		var d: float = (world_pos - camera.iso_pos).length() * camera.zoom.x
 		if d > HEARING:
 			return
 		vol -= d / HEARING * 18.0
