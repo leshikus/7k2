@@ -270,3 +270,21 @@ is meant to be sold, so only CC0 sources are used.
 Mineral deposits are 3D piles too (`make_site`). Still drawn from the original art: ground decals (building foundations,
 lakes, rubble), the lightning bolt and rain overlays, and the
 HUD's portraits and icons.
+
+## Scenario goals, items and scrolls (13 Oct 2026)
+
+- **Scenario goals** are read from each scenario's EndCondition records and checked
+  daily (`scripts/sim/goals.gd`); the kingdom panel shows each goal's progress.
+- **Treasure on the map** (`scripts/sim/treasure.gd`, osite.cpp/ositedrw.cpp): Scrolls
+  of Power, gold heaps (`COINS-1..8` by site number), items and weapon blueprints,
+  placed by scenarios or scattered on random maps; any unit that steps on one takes
+  it. A kingdom knows its own god; a scroll lets it build that race's Seat of Power.
+  A dying king drops a scroll his kingdom knows.
+- **Items** (`scripts/sim/items.gd`, the 29 of oitemres.cpp): attack, armour, speed,
+  combat and leadership bonuses, absorbing and invincibility, freezing, Fryhtan banes,
+  recharging potions, and manual items aimed at a unit, a town or a place. The
+  computer sends idle units to treasure near its bases.
+- **Walking pace.** A move step that reaches a cell carries on toward the next, so
+  units no longer stall for a frame at every cell boundary (it showed as a hitch in
+  the walk cycle). Mirrored facings (SW, W, NW) were checked frame by frame
+  against their E-side twins (`tests/tools/walk_strip`, `walk_film`, `walk_probe`).

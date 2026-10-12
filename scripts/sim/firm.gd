@@ -353,11 +353,13 @@ func _complete() -> void:
 func _train() -> void:
 	if overseer == null:
 		return
-	var lead := overseer.leadership
+	var lead := overseer.lead_skill()
 	var cap := minf(Defs.MAX_COMBAT_TRAIN, 30.0 + lead * 0.7)
+	# FirmCamp::train_unit: The Art of Training speeds it up
+	var rate := 0.2 * (1.0 + lead / 100.0) * (100.0 + overseer.item_ability(Items.Ability.TRAIN)) / 100.0
 	for s in soldiers:
 		if s.combat < cap:
-			s.combat = minf(cap, s.combat + 0.2 * (1.0 + lead / 100.0))
+			s.combat = minf(cap, s.combat + rate)
 		s.hp = minf(s.max_hp, s.hp + s.max_hp * 0.02)
 	if overseer.leadership < 100.0:
 		overseer.leadership = minf(100.0, overseer.leadership + 0.03)
@@ -654,7 +656,10 @@ func invoke_god() -> Unit:
 	var n := nation()
 	if n == null or n.prayer_points < god_cost():
 		return null
-	var g: Dictionary = Defs.gods.get(n.race, {})
+	# FirmBase: the Greater Being of the Seat's race, if its Scroll of Power is held
+	if not n.known_gods.has(race):
+		return null
+	var g: Dictionary = Defs.gods.get(race, {})
 	if g.is_empty() or not Assets.has_sprite(g["unit"]):
 		return null
 	n.prayer_points -= god_cost()

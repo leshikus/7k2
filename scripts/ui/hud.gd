@@ -4,6 +4,9 @@ extends CanvasLayer
 ## diplomacy window and game-over screen.
 
 signal build_requested(code: String)
+signal item_target_requested(u: Unit)
+
+var inspected_treasure: Treasure = null   # a scroll or item clicked on the map
 signal center_on(loc: Vector2)
 signal move_selected_to(loc: Vector2)
 signal menu_new_game
@@ -494,6 +497,13 @@ func refresh_selection(force := false) -> void:
 	var key := ",".join(sel.map(func(o): return str(o.obj_id))) + "|" + str(build_menu_open)
 	var rebuild := force or key != _last_sel_key
 	_last_sel_key = key
+	if sel.is_empty() and is_instance_valid(inspected_treasure) and inspected_treasure.is_inside_tree():
+		portrait.texture = null
+		title_label.text = inspected_treasure.title()
+		info_label.text = inspected_treasure.description()
+		if rebuild:
+			_clear_actions()
+		return
 	if sel.is_empty():
 		portrait.texture = null
 		title_label.text = game.player().name if not game.observer() else "Kingdoms"
@@ -649,6 +659,8 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 		s += "[color=#ffd860]Hero[/color]\n"
 	if u.is_spy:
 		s += "[color=#c0a0ff]Spy[/color], spying skill %d\nRight-click an enemy or independent town or building to infiltrate it.\n" % int(u.spy_skill)
+	if u.item_id > 0:
+		s += "[color=#ffd860]%s[/color]: %s\n" % [Items.item_name(u.item_id), Items.description(u.item_id, u.item_para)]
 	if u.life_frames > 0:
 		s += "Vanishes in %d days\n" % (u.life_frames / Defs.FRAMES_PER_DAY)
 	if u.is_caravan:
@@ -690,10 +702,29 @@ func _unit_actions(sel: Array) -> void:
 			_add_action("Demote to Soldier", func(): u.rank = Defs.Rank.SOLDIER)
 		if u.home_town == null and u.is_human():
 			_add_action("Settle in town", func(): _settle(u), true, "Walk to the nearest own town and rejoin its population.")
+		if u.item_id > 0:
+			_item_actions(u)
 		if u.is_god:
 			var gi := u.god_info()
 			if not gi.is_empty() and Defs.GOD_POWERS.has(gi["race"]):
 				_add_action("Cast power (%d)" % gi["power_pray"], func(): u.cast_power(), u.can_cast_power(), Defs.GOD_POWERS[gi["race"]] + ". Costs prayer points.")
+
+
+## Use, switch on or drop the carried item.
+func _item_actions(u: Unit) -> void:
+	var name := Items.item_name(u.item_id)
+	var aim: String = Items.MANUAL_TARGET.get(u.item_id, "")
+	if aim == "self":
+		_add_action("Use " + name, func():
+			var err := u.use_manual_item()
+			if err != "":
+				game.notify(err, Vector2(-1, -1)), true, Items.info(u.item_id)[Items.DESC])
+	elif aim != "":
+		_add_action("Use " + name + "...", func(): item_target_requested.emit(u), true,
+			Items.info(u.item_id)[Items.DESC] + ". Then click the %s." % {"unit": "unit", "town": "town", "place": "place to go"}[aim])
+	elif Items.info(u.item_id)[Items.PARA] in [Items.Para.USE_TIMED, Items.Para.CHARGE_TIMED]:
+		_add_action("Activate " + name, func(): u.turn_on_item(), Items.can_turn_on(u.item_id, u.item_para), "Works for a while once activated.")
+	_add_action("Drop item", func(): game._drop_item(u), true, "Leave the item on the ground for another unit.")
 
 
 func _settle(u: Unit) -> void:
@@ -713,11 +744,17 @@ func _build_menu() -> void:
 	for code in Defs.HUMAN_FIRMS:
 		var ft: Dictionary = Defs.firm_types.get(code, {})
 		var cost: int = ft.get("cost", 0)
-		var c: String = code
-		var pick := func():
-			build_menu_open = false
-			build_requested.emit(c)
-		_add_action("%s (%d)" % [ft.get("name", code), cost], pick, p.cash >= cost, Defs.FIRM_HELP.get(code, ""))
+		# one Seat of Power per Greater Being whose Scroll of Power the kingdom holds
+		var variants: Array = [code] if code != "BASE" else p.known_gods.keys().map(func(r): return "BASE|" + r)
+		for v in variants:
+			var c: String = v
+			var pick := func():
+				build_menu_open = false
+				build_requested.emit(c)
+			var label: String = ft.get("name", code)
+			if c.contains("|") and p.known_gods.size() > 1:
+				label += " (%s)" % Defs.race_name(c.get_slice("|", 1))
+			_add_action("%s (%d)" % [label, cost], pick, p.cash >= cost, Defs.FIRM_HELP.get(code, ""))
 	_add_action("Cancel", func(): build_menu_open = false)
 
 

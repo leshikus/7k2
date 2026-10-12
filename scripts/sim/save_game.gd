@@ -55,6 +55,8 @@ static func save(g: Game, slot: String) -> bool:
 		"firms": g.firms.filter(func(f): return not f.dead).map(func(f): return _firm(g, f)),
 		"units": g.units.filter(func(u): return not u.dead).map(func(u): return _unit(u)),
 		"goals": g.goals.to_dict(_id) if g.goals else null,
+		"treasures": g.treasures.map(func(t): return [t.kind, t.object_id, t.para, t.cell.x, t.cell.y, t.recno]),
+		"taken_sites": g.taken_sites,
 	}
 	var f := FileAccess.open(path_for(slot), FileAccess.WRITE)
 	if f == null:
@@ -89,6 +91,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"income_year": n.income_year, "expense_year": n.expense_year,
 		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
+		"known_gods": n.known_gods.keys(), "items_acquired": n.items_acquired.keys(),
 	}
 	if n.ai:
 		d["ai"] = {"war_target": n.ai.war_target, "war_start_day": n.ai.war_start_day, "aggression": n.ai.aggression}
@@ -126,6 +129,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"name": u.unit_name, "hero": u.is_hero, "life": u.life_frames, "dir": u.dir,
 		"home_town": _id(u.home_town), "home_firm": _id(u.home_firm), "inside": _id(u.inside_firm),
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
+		"item": [u.item_id, u.item_para],
 		"caravan_home": _id(u.caravan_home), "caravan_dest": _id(u.caravan_dest), "caravan_leg": u.caravan_leg, "cargo": u.cargo,
 	}
 
@@ -196,6 +200,12 @@ static func load_into(g: Game, slot: String) -> String:
 		n.last_income_year = float(nd.get("last_income_year", 0.0))
 		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
 		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
+		if nd.has("known_gods"):
+			n.known_gods.clear()
+			for r in nd["known_gods"]:
+				n.known_gods[r] = true
+		for i in nd.get("items_acquired", []):
+			n.items_acquired[int(i)] = true
 		n.is_fryhtan = nd.get("is_fryhtan", false)
 		n.monster_code = nd.get("monster_code", "")
 		n.live_points = float(nd.get("live_points", 0.0))
@@ -300,6 +310,9 @@ static func load_into(g: Game, slot: String) -> String:
 		u.remove_meta("save")
 		u.is_spy = ud.get("spy", false)
 		u.spy_skill = float(ud.get("spy_skill", 0.0))
+		var it: Array = ud.get("item", [0, 0])
+		u.item_id = int(it[0])
+		u.item_para = int(it[1])
 		u.spy_action = ud.get("spy_action", "agitate")
 		var sp = by_id.get(int(ud.get("spy_place", 0)))
 		if sp is GameObj and ud.get("hidden", false):
@@ -337,6 +350,10 @@ static func load_into(g: Game, slot: String) -> String:
 		if bu is Unit:
 			f.builder = bu
 			_put_inside(bu, f)
+	for td in d.get("treasures", []):
+		g.spawn_treasure(int(td[0]), int(td[1]), int(td[2]), Vector2i(int(td[3]), int(td[4])), int(td[5]))
+	for k in d.get("taken_sites", {}):
+		g.taken_sites[int(k)] = int(d["taken_sites"][k])
 	if d.get("goals") is Dictionary:
 		g.goals = Goals.from_dict(d["goals"], by_id)
 	for n in g.nations:

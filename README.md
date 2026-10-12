@@ -51,7 +51,12 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   combat and defence, siege weapons). Build catapults, ballistae, spitfires and
   cannons at the War Factory.
 * **Hire heroes** at the Inn. Pray at the **Seat of Power** to summon your race's
-  Greater Being.
+  Greater Being; find another race's **Scroll of Power** to build its Seat and
+  summon its Greater Being too.
+* **Items and treasure** lie on the map: heaps of gold, weapon blueprints, and 29
+  items a soldier or Fryhtan can carry (Excalibur, Boots of Hermes, Ring of Life,
+  Staff of Invincibility, Judas Ring, Telecordial …). Some work by themselves,
+  others are used or switched on from the unit panel; a fallen unit drops its item.
 * **Destroy Fryhtan lairs** for treasure. Their Fryhtans raid nearby kingdoms.
 * **Fryhtan kingdoms** (zero to two, chosen on the start screen) breed Fryhtans
   with gold and life points, build lairs beside independent villages and
@@ -113,15 +118,15 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 * The original game's 10 premade scenarios, read from your install, playable or
   watched as **AI vs AI** (also available for random maps), with their goals: kill
   or protect a named unit, conquer a town, reach a population, economy or military
-  score, acquire a technology, ally with or defeat a kingdom, within a time limit.
+  score, acquire a technology, an item or a scroll, ally with or defeat a kingdom,
+  within a time limit.
 * Computer kingdoms that expand, build economies, research, recruit, raise armies,
   clear lairs, declare war and make peace.
 
 ## Not yet implemented
 
-The full espionage system (bribery, assassination, disguise), the campaign, items and
-scrolls lying on the map (and the scenario goals that need them), the Fryhtan special buildings (a Fryhtan
-kingdom you lead has lairs only), and multiplayer. Balance values are adapted where this simplified simulation
+The full espionage system (bribery, assassination, disguise), the campaign, the
+Fryhtan special buildings (a Fryhtan kingdom you lead has lairs only), and multiplayer. Balance values are adapted where this simplified simulation
 differs from the original (noted in the code).
 
 ## Project layout

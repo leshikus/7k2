@@ -411,6 +411,22 @@ func spict(name: String, color: Color) -> Texture2D:
 	return tex
 
 
+## Item picture lying on the map, from I_ITEMB.RES (ItemRes::item_bitmap).
+func item_bitmap(name: String) -> Texture2D:
+	var key := "IT|" + name
+	if _tex_cache.has(key):
+		return _tex_cache[key]
+	var idx := _idx(_res_path("I_ITEMB.RES"))
+	var tex: Texture2D = null
+	if idx.has(name.to_upper()):
+		var img := SK2Files.decode_bitmap(idx[name.to_upper()], 0, _pal_std, true)
+		if img == null:
+			img = SK2Files.decode_bitmap(idx[name.to_upper()], 0, _pal_std, false, 255)
+		tex = _make_tex(img)
+	_tex_cache[key] = tex
+	return tex
+
+
 # ---------------------------------------------------------------- plants ---
 
 func _build_plants() -> void:

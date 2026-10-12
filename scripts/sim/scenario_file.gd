@@ -301,7 +301,7 @@ func _read_sites() -> bool:
 			if _s16(e) == 0:
 				continue
 			# Site: recno, type, object_id, reserve_qty, has_mine, map_x_loc, map_y_loc (osite.h)
-			sites.append({"type": _s8(e + 2), "object_id": _s16(e + 3), "qty": _s32(e + 5),
+			sites.append({"recno": _s16(e), "type": _s8(e + 2), "object_id": _s16(e + 3), "qty": _s32(e + 5),
 				"has_mine": _s8(e + 9), "x": _s16(e + 10), "y": _s16(e + 12)})
 	return true
 

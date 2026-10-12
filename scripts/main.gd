@@ -20,6 +20,8 @@ var rain_layer: RainLayer
 var rain_player: AudioStreamPlayer
 
 var build_code := ""
+var build_race := ""
+var _item_user: Unit = null  # unit about to use an item on what is clicked next        # race of the building to place (a Seat of Power's god)
 var _drag_from := Vector2.ZERO
 var _dragging := false
 var _left_down := false
@@ -68,6 +70,10 @@ func _ready() -> void:
 			camera.yaw = camera._yaw_target
 		elif a.begins_with("--pitch=") and camera:
 			camera.pitch = clampf(a.substr(8).to_float(), camera.pitch_min, camera.pitch_max)
+		elif a.begins_with("--look=") and camera:
+			var xy := a.substr(7).split(",")
+			camera.focus_on(Vector2(xy[0].to_float(), xy[1].to_float()))
+			camera.zoom = Vector2(1.5, 1.5)
 		elif a.begins_with("--bench="):
 			_bench(a.substr(8).to_float())
 		elif a == "--free-camera" and camera:
@@ -420,6 +426,9 @@ func _attach_game() -> void:
 	add_child(hud)
 	hud.setup(game, camera)
 	hud.build_requested.connect(_begin_build)
+	hud.item_target_requested.connect(func(u):
+		_item_user = u
+		game.notify("Click the target for the %s; right-click to cancel." % Items.item_name(u.item_id), Vector2(-1, -1)))
 	hud.center_on.connect(func(l): camera.iso_pos = Iso.to_screen(l))
 	hud.menu_new_game.connect(_show_menu)
 	hud.move_selected_to.connect(func(l):
@@ -580,6 +589,23 @@ func _pick() -> GameObj:
 	return game.object_at_screen(_world_mouse())
 
 
+func _use_item_on_click() -> void:
+	var u := _item_user
+	_item_user = null
+	if not is_instance_valid(u) or u.dead or u.item_id == 0:
+		return
+	var target = null
+	if Items.MANUAL_TARGET.get(u.item_id, "") == "place":
+		var l := _mouse_loc()
+		target = Vector2i(floori(l.x), floori(l.y))
+	else:
+		target = _pick()
+	var err := u.use_manual_item(target)
+	if err != "":
+		game.notify(err, Vector2(-1, -1))
+	hud.refresh_selection(true)
+
+
 func _mouse_loc() -> Vector2:
 	return Iso.to_loc(_world_mouse())
 
@@ -587,6 +613,9 @@ func _mouse_loc() -> Vector2:
 # ---------------------------------------------------------------- build ---
 
 func _begin_build(code: String) -> void:
+	# "BASE|GREEK": a Seat of Power of another race whose Scroll of Power we hold
+	build_race = code.get_slice("|", 1) if code.contains("|") else game.player().race
+	code = code.get_slice("|", 0)
 	build_code = code
 	ghost.visible = true
 	game.notify("Place the %s. Left-click to build, right-click to cancel." % Defs.firm_types.get(code, {}).get("name", "Lair" if code == "LAIR" else code), Vector2(-1, -1))
@@ -594,7 +623,7 @@ func _begin_build(code: String) -> void:
 
 func _placement() -> Dictionary:
 	var p := game.player()
-	var b := Assets.firm_build(build_code, p.race)
+	var b := Assets.firm_build(build_code, build_race if build_race != "" else p.race)
 	var w: int = b.get("loc_w", 3)
 	var h: int = b.get("loc_h", 3)
 	var loc := _mouse_loc()
@@ -638,7 +667,7 @@ func _place_building() -> void:
 		game.notify("Select a unit to construct the building.", Vector2(-1, -1))
 		_cancel_build()
 		return
-	var f := game.spawn_firm(build_code, p.id, p.race, pl["pos"], false)
+	var f := game.spawn_firm(build_code, p.id, build_race if build_race != "" else p.race, pl["pos"], false)
 	if f == null:
 		return
 	p.add_cash(-cost)
@@ -680,6 +709,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					if build_code != "":
 						_place_building()
 						return
+					if _item_user != null:
+						_use_item_on_click()
+						return
 					_left_down = true
 					_drag_from = mb.position
 					_dragging = false
@@ -700,6 +732,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				if mb.pressed:
 					if build_code != "":
 						_cancel_build()
+					elif _item_user != null:
+						_item_user = null
 					else:
 						_command(mb.ctrl_pressed)
 	elif event is InputEventMouseMotion and _orbiting:
@@ -788,9 +822,11 @@ func _set_selection(objs: Array) -> void:
 
 func _click_select(add: bool) -> void:
 	var o := _pick()
+	hud.inspected_treasure = null
 	if o == null:
 		if not add:
 			_set_selection([])
+			hud.inspected_treasure = _treasure_at_mouse()
 		return
 	if add and o is Unit and o.nation_id == game.player_id:
 		var cur: Array = game.selected.filter(func(x): return x is Unit and x.nation_id == game.player_id)
@@ -804,6 +840,13 @@ func _click_select(add: bool) -> void:
 
 
 var _last_click_ms := -1000
+
+
+func _treasure_at_mouse() -> Treasure:
+	for t in game.treasures:
+		if t.visible and _mouse_pos.distance_to(camera.iso_to_screen(t.position + Vector2(0, 16))) < 22.0 * camera.zoom.x:
+			return t
+	return null
 
 
 ## Double-click: every own unit of the clicked type that is on screen.

@@ -20,6 +20,7 @@ var bullets: Array[Bullet] = []
 var effects_list: Array = []      # FirmEffect and SpriteEffect nodes
 var rubble: Array = []        # [texture, screen position, expiry frame]
 var tornadoes: Array[Tornado] = []
+var treasures: Array[Treasure] = []   # scrolls, gold, items and blueprints lying about
 signal shake(strength: float)
 signal lightning(world_pos: Vector2)
 var weather := Weather.new()
@@ -87,6 +88,7 @@ func start(cfg: Dictionary) -> void:
 	_generate_sites(size)
 	_generate_independents(size, cfg)
 	_generate_lairs(size, cfg)
+	_generate_items()
 	_generate_rocks(size)
 	_generate_trees(size)
 	update_links()
@@ -908,6 +910,130 @@ func spawn_bullet(from: Unit, to: GameObj, sprite: String, spd: float, dmg: floa
 	bullets.append(b)
 
 
+# ------------------------------------------------------------- treasures ---
+
+## Scenario site numbers of scrolls and items taken, and by whom (for goals).
+var taken_sites := {}
+
+
+func spawn_treasure(kind: int, obj: int, para: int, at: Vector2i, recno := 0) -> Treasure:
+	var t := Treasure.new()
+	t.setup(kind, obj, para, at)
+	t.recno = recno
+	objects.add_child(t)
+	treasures.append(t)
+	return t
+
+
+## Battle::create_random_item: three to six ordinary items about the map.
+func _generate_items() -> void:
+	var n := 3 + rng.randi_range(0, 3)
+	for i in n:
+		var id := Items.random_id(rng, Items.MIN_RARITY, Items.MIN_RARITY + 1)
+		if id == 0:
+			break
+		var r := _random_free_rect(3, 3, 4, [], 0.0)
+		if r.x < 0:
+			break
+		spawn_treasure(Treasure.Kind.ITEM, id, Items.random_para(id, rng), r + Vector2i.ONE)
+
+
+## SiteArray::next_day: a unit standing on a treasure takes it (Site::get_site_object).
+func _pick_up_treasures() -> void:
+	for t in treasures.duplicate():
+		for u in units_near(t.center_loc(), 1.5):
+			if u.dead or u.inside_firm or u.cell() != t.cell:
+				continue
+			if _take(t, u):
+				break
+
+
+func _take(t: Treasure, u: Unit) -> bool:
+	var n := nation(u.nation_id)
+	if n == null:
+		return false          # independents and wild Fryhtans leave treasure where it lies
+	var what := ""
+	match t.kind:
+		Treasure.Kind.SCROLL:
+			if u.race != t.race():
+				return false
+			n.known_gods[t.race()] = true
+			what = "the %s Scroll of Power" % Defs.race_name(t.race())
+		Treasure.Kind.GOLD:
+			n.add_cash(float(t.object_id))
+			if n.is_fryhtan:
+				n.live_points += float(t.para)
+			what = "a treasure of %d gold" % t.object_id
+		Treasure.Kind.ITEM:
+			if u.item_id != 0 or not Items.can_pick(u):
+				return false
+			u.item_id = t.object_id
+			u.item_para = t.para
+			n.items_acquired[t.object_id] = true
+			what = Items.item_name(t.object_id)
+		Treasure.Kind.BLUEPRINT:
+			var code := t.tech_code()
+			if code != "" and n.tech_level(code) == 0:
+				n.tech[code] = 1
+			what = "the plans of the %s" % t.tech_name()
+	if t.recno > 0:
+		taken_sites[t.recno] = n.id
+	notify_nation(n.id, "%s has found %s." % [u.display_name(), what], t.center_loc())
+	treasures.erase(t)
+	t.queue_free()
+	return true
+
+
+## Unit::drop_item: a fallen unit's item lies where it fell.
+func _drop_item(u: Unit) -> void:
+	if u.item_id == 0:
+		return
+	var c := _free_treasure_cell(u.cell())
+	if c.x >= 0:
+		spawn_treasure(Treasure.Kind.ITEM, u.item_id, u.item_para, c)
+	u.item_id = 0
+	u.item_para = 0
+
+
+## Unit::king_die: a fallen king drops one of his kingdom's Scrolls of Power.
+func _drop_scroll(n: Nation, at: Vector2i) -> void:
+	var known := n.known_gods.keys()
+	if known.is_empty():
+		return
+	var race: String = known[rng.randi() % known.size()]
+	var ri := Defs.races.map(func(r): return r["code"]).find(race)
+	var c := _free_treasure_cell(at)
+	if ri < 0 or c.x < 0:
+		return
+	n.known_gods.erase(race)
+	spawn_treasure(Treasure.Kind.SCROLL, ri + 1, 0, c)
+
+
+func _free_treasure_cell(at: Vector2i) -> Vector2i:
+	for r in 4:
+		for y in range(at.y - r, at.y + r + 1):
+			for x in range(at.x - r, at.x + r + 1):
+				var c := Vector2i(x, y)
+				if world.is_free(c) and not treasures.any(func(t): return t.cell == c):
+					return c
+	return Vector2i(-1, -1)
+
+
+## ItemRes::next_day for every carried item; the Ring of Life heals.
+func _items_next_day() -> void:
+	for u in units:
+		if u.item_id == 0 or u.dead:
+			continue
+		u.item_para = Items.next_day(u.item_id, u.item_para)
+		if u.item_para < 0:
+			u.item_id = 0
+			u.item_para = 0
+			continue
+		var heal := u.item_ability(Items.Ability.RECOVERY)
+		if heal > 0:
+			u.hp = minf(u.max_hp, u.hp + heal * 2.0)
+
+
 func remove_unit(u: Unit) -> void:
 	units.erase(u)
 	deselect(u)
@@ -1120,6 +1246,8 @@ func sim_frame() -> void:
 		rubble = rubble.filter(func(r): return r[2] > frame)
 		if rubble.size() != before:
 			_ground_dirty = true
+	if frame % 10 == 0 and not treasures.is_empty():
+		_pick_up_treasures()
 	if frame % Defs.FRAMES_PER_DAY == 0:
 		next_day()
 		_process_spies()
@@ -1157,6 +1285,7 @@ func next_day() -> void:
 			n.income_year = 0.0
 			n.expense_year = 0.0
 	_check_homeless()
+	_items_next_day()
 	if day % 5 == 0:
 		_check_end()
 	_check_goals()
@@ -1210,7 +1339,7 @@ func _allocate_workers() -> void:
 		if t.nation_id <= 0 or t.dead:
 			continue
 		var n := nation(t.nation_id)
-		var fl: Array = t.linked_firms.filter(func(f): return not f.dead and not f.under_construction and f.is_work_firm() and f.nation_id == t.nation_id and (f.code != "BASE" or (n and t.race == n.race)))
+		var fl: Array = t.linked_firms.filter(func(f): return not f.dead and not f.under_construction and f.is_work_firm() and f.nation_id == t.nation_id and (f.code != "BASE" or t.race == f.race))
 		if fl.is_empty():
 			continue
 		var avail := int(t.population * 0.7)
@@ -1237,7 +1366,7 @@ func _update_fog() -> void:
 			fog[i] = 1
 	for u in units:
 		if u.nation_id == player_id and not u.dead and not u.inside_firm:
-			_reveal(u.cell(), int(u.utype.get("vis", 6)) + 1)
+			_reveal(u.cell(), int(u.utype.get("vis", 6)) + 1 + u.item_ability(Items.Ability.SCOUT_RANGE))
 	for f in firms:
 		if f.nation_id == player_id and not f.dead:
 			_reveal(Vector2i(f.center_loc()), Defs.EXPLORE_RANGE)
@@ -1273,6 +1402,8 @@ func _update_visibility() -> void:
 	for c in _plants:
 		var p: Plant = _plants[c]
 		p.visible = is_loc_explored(c)
+	for tr in treasures:
+		tr.visible = is_loc_explored(tr.cell)
 	if frame % 20 == 0:
 		for rk in rocks:
 			if rk.tex:
@@ -1312,7 +1443,7 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 		u.home_town.defender_killed(u, killer)
 		u.home_town._check_empty()
 	var victim_nation := nation(u.nation_id)
-	if killer and is_instance_valid(killer) and killer.nation_id > 0 and killer.nation_id != u.nation_id 			and (u.is_monster() or (victim_nation and victim_nation.is_fryhtan)):
+	if killer and is_instance_valid(killer) and killer.nation_id > 0 and killer.nation_id != u.nation_id and (u.is_monster() or (victim_nation and victim_nation.is_fryhtan)):
 		var kn := nation(killer.nation_id)
 		if kn and not kn.is_fryhtan:
 			if u.is_monster():
@@ -1323,10 +1454,12 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 		var kn := nation(killer.nation_id)
 		if kn and kn.is_fryhtan:
 			kn.live_points += 10.0 if u.is_human() else 4.0
+	_drop_item(u)
 	var n := nation(u.nation_id)
 	if n and n.king == u:
 		n.king = null
 		n.change_reputation(-10.0)
+		_drop_scroll(n, u.cell())
 		var heir := _best_heir(n)
 		if heir:
 			heir.rank = Defs.Rank.KING

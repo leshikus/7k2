@@ -48,6 +48,8 @@ var caravan_leg := 0              # 0 heading to dest, 1 heading home
 var cargo := {}                   # goods type -> quantity
 var _caravan_wait := 0
 var frozen_until := -1           # Amaterasu's freeze (frame)
+var item_id := 0                  # the item carried (Items.TABLE), 0 = none
+var item_para := 0                # its charges, uses or time (Item::para)
 var death_frames := 0
 var _speed := 4.0
 
@@ -86,7 +88,83 @@ func armor() -> float:
 	var n := nation()
 	if n and race != "":
 		a += 2.0 * n.tech_level("INFDEFEN")
-	return a
+	return a + item_ability(Items.Ability.ARMOR)
+
+
+## What the carried item adds toward an ability now (ItemRes::ability).
+func item_ability(ab: int) -> int:
+	return Items.ability(item_id, item_para, ab) if item_id > 0 else 0
+
+
+## The item did its work once: spend a use or charge (ItemRes::use_now).
+func use_item() -> void:
+	item_para = Items.use_now(item_id, item_para)
+	if item_para < 0:
+		item_id = 0
+		item_para = 0
+
+
+## Switches on a timed item (Staff of Invincibility, Unseen Torque).
+func turn_on_item() -> bool:
+	if not Items.can_turn_on(item_id, item_para):
+		return false
+	item_para = Items.turn_on(item_id, item_para)
+	return true
+
+
+## ItemRes::use_manually: Heimdall's Horn summons a Fryhtan to fight for us, the
+## Judas Ring wins over a unit and the Judas Rod a town, the Neutralizer frees a
+## town, the Telecordial carries the unit anywhere. Returns "" or why it failed.
+func use_manual_item(target = null) -> String:
+	var g := Game.inst
+	match item_id:
+		13:
+			var m: Dictionary = Defs.monsters[g.rng.randi() % Defs.monsters.size()]
+			var level := maxi(3, int(m["level"]))
+			var skill := minf(Defs.MAX_COMBAT_TRAIN, float(7 * int(Defs.MAX_COMBAT_TRAIN) + g.rng.randi() % int(Defs.MAX_COMBAT_TRAIN)) / (5 + level))
+			if g.spawn_unit(m["unit"], nation_id, cell() + Vector2i(2, 2), skill) == null:
+				return "There is no room to summon a Fryhtan here."
+		25:
+			var t := target as Unit
+			if t == null or t.dead or t.rank == Defs.Rank.KING or t.nation_id == nation_id or t.nation_id <= 0 					or t.is_monster() or t.inside_firm or distance_to(t) > 8.0:
+				return "Use the Judas Ring on an enemy unit (not a king) within 8 squares."
+			g.defect_unit(t, nation_id)
+		26:
+			var t := target as Town
+			if t == null or t.dead or t.nation_id == nation_id or distance_to(t) > 8.0:
+				return "Use the Judas Rod on another kingdom's or an independent town within 8 squares."
+			t.surrender(nation_id)
+		27:
+			var t := target as Town
+			if t == null or t.dead or t.nation_id <= 0 or distance_to(t) > 8.0:
+				return "Use the Neutralizer on a kingdom's town within 8 squares."
+			var old := t.nation_id
+			t.nation_id = 0
+			for nid in g.nation_ids():
+				t.resistance[nid] = 60.0
+			g.on_town_changed(t, old)
+			t.queue_redraw()
+		28:
+			var c: Vector2i = target if target is Vector2i else Vector2i(-1, -1)
+			if c.x < 0 or not g.world.is_free(c) or not g.is_loc_explored(c):
+				return "Teleport to an explored, open spot."
+			stop()
+			loc = Vector2(c)
+			position = Iso.to_screen(loc)
+		_:
+			return "This item works by itself."
+	use_item()
+	return ""
+
+
+## Skill::combat_level: training plus the item's bonus (Excalibur).
+func combat_level() -> float:
+	return combat + item_ability(Items.Ability.COMBAT_LEVEL)
+
+
+## Skill::skill_level: leadership plus the item's bonus (The Art of War).
+func lead_skill() -> float:
+	return leadership + item_ability(Items.Ability.SKILL_LEVEL)
 
 
 func is_human() -> bool:
@@ -119,7 +197,7 @@ func type_name() -> String:
 
 
 func speed_loc() -> float:
-	var sp := _speed
+	var sp := _speed + item_ability(Items.Ability.SPEED)
 	# SpriteRes::update_speed: rain slows units by their RAIN_SLOW value
 	var rain := mini(7, Game.inst.weather.rain_scale())
 	var slow: int = Assets.sprites.get(sprite_code, {}).get("rain_slow", 0)
@@ -274,16 +352,25 @@ func _step_move() -> bool:
 		if path.is_empty():
 			return true
 		return false
-	var d := Vector2(next) - loc
 	var step := speed_loc()
-	var nd := Iso.dir_of(d)
-	if nd >= 0:
-		dir = nd
-	if d.length() <= step:
+	# A step that reaches a cell carries on toward the next one, so the unit keeps
+	# an even pace instead of stalling for a frame at every cell.
+	while true:
+		var d := Vector2(next) - loc
+		var nd := Iso.dir_of(d)
+		if nd >= 0:
+			dir = nd
+		if d.length() > step:
+			loc += d.normalized() * step
+			return false
 		loc = Vector2(next)
+		step -= d.length()
 		path_i += 1
-		return path_i >= path.size()
-	loc += d.normalized() * step
+		if path_i >= path.size():
+			return true
+		next = path[path_i]
+		if step <= 0.0001 or not Game.inst.world.is_walkable(next):
+			return false
 	return false
 
 
@@ -402,7 +489,7 @@ func current_attack() -> Dictionary:
 	var atts: Array = utype.get("attacks", [])
 	var far := target != null and is_instance_valid(target) and distance_to(target) > 1.5
 	for a in atts:
-		if a["combat_lvl"] > combat:
+		if a["combat_lvl"] > combat_level():
 			continue
 		if best.is_empty():
 			best = a
@@ -487,7 +574,11 @@ func _attack_anim() -> void:
 func roll_damage(att: Dictionary) -> float:
 	var rng := Game.inst.rng
 	var dmg := float(att["damage"]) + rng.randi_range(0, 2)
-	dmg += float(att["pierce"]) * rng.randi_range(0, int(minf(combat, Defs.MAX_COMBAT_TRAIN))) / 100.0
+	dmg += float(att["pierce"]) * rng.randi_range(0, int(minf(combat_level(), Defs.MAX_COMBAT_TRAIN))) / 100.0
+	var extra := item_ability(Items.Ability.ARROW_DAMAGE if att["range"] > 1 else Items.Ability.MELEE_DAMAGE)
+	if extra > 0:
+		dmg += extra
+		use_item()
 	var n := nation()
 	if n and is_human():
 		dmg += 2.0 * n.tech_level("INFRANGE" if att["range"] > 1 else "INFCLOSE")
@@ -503,6 +594,7 @@ func _deliver_hit() -> void:
 	if att.is_empty():
 		return
 	var dmg := roll_damage(att)
+	_item_strike(dmg)
 	if visible:
 		Game.inst.play_sound("S", sprite_code, att["action"], center_loc())
 	if att["range"] > 1 and att["bullet"] != "" and Assets.has_sprite(att["bullet"]):
@@ -511,6 +603,27 @@ func _deliver_hit() -> void:
 		target.take_damage(dmg, self)
 	gain_experience()
 	attack_cooldown = int(att["delay"]) * 2
+	# Unit::set_remain_attack_delay: Raptorsclaw strikes sooner
+	var quick := item_ability(Items.Ability.ATTACK_SPEED)
+	if quick > 0:
+		attack_cooldown = maxi(2, attack_cooldown - quick * 2)
+		use_item()
+
+
+## Unit::being_attack_hit, the attacker's side: a Bane hurts its Fryhtan species
+## more, the Cyrostaff may freeze the target.
+func _item_strike(dmg: float) -> void:
+	if item_id == 0 or not (target is Unit):
+		return
+	var t := target as Unit
+	var bane := item_ability(Items.Ability.ANTI_MONSTER)
+	if bane > 0 and Items.bane_target(item_para) == t.sprite_code:
+		t.take_damage(float(bane), self)
+		use_item()
+	var freeze := item_ability(Items.Ability.FREEZE)
+	if freeze > 0 and Game.inst.rng.randi() % 100 < freeze:
+		t.frozen_until = maxi(t.frozen_until, Game.inst.frame + freeze * 2)
+		use_item()
 
 
 func gain_experience() -> void:
@@ -581,6 +694,10 @@ func _do_return() -> bool:
 
 func take_damage(amount: float, attacker: GameObj) -> void:
 	if invulnerable_until > Game.inst.frame:
+		return
+	# Aegis Field and the Staff of Invincibility take the blow
+	if amount > 0.0 and (item_ability(Items.Ability.ABSORB_HIT) > 0 or item_ability(Items.Ability.INVINCIBLE) > 0):
+		use_item()
 		return
 	super(amount, attacker)
 

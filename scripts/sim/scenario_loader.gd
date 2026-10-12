@@ -76,6 +76,8 @@ func _goal_target(c: Dictionary):
 			return firm_map.get(p1)
 		Goals.REACH_UNIT_COUNT:
 			return _sprite_of(p1)
+		Goals.GET_SCROLL, Goals.ACQUIRE_ITEM:
+			return p1
 		Goals.ACQUIRE_TECH:
 			var techs := Assets.table("TECH")
 			return techs[p1 - 1]["TECH"] if p1 >= 1 and p1 <= techs.size() else null
@@ -150,6 +152,10 @@ func _nid(recno: int, race_id := 0) -> int:
 func _sites() -> void:
 	var raws: Array = Assets.table("RAW")
 	for sd in s.sites:
+		if sd["type"] >= Treasure.Kind.SCROLL and sd["type"] <= Treasure.Kind.BLUEPRINT:
+			# scrolls, gold, items and weapon plans lying on the map
+			g.spawn_treasure(sd["type"], sd["object_id"], sd["qty"], Vector2i(sd["x"], sd["y"]), sd["recno"])
+			continue
 		if sd["type"] != 1 or sd["object_id"] < 1 or sd["object_id"] > mini(3, raws.size()):
 			_skip("site type %d" % sd["type"])
 			continue

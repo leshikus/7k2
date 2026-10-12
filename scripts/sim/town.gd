@@ -98,8 +98,8 @@ func camp_influence(f: Firm) -> int:
 	var n := f.nation()
 	if f.is_fryhtan_lair():
 		# Fryhtans rule by fear: no race bonus or penalty, reputation does not help
-		return clampi(int(minf(100.0, f.overseer.leadership) * 0.6) + 15, 0, 100)
-	var inf := int(minf(100.0, f.overseer.leadership) / 2.0)
+		return clampi(int(minf(100.0, f.overseer.lead_skill()) * 0.6) + 15, 0, 100)
+	var inf := int(minf(100.0, f.overseer.lead_skill()) / 2.0)
 	if f.overseer.race == race:
 		inf += inf / 3
 	else:
@@ -133,7 +133,7 @@ func update_target_loyalty() -> void:
 		var fnat := f.nation()
 		if fnat == null:
 			continue
-		var inf := int(f.overseer.leadership / 3.0)
+		var inf := int(f.overseer.lead_skill() / 3.0)
 		if f.overseer.rank == Defs.Rank.KING:
 			inf += 20
 		if f.overseer.race == race:
@@ -399,7 +399,7 @@ func tribute_to() -> int:
 func _pay_tribute() -> void:
 	var lairs := linked_firms.filter(func(f): return f.is_fryhtan_lair() and f.overseer and resistance_to(f.nation_id) < Defs.SURRENDER_RESISTANCE)
 	for f in lairs:
-		var skill := minf(100.0, f.overseer.leadership)
+		var skill := minf(100.0, f.overseer.lead_skill())
 		var amount := population * 5.0 / lairs.size() * (100.0 + skill) / 200.0
 		var n: Nation = f.nation()
 		if n:

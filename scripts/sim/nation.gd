@@ -30,6 +30,8 @@ var income_year := 0.0
 var expense_year := 0.0
 var last_income_year := 0.0
 var last_expense_year := 0.0
+var known_gods := {}             # race -> true: Scrolls of Power held (GodInfo::nation_know_array)
+var items_acquired := {}         # item id -> true, for scenario goals
 var kill_monster_score := 0.0   # Fryhtans slain: 1 a soldier, 5 a general, 20 a king (Unit::die)
 
 var ai: NationAI = null
@@ -41,6 +43,7 @@ func _init(nation_id: int, nation_race: String, nation_color: Color, ai_controll
 	color = nation_color
 	is_ai = ai_controlled
 	name = "Kingdom of " + Defs.race_name(race)
+	known_gods[race] = true          # NationBase::init: a kingdom knows its own Greater Being
 
 
 func tech_level(code: String) -> int:

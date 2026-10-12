@@ -41,7 +41,7 @@ static func from_scenario(data: Dictionary, resolve: Callable) -> Goals:
 static func _supported(c: Dictionary) -> bool:
 	match c["id"]:
 		GET_SCROLL, ACQUIRE_ITEM:
-			return false       # items and scrolls on the map are not implemented yet
+			return c["target"] is int and c["target"] > 0
 		ACQUIRE_TECH:
 			return c["target"] is String and not Defs.tech_def(c["target"]).is_empty()
 		KILL_UNIT, KEEP_UNIT_ALIVE, MEET_UNIT, CONQUER_TOWN, DESTROY_FIRM, CONQUER_FIRM, DEFEAT_KINGDOM, FORM_ALLY_WITH_KINGDOM:
@@ -162,6 +162,10 @@ func _true(c: Dictionary, g: Game, n: Nation) -> bool:
 			return tgt.nation_id == n.id or (n.is_fryhtan and tgt.tribute_to() == n.id)
 		DESTROY_FIRM:
 			return not is_instance_valid(tgt) or tgt.dead
+		GET_SCROLL:
+			return g.taken_sites.get(tgt, 0) == n.id
+		ACQUIRE_ITEM:
+			return n.items_acquired.has(tgt)
 		NATION_SURVIVE:
 			return n.alive and g.day > c["p2"] * 365
 		ACQUIRE_TECH:

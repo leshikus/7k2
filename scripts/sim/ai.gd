@@ -30,6 +30,7 @@ func next_day(day: int) -> void:
 		_homeless(day)
 		return
 	_garrisons()
+	_seek_treasure()
 	_settle_spare_peasants()
 	_economy(day)
 	_expand(day)
@@ -177,6 +178,34 @@ func _garrisons() -> void:
 			var linked: Array = f.linked_towns.filter(func(t): return t.nation_id == n.id and t.loyalty >= 50 and t.population > 25)
 			if not linked.is_empty():
 				linked[0].draft_into(f)
+
+
+## Site::ai_get_site_object: send the nearest idle unit that can take it to any
+## treasure near the kingdom's towns and buildings.
+func _seek_treasure() -> void:
+	if g.treasures.is_empty():
+		return
+	var bases: Array = my_towns() + my_firms()
+	for t in g.treasures:
+		if g.units.any(func(u): return u.nation_id == n.id and u.order == Unit.Order.MOVE and u.goal == t.cell):
+			continue
+		if not bases.any(func(b): return b.center_loc().distance_to(t.center_loc()) < 30.0):
+			continue
+		var best: Unit = null
+		var best_d := 40.0
+		for u in idle_units():
+			if u.rank == Defs.Rank.KING or u.is_civilian() and t.kind == Treasure.Kind.ITEM:
+				continue
+			if t.kind == Treasure.Kind.SCROLL and u.race != t.race():
+				continue
+			if t.kind == Treasure.Kind.ITEM and (u.item_id != 0 or not Items.can_pick(u)):
+				continue
+			var d: float = u.center_loc().distance_to(t.center_loc())
+			if d < best_d:
+				best_d = d
+				best = u
+		if best:
+			best.order_move(t.cell)
 
 
 ## Peasants left over from building go back to a town, keeping two on hand.
