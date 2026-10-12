@@ -185,17 +185,17 @@ func _run() -> void:
 	var units_before := game.units.size()
 	var pop_before := town.population
 	_check(await _press_hud_button("Recruit"), "Recruit button enabled")
-	_check(game.units.size() == units_before + 1 and town.population == pop_before - 1, "recruiting creates a soldier from the town")
+	_check(game.units.size() == units_before + 1 and town.population == pop_before - 1, "recruiting sends a peasant out of the town")
 
 	# 5b. double-click a soldier selects every soldier of that type on screen
-	var outside: Array = game.units.filter(func(u): return u.nation_id == p.id and u.sprite_code == "NO_INF" and u.inside_firm == null and not u.dead)
-	_check(not outside.is_empty(), "a soldier is outside to test with")
+	var outside: Array = game.units.filter(func(u): return u.nation_id == p.id and u.sprite_code == "NO_CIV" and u.inside_firm == null and not u.dead)
+	_check(not outside.is_empty(), "a peasant is outside to test with")
 	if not outside.is_empty():
 		await _center_on(outside[0].center_loc())
 		var dp := _screen(outside[0].position + Vector2(-6, 0))
 		await _click(MOUSE_BUTTON_LEFT, dp)
 		await _click(MOUSE_BUTTON_LEFT, dp)
-		_check(game.selected.size() >= 1 and game.selected.all(func(o): return o is Unit and o.sprite_code == "NO_INF"), "double-click selects same-type units (%d)" % game.selected.size())
+		_check(game.selected.size() >= 1 and game.selected.all(func(o): return o is Unit and o.sprite_code == "NO_CIV"), "double-click selects same-type units (%d)" % game.selected.size())
 		# 5c. right-click on the minimap sends them there
 		var mini: Minimap = main.hud.minimap
 		var target := Vector2(40, 40)

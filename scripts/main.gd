@@ -68,6 +68,8 @@ func _ready() -> void:
 			camera.yaw = camera._yaw_target
 		elif a.begins_with("--pitch=") and camera:
 			camera.pitch = clampf(a.substr(8).to_float(), camera.pitch_min, camera.pitch_max)
+		elif a.begins_with("--bench="):
+			_bench(a.substr(8).to_float())
 		elif a == "--free-camera" and camera:
 			camera.set_free(true)
 		elif a == "--fixed-camera" and camera:
@@ -393,7 +395,7 @@ func _attach_game() -> void:
 	add_child(overlay_layer)
 	view3d.setup(game, camera, overlay)
 	# 3D models replacing the sprite cards, when the model library is present
-	if ResourceLoader.exists(MODEL_LIBRARY):
+	if ResourceLoader.exists(MODEL_LIBRARY) and not "--no-models" in OS.get_cmdline_user_args():
 		view3d.model_provider = load(MODEL_LIBRARY).new()
 		# with models the camera is free; sprites alone hold it to quarter turns
 		camera.set_free(true)
@@ -887,3 +889,36 @@ func _formation_move(units: Array, dest: Vector2i) -> void:
 		var u: Unit = units[i]
 		u.home_firm = null
 		u.order_move(cells[i] if i < cells.size() else dest)
+
+
+## --bench=<seconds>: after a second's warm-up, print frame time, draw calls and
+## object counts over the given span, then quit.
+func _bench(seconds: float) -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	await get_tree().create_timer(1.0).timeout
+	var times: Array[float] = []
+	var v3d := 0.0
+	var shown := 0
+	var draws := 0.0
+	var prims := 0.0
+	var proc := 0.0
+	var t0 := Time.get_ticks_usec()
+	var last := t0
+	while Time.get_ticks_usec() - t0 < seconds * 1e6:
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		times.append((now - last) / 1000.0)
+		last = now
+		draws += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+		prims += Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+		proc += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+		v3d += view3d.usec / 1000.0
+		shown += view3d.models_shown
+	var n := float(times.size())
+	times.sort()
+	print("BENCH frames %d  avg %.1f ms (%.0f fps)  p95 %.1f ms  process %.1f ms  view3d %.1f ms  models shown %d  draw calls %d  triangles %dk  units %d  nodes %d" % [
+		times.size(), times.reduce(func(a, b): return a + b) / n, n / seconds,
+		times[int(n * 0.95)], proc / n, v3d / n, int(shown / n), int(draws / n), int(prims / n / 1000.0), game.units.size() if game else 0,
+		Performance.get_monitor(Performance.OBJECT_NODE_COUNT)])
+	get_tree().quit()
+

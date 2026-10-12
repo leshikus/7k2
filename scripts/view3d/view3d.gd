@@ -136,9 +136,16 @@ func _build_fog() -> void:
 	_fog_quad = mi
 
 
+var _vectors := {}       # node -> [anchor, overlay vectors] from its last refresh
+var usec := 0            # time spent in the last update, for --bench
+var models_shown := 0
+
+
 func _process(_delta: float) -> void:
 	if game == null or not is_instance_valid(game) or game.world == null:
 		return
+	var t0 := Time.get_ticks_usec()
+	models_shown = 0
 	_frame += 1
 	rig.apply()
 	Iso.dir_map = rig.direction_map()
@@ -170,16 +177,36 @@ func _process(_delta: float) -> void:
 			if _models[node] != null:
 				_models[node].queue_free()
 			_models.erase(node)
+			_vectors.erase(node)
 	if _frame % 20 == 1:
 		_sync_decals()
 	overlay.groups = groups
 	overlay.queue_redraw()
+	usec = Time.get_ticks_usec() - t0
 
 
 func _sync(node: Node, view: Rect2, groups: Array, seen: Dictionary) -> void:
 	if not is_instance_valid(node) or not node.has_method("render"):
 		return
 	seen[node] = true
+	# Most objects need no work most frames. Trees and rocks are built once and culled
+	# by the engine: refresh their fog every 15 frames. Buildings keep their place:
+	# refresh them every 8 frames and reuse their health bars and labels in between.
+	# Off-screen units are looked at every fourth frame; the view margin hides the lag.
+	var is_static := node is Plant or node is Rock
+	var m = _models.get(node)
+	if is_static:
+		if _frame % 15 != 0 and (_static.has(node) or m != null):
+			return
+	elif m != null:
+		var fixed := node is Firm or node is Town
+		if (_frame + node.get_instance_id()) % (8 if fixed else 4) != 0:
+			if fixed:
+				if m.visible:
+					_reuse_vectors(node, groups)
+				return
+			if not m.visible:
+				return
 	var n2 := node as Node2D
 	var loc := Iso.to_loc(n2.position)
 	var anchor := Vector3(loc.x, 0.0, loc.y)
@@ -187,7 +214,6 @@ func _sync(node: Node, view: Rect2, groups: Array, seen: Dictionary) -> void:
 	var shown := n2.visible
 	if model_provider != null and _use_model(node, anchor, shown, view, groups, fog):
 		return
-	var is_static := node is Plant or node is Rock
 	if is_static:
 		# built once; the engine culls them, only fog is refreshed now and then
 		if not _static.has(node):
@@ -221,16 +247,38 @@ func _use_model(node: Node, anchor: Vector3, shown: bool, view: Rect2, groups: A
 	if model == null:
 		return false
 	model.position = anchor
-	var sp := rig.cam.unproject_position(anchor)
-	model.visible = shown and view.has_point(sp)
-	if not model.visible:
+	if node is Plant or node is Rock:
+		# static: the engine culls it; only fog and visibility change
+		model.visible = shown
+		model.process_mode = Node.PROCESS_MODE_DISABLED
+		model_provider.sync(node, model)
 		return true
+	var sp := rig.cam.unproject_position(anchor)
+	var vis := shown and view.has_point(sp)
+	if vis != model.visible or _frame < 3:
+		model.visible = vis
+		# hidden models stop animating: skeletons off screen cost as much as on it
+		model.process_mode = Node.PROCESS_MODE_INHERIT if vis else Node.PROCESS_MODE_DISABLED
+	if not vis:
+		return true
+	models_shown += 1
 	model_provider.sync(node, model)
 	_rec.clear()
 	node.render(_rec)
 	if not _rec.vectors.is_empty() and fog > 0:
-		groups.append([sp, rig.zoom.x, _rec.vectors.duplicate()])
+		var vec := _rec.vectors.duplicate()
+		groups.append([sp, rig.zoom.x, vec])
+		_vectors[node] = [anchor, vec]
+	else:
+		_vectors.erase(node)
 	return true
+
+
+## Last frame's health bars and labels of a building, at the current view.
+func _reuse_vectors(node: Node, groups: Array) -> void:
+	var v = _vectors.get(node)
+	if v != null:
+		groups.append([rig.cam.unproject_position(v[0]), rig.zoom.x, v[1]])
 
 
 func _apply_cards(node: Node, anchor: Vector3, textures: Array) -> void:

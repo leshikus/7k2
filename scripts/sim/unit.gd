@@ -93,6 +93,11 @@ func is_human() -> bool:
 	return race != "" and not is_weapon and not is_god
 
 
+## Villagers (the *_CIV sprites) build, settle and spy but never garrison a fort.
+func is_civilian() -> bool:
+	return sprite_code.ends_with("_CIV")
+
+
 func can_lead() -> bool:
 	return is_human() and (rank >= Defs.Rank.GENERAL)
 
@@ -172,6 +177,24 @@ func order_enter(f: Firm) -> void:
 	order = Order.ENTER
 	order_firm = f
 	_path_to(Game.inst.world.adjacent_to_rect(f.footprint(), cell()))
+
+
+## Walk to the nearest own town of the same race and rejoin its population.
+func order_settle() -> bool:
+	var best: Town = null
+	var best_d := INF
+	for t in Game.inst.towns:
+		if t.nation_id == nation_id and t.race == race and not t.dead:
+			var d := t.center_loc().distance_to(center_loc())
+			if d < best_d:
+				best_d = d
+				best = t
+	if best == null:
+		return false
+	stop()
+	home_town = best
+	order = Order.RETURN
+	return true
 
 
 func order_build(f: Firm) -> void:

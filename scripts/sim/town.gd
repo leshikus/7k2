@@ -465,10 +465,10 @@ func recruit() -> Unit:
 	if not can_recruit():
 		return null
 	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
-	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "INF"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
+	# Town::mobilize_town_people: a villager leaves as a civilian, not a soldier
+	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
 	if u == null:
 		return null
-	u.leadership = float(Game.inst.rng.randi_range(10, 40))
 	population -= 1
 	loyalty = maxf(0.0, loyalty - minf(10.0, 2.0 + recruit_penalty / 5.0))
 	recruit_penalty += 5

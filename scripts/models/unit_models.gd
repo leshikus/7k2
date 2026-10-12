@@ -40,7 +40,7 @@ static var SPECS := {
 	"MO_SPU": _ride("MO_SPU", "horse_white", {"A2": "Ride_2H_Ranged_Shoot"}, {"*": ["W_Sword"], "A2": ["W_Bow"], "A3": ["W_Throw"]}),
 	"PE_SPU": _ride("PE_SPU", "horse_black", {"A2": "Ride_1H_Melee_Attack_Stab"}, {"*": ["W_Sword"], "A3": ["W_Throw"]}),
 	"CT_SPU": _ride("CT_SPU", "elephant", {"A1": "Ride_2H_Melee_Attack_Stab", "A2": "Ride_2H_Melee_Attack_Stab"}, {"*": ["W_Spear"]}, 2.0),
-	"IN_SPU": _ride("IN_SPU", "elephant_white", {"A1": "Ride_2H_Melee_Attack_Stab"}, {"*": ["W_Spear"], "A2": ["W_Throw"], "A3": ["W_Throw"]}, 2.0),
+	"IN_SPU": _ride("IN_SPU", "elephant_white", {"A1": "Ride_2H_Melee_Attack_Stab", "A2": "Ride_Throw"}, {"*": ["W_Spear"], "A2": ["W_Throw"], "A3": ["W_Throw"]}, 2.0),
 	"EG_SPU": {"model": "riders/EG_SPU.glb", "cart": "props/chariot.glb", "seat": Vector3(0, 0.36, -0.1),
 		"pullers": [["mounts/horse_bay.glb", Vector3(-0.32, 0, 1.75)], ["mounts/horse_chestnut.glb", Vector3(0.32, 0, 1.75)]],
 		"clips": {"M": "Idle", "A1": "1H_Melee_Attack_Stab", "A2": "Throw", "A3": "Throw"},
@@ -82,6 +82,23 @@ static var SPECS := {
 	"JA_SPU": _u("JA_SPU", {"A1": "1H_Melee_Attack_Slice_Horizontal", "A2": "Dualwield_Melee_Attack_Stab", "A3": "Throw"}, {"*": ["W_Sword"], "A2": ["W_Sword", "W_Knife"], "A3": ["W_Throw"]}),
 }
 
+## Where in each attack clip (0..1) the blow lands or the missile leaves the hand,
+## read off contact sheets (tests/tools/clip_sheet.tscn) and the right hand's peak
+## speed (tests/tools/attack_audit.tscn -- hits). The view times the clip so this
+## moment falls on the sprite action's last frame, when the simulation deals the hit.
+const HIT_TIME := {
+	"1H_Melee_Attack_Chop": 0.58, "1H_Melee_Attack_Slice_Diagonal": 0.45,
+	"1H_Melee_Attack_Slice_Horizontal": 0.3, "1H_Melee_Attack_Stab": 0.3,
+	"2H_Melee_Attack_Chop": 0.5, "2H_Melee_Attack_Slice": 0.38, "2H_Melee_Attack_Spin": 0.5,
+	"2H_Melee_Attack_Stab": 0.3, "2H_Ranged_Shoot": 0.5, "Block_Attack": 0.5,
+	"Dualwield_Melee_Attack_Stab": 0.3, "Ride_1H_Melee_Attack_Chop": 0.6,
+	"Ride_1H_Melee_Attack_Slice_Diagonal": 0.45, "Ride_1H_Melee_Attack_Stab": 0.3,
+	"Ride_2H_Melee_Attack_Stab": 0.3, "Ride_2H_Ranged_Shoot": 0.5, "Ride_Throw": 0.55,
+	"Spellcast_Long": 0.65, "Spellcast_Raise": 0.5, "Spellcast_Shoot": 0.4,
+	"Spellcast_Summon": 0.68, "Throw": 0.55, "Unarmed_Melee_Attack_Kick": 0.38,
+	"Unarmed_Melee_Attack_Punch_A": 0.32, "Unarmed_Melee_Attack_Punch_B": 0.32,
+}
+
 const BOW_CLIP := "2H_Ranged_Shoot"
 const RIDE_CLIPS := {"S": "Ride_Idle", "M": "Ride_Idle", "A1": "Ride_1H_Melee_Attack_Chop",
 	"A2": "Ride_1H_Melee_Attack_Slice_Diagonal", "A3": "Ride_Throw", "D": "Death_B"}
@@ -115,6 +132,10 @@ static func _siege(code: String) -> Dictionary:
 
 static func _civ(code: String) -> Dictionary:
 	return _u(code, {"A1": "1H_Melee_Attack_Chop"}, {"*": ["W_Tool"]})
+
+
+static func hit_time(clip: String) -> float:
+	return HIT_TIME.get(clip, 0.5)
 
 
 static func spec(code: String) -> Dictionary:

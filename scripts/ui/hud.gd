@@ -658,7 +658,7 @@ func _unit_actions(sel: Array) -> void:
 		_add_action("Build...", func(): build_menu_open = true, true, "Choose a building to construct. The nearest selected unit will build it.")
 	if own.size() == 1:
 		var u: Unit = own[0]
-		if u.is_human() and u.rank == Defs.Rank.SOLDIER:
+		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian():
 			var promote := func():
 				u.rank = Defs.Rank.GENERAL
 				u.leadership = maxf(u.leadership, 25.0)
@@ -674,19 +674,7 @@ func _unit_actions(sel: Array) -> void:
 
 
 func _settle(u: Unit) -> void:
-	var best: Town = null
-	var best_d := INF
-	for t in game.towns:
-		if t.nation_id == u.nation_id and t.race == u.race:
-			var d := t.center_loc().distance_to(u.center_loc())
-			if d < best_d:
-				best_d = d
-				best = t
-	if best:
-		u.home_town = best
-		u.stop()
-		u.order = Unit.Order.RETURN
-	else:
+	if not u.order_settle():
 		game.notify("No town of the same race to settle in.", Vector2(-1, -1))
 
 
@@ -788,7 +776,7 @@ func _show_town(t: Town, rebuild: bool) -> void:
 			if u:
 				game.selected = [u]
 				u.selected = true
-		_add_action("Recruit peasant", do_recruit, t.can_recruit(), "Recruit a villager as a peasant unit; peasants become soldiers in a fort. Needs loyalty %d+." % Defs.MIN_RECRUIT_LOYALTY)
+		_add_action("Recruit peasant", do_recruit, t.can_recruit(), "Send a villager out as a peasant, to build, found a town or work as a spy. Soldiers come from a fort's \"Fill from towns\". Needs loyalty %d+." % Defs.MIN_RECRUIT_LOYALTY)
 		var do_tax := func():
 			var tax := t.collect_tax()
 			game.notify("Collected %d gold from %s." % [int(tax), t.town_name], t.center_loc())

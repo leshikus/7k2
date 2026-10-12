@@ -136,8 +136,8 @@ func accept_unit(u: Unit) -> bool:
 		return false
 	if not is_military():
 		return false
-	if code != "LAIR" and not u.is_human():
-		return false
+	if code != "LAIR" and (not u.is_human() or u.is_civilian()):
+		return false      # FirmCamp::assign_unit: only military units
 	if code == "LAIR" and u.home_firm == self:
 		u.home_firm = null      # a raider coming home always fits; it counted toward the brood
 		soldiers.append(u)

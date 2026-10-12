@@ -30,6 +30,7 @@ func next_day(day: int) -> void:
 		_homeless(day)
 		return
 	_garrisons()
+	_settle_spare_peasants()
 	_economy(day)
 	_expand(day)
 	_military(day)
@@ -175,9 +176,14 @@ func _garrisons() -> void:
 		if f.soldiers.size() < f.capacity() * 2 / 3 and n.cash > 200:
 			var linked: Array = f.linked_towns.filter(func(t): return t.nation_id == n.id and t.loyalty >= 50 and t.population > 25)
 			if not linked.is_empty():
-				var u: Unit = linked[0].recruit()
-				if u:
-					u.order_enter(f)
+				linked[0].draft_into(f)
+
+
+## Peasants left over from building go back to a town, keeping two on hand.
+func _settle_spare_peasants() -> void:
+	var idle := idle_units().filter(func(u): return u.is_civilian())
+	for i in range(2, idle.size()):
+		idle[i].order_settle()
 
 
 func _best_idle_leader(c: Vector2) -> Unit:
@@ -187,7 +193,7 @@ func _best_idle_leader(c: Vector2) -> Unit:
 			best = u
 	if best == null:
 		for u in idle_units():
-			if u.rank == Defs.Rank.SOLDIER and (best == null or u.leadership > best.leadership):
+			if u.rank == Defs.Rank.SOLDIER and not u.is_civilian() and (best == null or u.leadership > best.leadership):
 				best = u
 		if best:
 			best.rank = Defs.Rank.GENERAL
@@ -360,7 +366,7 @@ func _expand(_day: int) -> void:
 # -------------------------------------------------------------- military ---
 
 func _military(day: int) -> void:
-	var army := idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING)
+	var army := idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING and not u.is_civilian())
 	var mine := g.military_strength(n.id)
 	# pick a war
 	if war_target == 0 and day > int(700 / aggression):
@@ -400,7 +406,7 @@ func _military(day: int) -> void:
 			if f.code in Firm.MILITARY_FIRMS and f.soldiers.size() > 3:
 				for i in f.soldiers.size() - 2:
 					f.release_unit(f.soldiers[0])
-	army = idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING)
+	army = idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING and not u.is_civilian())
 	if attack_target and army.size() >= 6:
 		for u in army:
 			u.order_attack(attack_target)

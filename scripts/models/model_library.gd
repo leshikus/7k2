@@ -243,7 +243,14 @@ func _sync_unit(u: Unit, model: Node3D) -> void:
 	if u.dead:
 		act = "D"
 	var spec: Dictionary = st["spec"]
-	var restart: bool = act != st["action"] or (act.begins_with("A") and u.anim_frame < st["frame"])
+	# The hit lands on the action's last frame, mid-swing in the clip: once the
+	# simulation is back to standing, let the swing follow through first.
+	var prev: String = st["action"]
+	var follow := act == "S" and prev.begins_with("A") and _attack_playing(st)
+	if follow:
+		act = prev
+	var restart: bool = act != prev or (act.begins_with("A") and not follow and (u.anim_frame < st["frame"] or st.get("follow", false)))
+	st["follow"] = follow
 	st["frame"] = u.anim_frame
 	if restart:
 		st["action"] = act
@@ -263,9 +270,12 @@ func _sync_unit(u: Unit, model: Node3D) -> void:
 			if restart:
 				ap.seek(0.0, true)
 		var length := ap.get_animation(clip).length
-		if act.begins_with("A"):
-			# the whole clip spans the sprite action; the hit lands on its last frame
-			ap.speed_scale = length / (float(n_attack) / (Defs.SIM_FPS * spd))
+		if follow:
+			ap.speed_scale = spd * 1.2
+		elif act.begins_with("A"):
+			# the clip's impact falls on the sprite action's last frame, when the hit lands
+			var hit := UnitModels.hit_time(clip) if not is_mount else 0.5
+			ap.speed_scale = length * hit / (float(n_attack) / (Defs.SIM_FPS * spd))
 		elif act == "M":
 			var stride: float = spec.get("mount_stride" if is_mount else "stride", 1.1)
 			ap.speed_scale = ground * length / stride
@@ -285,6 +295,17 @@ func _sync_unit(u: Unit, model: Node3D) -> void:
 		var n := Assets.action_len(u.sprite_code, "D", 0)
 		var t := float(u.death_frames - maxi(n * 2, 1) - 20) / 40.0
 		pivot.position.y = spec.get("fly", 0.0) * (1.0 - clampf(float(u.death_frames) / 12.0, 0.0, 1.0)) - clampf(t, 0.0, 1.0) * 0.6
+
+
+## True while a body's attack clip is still playing out.
+static func _attack_playing(st: Dictionary) -> bool:
+	for part in st["parts"]:
+		var ap: AnimationPlayer = part["ap"]
+		if part["role"] == "mount" or ap == null or not ap.is_playing() or ap.current_animation in UnitModels.LOOPING:
+			continue
+		if ap.current_animation_position < ap.current_animation_length - 0.03:
+			return true
+	return false
 
 
 ## Code-driven motion of rigid siege parts over an attack (p: 0..1 to the hit).
