@@ -241,10 +241,10 @@ func sprite_frame(code: String, action: String, dir: int, frame: int, color: Col
 	if img != null:
 		var off := Vector2(fr["OFFSET_X"].to_int(), fr["OFFSET_Y"].to_int()) + Iso.bitmap_adjust(info["loc_w"], info["loc_h"])
 		# The SW, W and NW frames are stored facing the other way (note their shadows):
-		# the original draws them mirrored about the sprite's centre.
+		# the original draws them mirrored in place, at the stored offset
+		# (Sprite::need_mirror, put_bitmap_*_hmirror at x1 = x + offset_x).
 		if dir >= 5 and acts.size() == 8:
 			img.flip_x()
-			off.x = -(off.x + img.get_width())
 		result = [_make_tex(img), off]
 	_tex_cache[key] = result
 	return result
