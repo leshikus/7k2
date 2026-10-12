@@ -87,14 +87,13 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   terrain textures, town houses, trees, raw-material sites, unit portraits, JPEG
   screens and WAV music.
 * A 3D world with blended terrain (shader), hill shading, trees, fog of war and a
-  diamond minimap. The camera turns in quarter turns; free rotation and tilt are
-  settings on `CameraRig`.
-* Low-poly 3D models for every unit, Fryhtan, Greater Being, siege weapon,
-  projectile, building, town, tree and rock, with skeletal animations for walking,
-  attacks and deaths, and particle effects for fires, explosions and spells. They
-  are built from CC0 packs and procedural geometry by `tools/blender/`
-  (`assets/models/CREDITS.md`). Objects without a model fall back to the original's
-  bitmaps, drawn as camera-facing cards.
+  diamond minimap. The original's bitmaps are drawn as camera-facing cards; at the
+  original's view angle the picture matches the original 2D projection. The camera
+  turns in quarter turns; free rotation and tilt are settings on `CameraRig`.
+* Experimental, off by default (`--models` turns them on): low-poly 3D models for
+  every unit, Fryhtan, Greater Being, siege weapon, projectile, building, town, tree
+  and rock, with skeletal animations and particle effects. They are built from CC0
+  packs and procedural geometry by `tools/blender/` (`assets/models/CREDITS.md`).
 * All 12 human races with their infantry, special units, civilians and Greater
   Beings; 7 Fryhtan species with their lairs; computer-run Fryhtan kingdoms;
   siege weapons.

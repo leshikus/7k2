@@ -394,8 +394,9 @@ func _attach_game() -> void:
 	overlay_layer.add_child(overlay)
 	add_child(overlay_layer)
 	view3d.setup(game, camera, overlay)
-	# 3D models replacing the sprite cards, when the model library is present
-	if ResourceLoader.exists(MODEL_LIBRARY) and not "--no-models" in OS.get_cmdline_user_args():
+	# 3D models replacing the sprite cards: off for now, the original sprites are the
+	# look of the game; --models turns them on
+	if ResourceLoader.exists(MODEL_LIBRARY) and "--models" in OS.get_cmdline_user_args():
 		view3d.model_provider = load(MODEL_LIBRARY).new()
 		# with models the camera is free; sprites alone hold it to quarter turns
 		camera.set_free(true)
