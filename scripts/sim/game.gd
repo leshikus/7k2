@@ -699,6 +699,7 @@ var spies: Array[Unit] = []        # spies currently inside a town or building
 
 func spy_enter(u: Unit, place: GameObj) -> void:
 	u.stop()
+	Espionage.stop_camouflage(u)
 	u.inside_firm = null
 	u.visible = false
 	u.spy_place = place
@@ -707,9 +708,13 @@ func spy_enter(u: Unit, place: GameObj) -> void:
 	if not spies.has(u):
 		spies.append(u)
 	if u.nation_id == player_id:
-		notify("Your spy has infiltrated %s." % place.display_name(), place.center_loc())
+		if place.nation_id == player_id:
+			notify("Your spy is watching for enemy spies in %s." % place.display_name(), place.center_loc())
+		else:
+			notify("Your spy has infiltrated %s." % place.display_name(), place.center_loc())
 
 
+## Spy::mobilize_spy: the spy walks out wearing the colours of the place he left.
 func spy_leave(u: Unit) -> void:
 	spies.erase(u)
 	if u.dead:
@@ -719,57 +724,32 @@ func spy_leave(u: Unit) -> void:
 	u.remove_meta("hidden")
 	u.visible = true
 	if place and is_instance_valid(place):
+		u.cloak_id = place.nation_id if place.nation_id > 0 and place.nation_id != u.nation_id and nation(place.nation_id) and not nation(place.nation_id).is_fryhtan else 0
 		var c := world.adjacent_to_rect(place.footprint(), Vector2i(place.center_loc()))
 		u.loc = Vector2(c)
 		u.position = Iso.to_screen(u.loc)
+	u.queue_redraw()
 
 
-## Daily spy work (ospy.cpp, simplified): agitation, sabotage, tech theft, and
-## the chance of being caught, which falls with spying skill.
-func _process_spies() -> void:
-	for u in spies.duplicate():
-		if u.dead or not is_instance_valid(u.spy_place) or u.spy_place.dead:
-			spy_leave(u)
-			continue
-		var place: Variant = u.spy_place
-		if day % 10 != u.obj_id % 10:
-			continue
-		var catch_chance := maxf(0.01, 0.12 - u.spy_skill / 1000.0)
-		if place.nation_id > 0 and rng.randf() < catch_chance:
-			_spy_caught(u)
-			continue
-		u.spy_skill = minf(100.0, u.spy_skill + 0.5)
-		if place is Town:
-			var t := place as Town
-			if t.nation_id == 0:
-				t.resistance[u.nation_id] = maxf(0.0, t.resistance_to(u.nation_id) - 1.0 - u.spy_skill / 50.0)
-				t.think_surrender()
-			elif t.nation_id != u.nation_id:
-				t.loyalty = maxf(0.0, t.loyalty - 1.0 - u.spy_skill / 50.0)
-		elif place is Firm:
-			var f := place as Firm
-			match u.spy_action:
-				"sabotage":
-					f.take_damage(f.max_hp * (0.1 + u.spy_skill / 400.0), null)
-					u.spy_action = "agitate"
-					if u.nation_id == player_id:
-						notify("Your spy sabotaged the %s." % f.display_name(), f.center_loc())
-				"steal":
-					_steal_tech(u, f)
-					u.spy_action = "agitate"
-
-
-func _spy_caught(u: Unit) -> void:
+## A spy unmasked by counter-espionage (SpyArray::catch_spy -> Spy::get_killed).
+func spy_caught(u: Unit) -> void:
 	var place := u.spy_place
-	spies.erase(u)
 	if place and place.nation_id == player_id:
 		notify("An enemy spy was caught in %s!" % place.display_name(), place.center_loc())
 	elif u.nation_id == player_id:
 		notify("Your spy in %s has been caught and executed." % place.display_name(), place.center_loc())
+	kill_spy(u)
+
+
+## A spy dies on a failed mission or when caught. Spying on a kingdom at peace
+## costs reputation.
+func kill_spy(u: Unit) -> void:
+	var place := u.spy_place
+	spies.erase(u)
 	var n := nation(u.nation_id)
-	if n and place:
+	if n and place and is_instance_valid(place):
 		var victim := nation(place.nation_id)
-		if victim and victim.relation(u.nation_id) >= Defs.Relation.PEACE:
+		if victim and victim.id != n.id and victim.relation(u.nation_id) >= Defs.Relation.PEACE:
 			n.change_reputation(-5.0)
 	u.spy_place = null
 	u.remove_meta("hidden")
@@ -777,17 +757,39 @@ func _spy_caught(u: Unit) -> void:
 	remove_unit(u)
 
 
-func _steal_tech(u: Unit, f: Firm) -> void:
-	var mine := nation(u.nation_id)
-	var theirs := f.nation()
-	if mine == null or theirs == null or u.spy_skill < Defs.MIN_TECH_THEFT_SPYING_SKILL:
-		return
-	for code in theirs.tech:
-		if theirs.tech_level(code) > mine.tech_level(code):
-			mine.tech[code] = mine.tech_level(code) + 1
-			if u.nation_id == player_id:
-				notify("Your spy stole the secret of %s!" % Defs.tech_def(code).get("name", code), f.center_loc())
-			return
+## Kills a man inside a building (an assassinated general).
+func kill_inside(f: Firm, u: Unit) -> void:
+	if f.overseer == u:
+		f.overseer = null
+	f.soldiers.erase(u)
+	u.inside_firm = null
+	u.die(null)
+	remove_unit(u)
+	update_links()
+
+
+## A bribed man let out of his fort turns to his true master as a spy in the
+## field, still wearing the colours he served (Spy::mobilize_firm_spy).
+func sleeper_wakes(u: Unit, f: Firm) -> void:
+	var master := u.sleeper_for
+	u.sleeper_for = 0
+	u.nation_id = master
+	u.is_spy = true
+	u.spy_skill = float(u.get_meta("sleeper_skill", Espionage.SLEEPER_SKILL))
+	u.remove_meta("sleeper_skill")
+	u.cloak_id = f.nation_id if nation(f.nation_id) and not nation(f.nation_id).is_fryhtan else 0
+	u.rank = Defs.Rank.SOLDIER if u.rank == Defs.Rank.GENERAL else u.rank
+	u.home_firm = null
+	notify_nation(master, "%s, who took your bribe, has left %s and reports to you." % [u.display_name(), f.display_name()], f.center_loc())
+
+
+## A building has changed hands: links, the AI's bookkeeping, messages.
+func on_firm_changed(f: Firm, old_nation: int) -> void:
+	deselect(f)
+	update_links()
+	var n := nation(f.nation_id)
+	if observer():
+		notify("%s now belongs to the %s." % [f.display_name(), n.name if n else "independents"], f.center_loc())
 
 
 func spy_spawn(college: Firm) -> Unit:
@@ -1077,22 +1079,29 @@ func player() -> Nation:
 	return nation(player_id)
 
 
+## Whether a and b fight. A disguised spy is judged by the colours it wears
+## (Unit::nation_recno is the cloaked nation in the original); its own side
+## always knows it.
 func is_hostile(a: GameObj, b: GameObj) -> bool:
 	if a == null or b == null or a.nation_id == b.nation_id:
 		return false
 	if a.is_monster() or b.is_monster():
 		return true
-	if a.nation_id == 0 or b.nation_id == 0:
-		var indep := a if a.nation_id == 0 else b
+	var sa := a.seen_nation()
+	var sb := b.seen_nation()
+	if sa == sb:
+		return false
+	if sa == 0 or sb == 0:
+		var indep := a if sa == 0 else b
 		var other := b if indep == a else a
 		var town: Town = null
 		if indep is Town:
 			town = indep
 		elif indep is Unit:
 			town = (indep as Unit).home_town
-		return town != null and is_instance_valid(town) and not town.dead and town.aggressors.has(other.nation_id)
-	var na := nation(a.nation_id)
-	return na != null and na.is_hostile_to(b.nation_id)
+		return town != null and is_instance_valid(town) and not town.dead and town.aggressors.has(other.seen_nation())
+	var na := nation(sa)
+	return na != null and na.is_hostile_to(sb)
 
 
 ## Nearest hostile unit (or, for Fryhtans, any human object) within `range`.
@@ -1117,6 +1126,8 @@ func find_enemy_near(obj: GameObj, range: float) -> GameObj:
 	for u in units_near(c, range + 2.0):
 		if u.dead or u.inside_firm or u == obj or u.has_meta("hidden") or not is_hostile(obj, u):
 			continue
+		if u.camouflage_days > 0:
+			continue          # a camouflaged spy is not seen by other kingdoms
 		var d := c.distance_to(u.center_loc())
 		if d < best_d:
 			best_d = d
@@ -1250,7 +1261,7 @@ func sim_frame() -> void:
 		_pick_up_treasures()
 	if frame % Defs.FRAMES_PER_DAY == 0:
 		next_day()
-		_process_spies()
+		Espionage.next_day(self)
 	if frame % 5 == 0:
 		_update_visibility()
 	if frame % 3 == 0:
@@ -1394,7 +1405,7 @@ func _update_visibility() -> void:
 		if u.has_meta("hidden"):
 			u.visible = false
 			continue
-		u.visible = u.nation_id == player_id or reveal_all or is_loc_visible(u.cell())
+		u.visible = u.nation_id == player_id or ((reveal_all or is_loc_visible(u.cell())) and (u.camouflage_days <= 0 or observer()))
 	for f in firms:
 		f.visible = f.nation_id == player_id or is_explored_rect(f.footprint())
 	for t in towns:

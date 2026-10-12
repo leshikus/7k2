@@ -452,6 +452,7 @@ func draft_into(f: Firm) -> Unit:
 	if u == null:
 		return null
 	u.leadership = float(Game.inst.rng.randi_range(10, 40))
+	u.loyalty = loyalty          # a recruit brings the town's loyalty with him
 	if not f.accept_unit(u):
 		Game.inst.remove_unit(u)
 		return null
@@ -469,6 +470,7 @@ func recruit() -> Unit:
 	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
 	if u == null:
 		return null
+	u.loyalty = loyalty
 	population -= 1
 	loyalty = maxf(0.0, loyalty - minf(10.0, 2.0 + recruit_penalty / 5.0))
 	recruit_penalty += 5

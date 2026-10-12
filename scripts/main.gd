@@ -266,9 +266,19 @@ func _demo(what: String) -> void:
 			var indep: Array = game.towns.filter(func(t): return t.nation_id == 0)
 			if s1 and not indep.is_empty():
 				game.spy_enter(s1, indep[0])
-			_set_selection([col])
-			camera.iso_pos = Iso.to_screen(col.center_loc())
-			hud.toggle_spies()
+			# a spy inside an enemy fort, with the spying techs, to show the missions
+			var foe_f: Array = game.firms.filter(func(f): return Espionage.is_camp(f) and f.nation_id != p.id and f.nation_id > 0 and f.overseer != null)
+			if s2 and not foe_f.is_empty():
+				for k in ["STEALINF", "BRIBE", "ASSASSIN", "STEALTEC", "INCIDENT", "AGITATE", "COUNTERS", "CAMOUFLG"]:
+					p.tech[k] = 1
+				s2.spy_skill = 95.0
+				game.spy_enter(s2, foe_f[0])
+				p.cash = 20000.0
+				_set_selection([foe_f[0]])
+				camera.iso_pos = Iso.to_screen(foe_f[0].center_loc())
+			else:
+				_set_selection([col])
+				camera.iso_pos = Iso.to_screen(col.center_loc())
 		"gallery":
 			# every work building in all four architectural styles, for visual checks
 			var base := Vector2i(10, 10)
@@ -882,11 +892,16 @@ func _command(force_attack: bool) -> void:
 		return
 	sfx.play_event("S", own[0].sprite_code, "ACK")
 	var target := _pick()
-	# spies slip into enemy and independent towns and buildings instead of attacking
+	# spies slip into towns, forts and camps (their own ones to hunt enemy spies)
 	var spies_sel: Array = own.filter(func(u): return u.is_spy)
-	if target and not spies_sel.is_empty() and target.nation_id != game.player_id and (target is Town or target is Firm):
+	if target and not spies_sel.is_empty() and (target is Town or Espionage.is_camp(target)):
+		var refused := 0
 		for u in spies_sel:
-			u.order_infiltrate(target)
+			if not u.order_infiltrate(target):
+				refused += 1
+		if refused > 0:
+			var tn := game.nation(target.nation_id)
+			game.notify("A spy cannot put on the colours of the %s with enemies nearby." % tn.name if tn else "The spy cannot go there.", spies_sel[0].center_loc())
 		own = own.filter(func(u): return not u.is_spy)
 		if own.is_empty():
 			return

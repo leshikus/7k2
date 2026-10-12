@@ -129,6 +129,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"name": u.unit_name, "hero": u.is_hero, "life": u.life_frames, "dir": u.dir,
 		"home_town": _id(u.home_town), "home_firm": _id(u.home_firm), "inside": _id(u.inside_firm),
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
+		"cloak": u.cloak_id, "camo": [u.camouflage_days, u.camouflage_power], "sleeper": u.sleeper_for, "loyalty": u.loyalty,
 		"item": [u.item_id, u.item_para],
 		"caravan_home": _id(u.caravan_home), "caravan_dest": _id(u.caravan_dest), "caravan_leg": u.caravan_leg, "cargo": u.cargo,
 	}
@@ -313,7 +314,15 @@ static func load_into(g: Game, slot: String) -> String:
 		var it: Array = ud.get("item", [0, 0])
 		u.item_id = int(it[0])
 		u.item_para = int(it[1])
-		u.spy_action = ud.get("spy_action", "agitate")
+		u.spy_action = ud.get("spy_action", "dissent")
+		if not u.spy_action in ["idle", "dissent"]:
+			u.spy_action = "dissent"
+		u.cloak_id = int(ud.get("cloak", 0))
+		var camo: Array = ud.get("camo", [0, 0])
+		u.camouflage_days = int(camo[0])
+		u.camouflage_power = int(camo[1])
+		u.sleeper_for = int(ud.get("sleeper", 0))
+		u.loyalty = float(ud.get("loyalty", 70.0))
 		var sp = by_id.get(int(ud.get("spy_place", 0)))
 		if sp is GameObj and ud.get("hidden", false):
 			g.spy_enter(u, sp)

@@ -342,26 +342,31 @@ func _fill_spies() -> void:
 		var row := HBoxContainer.new()
 		spies_list.add_child(row)
 		var l := Label.new()
-		var where := "infiltrated in %s" % u.spy_place.display_name() if u.spy_place and is_instance_valid(u.spy_place) and u.has_meta("hidden") else "in the field"
+		var where := "in %s" % u.spy_place.display_name() if u.spy_place and is_instance_valid(u.spy_place) and u.has_meta("hidden") else "in the field"
+		if u.cloak_id > 0 and game.nation(u.cloak_id):
+			where += ", disguised as %s" % game.nation(u.cloak_id).name
 		l.text = "%s (skill %d) — %s" % [u.unit_name, int(u.spy_skill), where]
 		l.custom_minimum_size = Vector2(330, 0)
 		row.add_child(l)
-		if u.has_meta("hidden") and u.spy_place is Firm:
-			var sab := Button.new()
-			sab.text = "Sabotage"
-			sab.pressed.connect(func():
-				u.spy_action = "sabotage"
+		if u.has_meta("hidden") and u.spy_place.nation_id != game.player_id:
+			var mode := Button.new()
+			mode.text = "Sow dissent" if u.spy_action == "dissent" else "Sleep"
+			mode.tooltip_text = "Click to switch between sowing dissent and lying low."
+			mode.pressed.connect(func():
+				u.spy_action = "idle" if u.spy_action == "dissent" else "dissent"
 				_fill_spies())
-			row.add_child(sab)
-			if (u.spy_place as Firm).code == "RESEARCH":
-				var st := Button.new()
-				st.text = "Steal tech"
-				st.disabled = u.spy_skill < Defs.MIN_TECH_THEFT_SPYING_SKILL
-				st.tooltip_text = "Needs spying skill %d." % Defs.MIN_TECH_THEFT_SPYING_SKILL
-				st.pressed.connect(func():
-					u.spy_action = "steal"
-					_fill_spies())
-				row.add_child(st)
+			row.add_child(mode)
+		var go := Button.new()
+		go.text = "Show"
+		go.pressed.connect(func():
+			var o: GameObj = u.spy_place if u.has_meta("hidden") else u
+			for x in game.selected:
+				if is_instance_valid(x):
+					x.selected = false
+			game.selected = [o]
+			o.selected = true
+			camera.focus_on(o.center_loc()))
+		row.add_child(go)
 		if u.has_meta("hidden"):
 			var rc := Button.new()
 			rc.text = "Recall"
@@ -657,8 +662,16 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 			s += "Leadership %d\n" % int(u.leadership)
 	if u.is_hero:
 		s += "[color=#ffd860]Hero[/color]\n"
-	if u.is_spy:
-		s += "[color=#c0a0ff]Spy[/color], spying skill %d\nRight-click an enemy or independent town or building to infiltrate it.\n" % int(u.spy_skill)
+	if u.is_spy and u.nation_id == game.player_id:
+		s += "[color=#c0a0ff]Spy[/color], spying skill %d\n" % int(u.spy_skill)
+		var cn := game.nation(u.cloak_id) if u.cloak_id > 0 else null
+		if cn:
+			s += "Disguised as one of the [color=#%s]%s[/color]\n" % [cn.color.to_html(false), cn.name]
+		if u.camouflage_days > 0:
+			s += "Camouflaged: unseen for %d days\n" % u.camouflage_days
+		s += "[color=#b0a890]Right-click a town, fort or camp to infiltrate it. A kingdom's place needs its colours, put on automatically when no enemy is near. In your own places spies hunt enemy spies.[/color]\n"
+	elif u.nation_id == game.player_id and u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
+		s += "Loyalty %d\n" % int(u.loyalty)
 	if u.item_id > 0:
 		s += "[color=#ffd860]%s[/color]: %s\n" % [Items.item_name(u.item_id), Items.description(u.item_id, u.item_para)]
 	if u.life_frames > 0:
@@ -704,6 +717,8 @@ func _unit_actions(sel: Array) -> void:
 			_add_action("Settle in town", func(): _settle(u), true, "Walk to the nearest own town and rejoin its population.")
 		if u.item_id > 0:
 			_item_actions(u)
+		if u.is_spy:
+			_spy_unit_actions(u)
 		if u.is_god:
 			var gi := u.god_info()
 			if not gi.is_empty() and Defs.GOD_POWERS.has(gi["race"]):
@@ -725,6 +740,106 @@ func _item_actions(u: Unit) -> void:
 	elif Items.info(u.item_id)[Items.PARA] in [Items.Para.USE_TIMED, Items.Para.CHARGE_TIMED]:
 		_add_action("Activate " + name, func(): u.turn_on_item(), Items.can_turn_on(u.item_id, u.item_para), "Works for a while once activated.")
 	_add_action("Drop item", func(): game._drop_item(u), true, "Leave the item on the ground for another unit.")
+
+
+## Disguise and camouflage for a spy in the field.
+func _spy_unit_actions(u: Unit) -> void:
+	var choices := Espionage.cloak_choices(u)
+	var cur := choices.find(u.cloak_id if u.cloak_id > 0 else u.nation_id)
+	var next: int = choices[(cur + 1) % choices.size()]
+	var cn := game.nation(u.cloak_id) if u.cloak_id > 0 else null
+	_add_action("Disguise: %s" % (cn.name if cn else "own colours"), func():
+		if not Espionage.set_cloak(u, next):
+			game.notify("Your spy cannot change colours with enemies nearby.", u.center_loc()),
+		choices.size() > 1,
+		"Click: pass for the next kingdom. Right-click: back to your own colours. Units of the kingdom you pass for leave the spy alone; attacking gives the disguise away. Not possible with enemies within %d." % Espionage.ENEMY_RANGE,
+		func(): Espionage.set_cloak(u, u.nation_id))
+	if game.player().tech_level("CAMOUFLG") > 0:
+		_add_action("Camouflage (%d)" % u.camouflage_power, func(): Espionage.start_camouflage(u), Espionage.can_camouflage(u),
+			"Become unseen by other kingdoms for as many days as the camouflage power (at least %d). Needs a disguise." % Espionage.MIN_CAMOUFLAGE_POWER)
+
+
+# ------------------------------------------------------------- espionage ---
+
+var bribe_target := 0          # index among the place's men
+var bribe_amount := 1          # index in Espionage.BRIBE_AMOUNTS
+var incident_with := 0         # index in Espionage.incident_choices
+var secret_for: GameObj = null # place whose secret report is shown
+
+
+## The player's spies in a place: what they see (the original's spy menu).
+func _spy_info(place: GameObj) -> String:
+	var mine := Espionage.spies_in(place).filter(func(x): return x.nation_id == game.player_id)
+	if mine.is_empty():
+		return ""
+	var s := "\n[color=#c0a0ff]Your spies here: %s[/color]\n" % ", ".join(mine.map(func(x): return "%s (%d)" % [x.unit_name, int(x.spy_skill)]))
+	if place.nation_id == game.player_id:
+		return s + "They watch for enemy spies.\n"
+	s += "Mission: %s\n" % ("sow dissent" if mine[0].spy_action == "dissent" else "sleep (lie low)")
+	if place is Firm:
+		var f := place as Firm
+		for m in Espionage.occupants(f):
+			var mark := " [color=#c0a0ff](yours)[/color]" if m.sleeper_for == game.player_id else ""
+			var loy := "" if m.rank == Defs.Rank.KING else " — loyalty %d" % int(m.loyalty)
+			s += "  %s%s%s%s\n" % ["★ " if m == f.overseer else "", m.display_name(), loy, mark]
+	if secret_for == place:
+		s += "\n" + Espionage.secret_report(game, place.nation_id)
+	return s
+
+
+## Spy missions from a place's panel: bribe, capture, assassinate, steal
+## technology, create an incident, read the secret report.
+func _spy_actions(place: GameObj) -> void:
+	var mine := Espionage.spies_in(place).filter(func(x): return x.nation_id == game.player_id)
+	if mine.is_empty():
+		return
+	mine.sort_custom(func(a, b): return a.spy_skill > b.spy_skill)
+	var spy: Unit = mine[0]
+	var p := game.player()
+	_add_action("Recall spy", func(): game.spy_leave(mine[-1]), true, "Your least skilled spy here walks out, wearing the place's colours.")
+	if place.nation_id == game.player_id:
+		return
+	_add_action("Mission: " + ("Dissent" if spy.spy_action == "dissent" else "Sleep"), func():
+		var to := "idle" if spy.spy_action == "dissent" else "dissent"
+		for x in mine:
+			x.spy_action = to, true,
+		"Sow dissent: lower the town's loyalty (or its resistance to you), or the loyalty of the men of their own race. Sleep: lie low; a sleeping spy is almost never caught.")
+	if place.nation_id > 0 and p.tech_level("STEALINF") > 0:
+		_add_action("Secret report", func(): secret_for = null if secret_for == place else place, Espionage.can_view_secret(spy),
+			"Read the kingdom's treasury, armies, technology and treaties. Needs spying skill %d." % Espionage.MIN_VIEW_SECRET_SKILL)
+	if not Espionage.is_camp(place):
+		return
+	var f := place as Firm
+	var men: Array = Espionage.occupants(f).filter(func(m): return Espionage.can_bribe(f, m, game.player_id))
+	if not men.is_empty():
+		bribe_target = bribe_target % men.size()
+		var who: Unit = men[bribe_target]
+		var amt: int = Espionage.BRIBE_AMOUNTS[bribe_amount % Espionage.BRIBE_AMOUNTS.size()]
+		var ch := clampi(Espionage.bribe_chance(spy, f, who, amt), 0, 100)
+		_add_action("Bribe: %s" % who.display_name().get_slice(" ", 0) if who != f.overseer else "Bribe: general", func(): bribe_target += 1, men.size() > 1, "Click: choose another man.")
+		_add_action("Offer %d: %d%%" % [amt, ch], func(): Espionage.bribe(spy, f, who, amt),
+			spy.spy_skill >= Espionage.MIN_BRIBE_SKILL and p.cash >= amt,
+			"Click: offer the bribe; the gold is spent and, if refused, your spy is executed. Right-click: change the sum. Needs spying skill %d. A bought general can hand the fort over to you." % Espionage.MIN_BRIBE_SKILL,
+			func(): bribe_amount = (bribe_amount + 1) % Espionage.BRIBE_AMOUNTS.size())
+	if Espionage.can_capture(f, game.player_id):
+		_add_action("Capture %s" % f.display_name(), func(): Espionage.capture(f, game.player_id), true,
+			"Your bribed general hands the fort over. Soldiers who will not follow him walk out and attack it.")
+	if f.overseer and f.overseer.sleeper_for != game.player_id:
+		_add_action("Assassinate: %d%%" % Espionage.assassinate_chance(spy, f), func(): Espionage.assassinate(spy, f),
+			Espionage.can_assassinate(spy, f),
+			"Kill the commander, %s. Needs spying skill %d. Guards make it harder, and with guards about your spy may be caught even when he succeeds." % [f.overseer.display_name(), Espionage.MIN_ASSASSIN_SKILL])
+	if p.tech_level("STEALTEC") > 0:
+		_add_action("Steal tech: %d%%" % Espionage.steal_rating(spy, f), func(): Espionage.steal_tech(spy, f),
+			Espionage.can_steal_tech(spy, f), "Learn one technology they know better than you. Needs spying skill %d. Failure costs the spy." % Espionage.MIN_STEAL_TECH_SKILL)
+	if p.tech_level("INCIDENT") > 0:
+		var others := Espionage.incident_choices(spy, f)
+		if not others.is_empty():
+			incident_with = incident_with % others.size()
+			var other: Nation = game.nation(others[incident_with])
+			_add_action("Incident: %s %d%%" % [Defs.race_name(other.race), Espionage.steal_rating(spy, f, other.id)], func(): Espionage.create_incident(spy, f, other.id),
+				Espionage.can_create_incident(spy, f),
+				"Stage an incident: the %s and the %s break their treaties and go to war. Right-click: choose another kingdom. Needs spying skill %d." % [f.nation().name, other.name, Espionage.MIN_INCIDENT_SKILL],
+				func(): incident_with += 1)
 
 
 func _settle(u: Unit) -> void:
@@ -826,6 +941,7 @@ func _show_town(t: Town, rebuild: bool) -> void:
 	var links := t.linked_firms.filter(func(f): return f.nation_id == game.player_id)
 	if not links.is_empty():
 		s += "Linked: " + ", ".join(links.map(func(f): return f.display_name())) + "\n"
+	s += _spy_info(t)
 	info_label.text = s
 	if not rebuild:
 		return
@@ -853,6 +969,7 @@ func _show_town(t: Town, rebuild: bool) -> void:
 	elif t.nation_id == 0:
 		_add_action("Grant gold (%d)" % int(t.grant_cost()), func(): t.grant(game.player_id),
 			game.player().cash >= t.grant_cost() and t.has_linked_camp(game.player_id), "Lower the town's resistance to you. Needs one of your camps linked to it.")
+	_spy_actions(t)
 
 
 # ---------------------------------------------------------------- firms ---
@@ -879,12 +996,14 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		match f.code:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:
-					s += "Commander: %s (leadership %d)\n" % [f.overseer.display_name(), int(f.overseer.leadership)]
+					s += "Commander: %s (leadership %d%s)\n" % [f.overseer.display_name(), int(f.overseer.leadership),
+						", loyalty %d" % int(f.overseer.loyalty) if f.overseer.rank != Defs.Rank.KING and f.code != "LAIR" else ""]
 				elif f.code != "LAIR":
 					s += "[color=#ff9060]No general. Send a general here to gain influence.[/color]\n"
 				s += "Soldiers %d / %d\n" % [f.soldiers.size(), f.capacity()]
 				for u in f.soldiers:
-					s += "  %s — combat %d, HP %d\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.hp)]
+					s += "  %s — combat %d, HP %d%s\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.hp),
+						", loyalty %d" % int(u.loyalty) if u.is_human() else ""]
 				if f.code != "LAIR":
 					var towns := f.linked_towns.map(func(t): return t.town_name)
 					s += "Influences: %s\n" % (", ".join(towns) if not towns.is_empty() else "no towns in range")
@@ -936,11 +1055,13 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			var links := f.linked_towns.filter(func(t): return t.nation_id == f.nation_id)
 			if links.is_empty():
 				s += "[color=#ff9060]No own town in range to supply workers.[/color]\n"
+	s += _spy_info(f)
 	info_label.text = s
 	if not rebuild:
 		return
 	_clear_actions()
 	if not own:
+		_spy_actions(f)
 		return
 	var p := game.player()
 	match f.code:
@@ -970,9 +1091,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		"RESEARCH":
 			for t in Defs.TECHS:
 				var lvl := p.tech_level(t["code"])
-				var ok: bool = lvl < t["max"]
-				if t.has("req") and p.tech_level(t["req"]) < t["req_lvl"]:
-					ok = false
+				var ok := Defs.can_research(p, t)
 				var tc: String = t["code"]
 				var label := "%s %d" % [t["name"], lvl + 1] if lvl < t["max"] else "%s (max)" % t["name"]
 				var b := _add_action(label, func(): f.start_research(tc), ok)

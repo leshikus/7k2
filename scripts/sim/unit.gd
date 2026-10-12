@@ -41,7 +41,12 @@ var is_caravan := false
 var is_spy := false
 var spy_skill := 0.0
 var spy_place: GameObj = null    # town or firm the spy has infiltrated
-var spy_action := "agitate"      # agitate | sabotage | steal
+var spy_action := "dissent"      # idle (sleep: never caught) | dissent (Spy::action_mode)
+var cloak_id := 0                # disguise: the kingdom a mobile spy passes for (0 = its own colours)
+var camouflage_days := 0         # camouflaged spy: unseen by other kingdoms while > 0
+var camouflage_power := 0        # recharges a day at a time (Spy::camouflage_power)
+var sleeper_for := 0             # a bribed general or soldier: the kingdom he secretly serves
+var loyalty := 70.0              # a soldier's or general's loyalty to his kingdom (Unit::loyalty)
 var caravan_home: Firm = null     # market the caravan was hired at
 var caravan_dest: Firm = null     # the other market on its route
 var caravan_leg := 0              # 0 heading to dest, 1 heading home
@@ -228,7 +233,14 @@ func order_move(dest: Vector2i) -> void:
 	_path_to(dest)
 
 
+## A disguised spy is judged by its cloak (see Game.is_hostile).
+func seen_nation() -> int:
+	return cloak_id if cloak_id > 0 else nation_id
+
+
 func order_attack(obj: GameObj) -> void:
+	if cloak_id > 0 and obj and obj.nation_id != nation_id:
+		Espionage.drop_cloak(self)     # attacking gives a disguised spy away
 	if dead or inside_firm or obj == null or obj == self or not can_attack():
 		return
 	stop()
@@ -237,15 +249,21 @@ func order_attack(obj: GameObj) -> void:
 	repath_timer = 0
 
 
-## Spy: walk to an enemy or independent town/building and slip inside.
-func order_infiltrate(target_obj: GameObj) -> void:
-	if not is_spy or dead or inside_firm or target_obj == null:
-		return
+## Spy: walk to a town, fort or camp and slip inside. A kingdom's place only
+## lets in one of its own, so the spy first puts on its colours (which fails
+## with enemies close by). Returns false when the spy cannot go there.
+func order_infiltrate(target_obj: GameObj) -> bool:
+	if not is_spy or dead or inside_firm or target_obj == null or not Espionage.can_enter(self, target_obj):
+		return false
+	var need := Espionage.cloak_needed(self, target_obj)
+	if need > 0 and cloak_id != need and not Espionage.set_cloak(self, need):
+		return false
 	stop()
 	order = Order.ENTER
 	order_firm = null
 	spy_place = target_obj
 	_path_to(Game.inst.world.adjacent_to_rect(target_obj.footprint(), cell()))
+	return true
 
 
 func order_enter(f: Firm) -> void:
@@ -664,6 +682,11 @@ func _do_infiltrate() -> bool:
 		stop()
 		return false
 	if distance_to(spy_place) <= 1.0:
+		var need := Espionage.cloak_needed(self, spy_place)
+		if need > 0 and cloak_id != need:
+			spy_place = null       # the place changed hands on the way
+			stop()
+			return false
 		Game.inst.spy_enter(self, spy_place)
 		return false
 	if path_i >= path.size():
@@ -825,6 +848,8 @@ func render(cv) -> void:
 			mod = Color(0.6, 0.8, 1.3)
 		elif invulnerable_until > Game.inst.frame:
 			mod = Color(1.25, 1.2, 0.8)
+		if camouflage_days > 0:
+			mod.a *= 0.45
 		cv.draw_texture(tex, fr[1], mod)
 	else:
 		cv.draw_circle(Vector2(0, 16), 8, col)
@@ -837,6 +862,12 @@ func render(cv) -> void:
 		cv.draw_colored_polygon(flag, col)
 		if rank == Defs.Rank.KING:
 			cv.draw_circle(top + Vector2(0, -16), 3, Color(1, 0.85, 0.2))
+	if cloak_id > 0 and nation_id == Game.inst.player_id:
+		# your disguised spy: its true colours in a little diamond over its head
+		var c := Vector2(0, -50)
+		var own := Game.inst.nation(nation_id)
+		cv.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -5), c + Vector2(5, 0), c + Vector2(0, 5), c + Vector2(-5, 0)]), own.color if own else Color.WHITE)
+		cv.draw_polyline(PackedVector2Array([c + Vector2(0, -5), c + Vector2(5, 0), c + Vector2(0, 5), c + Vector2(-5, 0), c + Vector2(0, -5)]), Color.BLACK, 1.0)
 	if selected or hp < max_hp:
 		draw_hp_bar_on(cv, Vector2(0, -44), 28)
 

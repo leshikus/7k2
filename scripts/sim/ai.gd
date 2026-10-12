@@ -4,7 +4,7 @@ extends RefCounted
 ## secure towns with camps, build the mine-factory-market chain, research,
 ## win independent towns over with camps and grants, and attack weaker rivals.
 
-const RESEARCH_ORDER := ["MINING", "MANUFACT", "INFCLOSE", "FARMING", "INFDEFEN", "CATAPULT", "INFRANGE", "BALLISTA", "WAR_PROD", "FLAMETHR", "CANNON"]
+const RESEARCH_ORDER := ["MINING", "MANUFACT", "INFCLOSE", "FARMING", "INFDEFEN", "CATAPULT", "INFRANGE", "BALLISTA", "WAR_PROD", "AGITATE", "FLAMETHR", "STEALINF", "BRIBE", "COUNTERS", "CANNON", "ASSASSIN", "STEALTEC"]
 
 var n: Nation
 var g: Game
@@ -24,7 +24,10 @@ var _last_close := -999
 
 
 func next_day(day: int) -> void:
-	if not n.alive or (day + n.id * 3) % 7 != 0:
+	if not n.alive:
+		return
+	Espionage.ai_think(n, g, war_target, day)
+	if (day + n.id * 3) % 7 != 0:
 		return
 	if my_towns().is_empty() and my_firms().is_empty():
 		_homeless(day)
@@ -309,10 +312,7 @@ func _economy(day: int) -> void:
 		if r.research_tech == "" and not r.under_construction:
 			for code in RESEARCH_ORDER:
 				var t := Defs.tech_def(code)
-				var ok: bool = n.tech_level(code) < t["max"]
-				if t.has("req") and n.tech_level(t["req"]) < t["req_lvl"]:
-					ok = false
-				if ok:
+				if Defs.can_research(n, t):
 					r.start_research(code)
 					break
 	if day > 400 and my_firms("INN").is_empty() and n.cash > 1500:
@@ -321,18 +321,13 @@ func _economy(day: int) -> void:
 	for inn in my_firms("INN"):
 		if not inn.heroes.is_empty() and n.cash > 2500:
 			inn.hire_hero(0)
-	# spies: agitate the towns of the kingdom we are at war with
-	if day > 800 and my_firms("SPY").is_empty() and n.cash > 2500 and war_target > 0:
+	# spies: guard home, then infiltrate the camps and towns of the kingdom we fight
+	if day > 600 and my_firms("SPY").is_empty() and n.cash > 2000:
 		if _try_build("SPY", towns[0].footprint(), [towns[0].center_loc()]):
 			return
 	for sc in my_firms("SPY"):
-		if sc.weapon_queue == 0 and n.cash > 1500 and g.units.filter(func(u): return u.is_spy and u.nation_id == n.id).size() < 3:
+		if sc.weapon_queue == 0 and n.cash > 1500 and g.units.filter(func(u): return u.is_spy and u.nation_id == n.id).size() < 4:
 			sc.weapon_queue = 1
-	for sp in g.units:
-		if sp.is_spy and sp.nation_id == n.id and not sp.dead and sp.order == Unit.Order.IDLE and not sp.has_meta("hidden") and war_target > 0:
-			var tt: Array = g.towns.filter(func(t): return t.nation_id == war_target and not t.dead)
-			if not tt.is_empty():
-				sp.order_infiltrate(tt[g.rng.randi() % tt.size()])
 	# caravans between our markets and those of friendly kingdoms
 	if n.cash > 900:
 		for mk in my_firms("MARKET"):

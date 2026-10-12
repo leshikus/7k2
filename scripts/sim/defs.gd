@@ -12,6 +12,7 @@ const MAX_SOLDIER := 15
 const MIN_RECRUIT_LOYALTY := 30
 const CITIZEN_COMBAT_LEVEL := 10.0     # every villager leaving a town starts here (CITIZEN_COMBAT_LEVEL)
 const MIN_TECH_THEFT_SPYING_SKILL := 70
+const UNIT_BETRAY_LOYALTY := 30      # a unit whose loyalty falls below this may desert (gamedef.h)
 const SPY_COST := 80
 const SURRENDER_LOYALTY := 30
 const SURRENDER_RESISTANCE := 30
@@ -80,6 +81,15 @@ const TECHS := [
 	{"code": "BALLISTA", "name": "Ballista", "max": 3, "cost": 30},
 	{"code": "FLAMETHR", "name": "SpitFire", "max": 3, "cost": 30, "req": "CATAPULT", "req_lvl": 2},
 	{"code": "CANNON", "name": "Cannon", "max": 3, "cost": 70, "req": "BALLISTA", "req_lvl": 2},
+	# Spying Methodology (TECH table class SPYING)
+	{"code": "AGITATE", "name": "Advanced Agitation", "max": 1, "cost": 12, "spy": true},
+	{"code": "COUNTERS", "name": "Advanced Counter-spy", "max": 1, "cost": 14, "spy": true},
+	{"code": "STEALINF", "name": "Information Theft", "max": 1, "cost": 16, "spy": true},
+	{"code": "BRIBE", "name": "Advanced Bribing", "max": 1, "cost": 18, "spy": true, "req": "AGITATE", "req_lvl": 1},
+	{"code": "ASSASSIN", "name": "Advanced Assassination", "max": 1, "cost": 20, "spy": true, "req": "BRIBE", "req_lvl": 1},
+	{"code": "STEALTEC", "name": "Technology Theft", "max": 1, "cost": 22, "spy": true, "req": "STEALINF", "req_lvl": 1},
+	{"code": "CAMOUFLG", "name": "Camouflage", "max": 1, "cost": 26, "spy": true, "req": "COUNTERS", "req_lvl": 1, "req2": "ASSASSIN", "req2_lvl": 1},
+	{"code": "INCIDENT", "name": "Create Incident", "max": 1, "cost": 28, "spy": true, "req": "CAMOUFLG", "req_lvl": 1},
 ]
 const WEAPONS := ["CATAPULT", "BALLISTA", "FLAMETHR", "CANNON"]
 
@@ -202,6 +212,17 @@ static func race_name(code: String) -> String:
 
 static func unit_sprite(race: String, kind: String) -> String:
 	return RACE_PREFIX.get(race, "NO") + "_" + kind
+
+
+## Whether a nation may research the next level of a technology now.
+static func can_research(n, t: Dictionary) -> bool:
+	if n.tech_level(t["code"]) >= t["max"]:
+		return false
+	if t.has("req") and n.tech_level(t["req"]) < t["req_lvl"]:
+		return false
+	if t.has("req2") and n.tech_level(t["req2"]) < t["req2_lvl"]:
+		return false
+	return true
 
 
 static func tech_def(code: String) -> Dictionary:

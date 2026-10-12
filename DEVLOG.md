@@ -288,3 +288,35 @@ HUD's portraits and icons.
   units no longer stall for a frame at every cell boundary (it showed as a hitch in
   the walk cycle). Mirrored facings (SW, W, NW) were checked frame by frame
   against their E-side twins (`tests/tools/walk_strip`, `walk_film`, `walk_probe`).
+
+## Espionage (13 Oct 2026)
+
+Ported from ospy.cpp, ospya.cpp, ospy2.cpp and of_campb.cpp (`scripts/sim/espionage.gd`):
+
+- **Disguise.** A spy in the field can pass for any kingdom (`Unit.cloak_id`); others
+  judge it by its colours (`Game.is_hostile` uses `seen_nation()`), its owner sees a
+  diamond of its true colour over its head. No change with an enemy within 5 cells;
+  attacking drops the disguise. Ordered into a kingdom's town or fort, a spy puts on
+  its colours automatically. **Camouflage** (with the tech) hides it for a while.
+- **Places.** Towns and forts/camps (the original has no spies among workers).
+  Spies **sow dissent** (towns lose loyalty or resistance at skill/4/population a
+  month; the men of the spy's race in a fort lose loyalty) or **sleep** (almost never
+  caught). Once a month each place tries to catch one active intruder; its owner's
+  own spies there are the counter-spies (`SpyArray::catch_spy`).
+- **Loyalty** for soldiers and generals (`Soldier::target_loyalty`,
+  `Unit::update_loyalty`), shown in the panels; men below 30 may desert.
+- **Missions** from the place's panel, with their success chances: bribe a general
+  or soldier with 500–4000 gold (a refused bribe costs the spy); a bribed man stays as
+  a sleeper, walks out as your spy when released, and a bribed general can **capture**
+  the fort (soldiers who will not follow him walk out); **assassinate** the
+  commander; **steal technology**; **create an incident** that drives two kingdoms
+  to war; read the **secret report**.
+- The eight **spying technologies** (Agitation, Counter-spy, Information Theft,
+  Bribing, Assassination, Technology Theft, Camouflage, Incident) are researched at
+  the Tower of Science and gate or strengthen these missions.
+- **Computer kingdoms** build a college, keep a spy at home, send spies into the
+  independent villages they want or the forts and towns of their enemy, and bribe,
+  capture, assassinate, steal and stage incidents by the original's `think_*` rules.
+- Sabotage is gone: 7k2 disabled it (`Spy::can_sabotage` returns 0).
+- Tests: `tests/spy_test` (45 checks); `tests/tools/spy_watch` plays a computer-only
+  game and tallies spy events.

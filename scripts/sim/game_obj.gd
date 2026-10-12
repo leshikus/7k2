@@ -52,10 +52,15 @@ func nation() -> Nation:
 	return Game.inst.nation(nation_id) if Game.inst else null
 
 
+## The kingdom others take this object for: its own, or a disguised spy's cloak.
+func seen_nation() -> int:
+	return nation_id
+
+
 func nation_color() -> Color:
 	if nation_id == MONSTER_NATION:
 		return Defs.MONSTER_COLOR
-	var n := nation()
+	var n := Game.inst.nation(seen_nation()) if Game.inst else null
 	return n.color if n else Defs.INDEPENDENT_COLOR
 
 

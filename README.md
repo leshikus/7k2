@@ -102,7 +102,12 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 * All 12 human races with their infantry, special units, civilians and Greater
   Beings; 7 Fryhtan species with their lairs; computer-run Fryhtan kingdoms;
   siege weapons.
-* Spies that infiltrate towns and buildings to stir unrest, sabotage and steal technology.
+* Espionage: spies disguise themselves in another kingdom's colours, slip into towns,
+  forts and camps, sow dissent or lie low, bribe generals and soldiers (a bought
+  general hands his fort over), assassinate commanders, steal technology, stage
+  incidents that start wars, read a kingdom's secret reports and camouflage
+  themselves; your own spies at home hunt intruders. Eight spying technologies at the
+  Tower of Science. Soldiers and generals have loyalty, and disloyal men desert.
 * Caravans trading goods between your markets and those of friendly kingdoms.
 * Town walls and village archers.
 * Seasonal rain and thunderstorms that slow units and strike with lightning.
@@ -125,8 +130,8 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 
 ## Not yet implemented
 
-The full espionage system (bribery, assassination, disguise), the campaign, the
-Fryhtan special buildings (a Fryhtan kingdom you lead has lairs only), and multiplayer. Balance values are adapted where this simplified simulation
+The campaign, the Fryhtan special buildings (a Fryhtan kingdom you lead has lairs
+only), and multiplayer. Balance values are adapted where this simplified simulation
 differs from the original (noted in the code).
 
 ## Project layout

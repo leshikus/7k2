@@ -185,6 +185,8 @@ func release_unit(u: Unit, attack_target: GameObj = null) -> void:
 		overseer = null
 	soldiers.erase(u)
 	u.inside_firm = null
+	if u.sleeper_for > 0 and u.sleeper_for != nation_id:
+		Game.inst.sleeper_wakes(u, self)
 	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
 	if c.x < 0:
 		c = Vector2i(x1 + w, y1 + h - 1)
@@ -195,6 +197,26 @@ func release_unit(u: Unit, attack_target: GameObj = null) -> void:
 	if attack_target:
 		u.home_firm = self
 		u.order_attack(attack_target)
+
+
+## The building changes hands (Firm::change_nation): its men serve the new
+## kingdom; work in progress is lost.
+func change_nation(to_nation: int) -> void:
+	var old := nation_id
+	nation_id = to_nation
+	for u in Espionage.occupants(self):
+		u.nation_id = to_nation
+		if u.sleeper_for == to_nation:
+			u.sleeper_for = 0       # Spy::drop_spy_identity: no longer a spy
+			u.remove_meta("sleeper_skill")
+	research_tech = ""
+	research_points = 0.0
+	weapon = ""
+	weapon_queue = 0
+	weapon_progress = 0.0
+	# spies of the new owner now sit in their own building
+	Game.inst.on_firm_changed(self, old)
+	queue_redraw()
 
 
 func eject_all() -> void:
@@ -303,6 +325,8 @@ func next_day(day: int) -> void:
 	match code:
 		"CAMP", "FORT":
 			_train()
+			Espionage.update_camp_loyalty(self)
+			Espionage.think_desert(self, day)
 		"MINE":
 			if day % Defs.PROCESS_GOODS_INTERVAL == obj_id % Defs.PROCESS_GOODS_INTERVAL:
 				_produce_raw()
