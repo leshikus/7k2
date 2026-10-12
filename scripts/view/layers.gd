@@ -17,7 +17,7 @@ func render(cv) -> void:
 		if game.is_explored_rect(Rect2i(l[1], l[2], t["w"], t["h"])):
 			cv.draw_texture(t["tex"], Iso.to_screen(Vector2(l[1], l[2])) + t["ofs"])
 	for s in game.sites:
-		if game.is_explored_rect(s.footprint()):
+		if game.is_explored_rect(s.footprint()) and not s.has_meta("model3d"):
 			s.draw_ground(cv)
 	for t in game.towns:
 		if is_instance_valid(t) and not t.dead and game.is_explored_rect(t.footprint()):

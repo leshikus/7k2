@@ -53,6 +53,29 @@ func turn(steps: int) -> void:
 	_yaw_target += steps * (yaw_step if yaw_step > 0.0 else 15.0)
 
 
+## Mouse orbit (middle-button drag): only in free mode.
+func orbit(rel: Vector2) -> void:
+	if yaw_step > 0.0:
+		return
+	_yaw_target -= rel.x * 0.4
+	yaw = _yaw_target
+	tilt(-rel.y * 0.3)
+
+
+## Free rotation and tilt, for when 3D models replace the sprites.
+func set_free(free: bool) -> void:
+	if free:
+		yaw_step = 0.0
+		pitch_min = 20.0
+		pitch_max = 75.0
+	else:
+		yaw_step = 90.0
+		pitch_min = 30.0
+		pitch_max = 30.0
+		pitch = 30.0
+		_yaw_target = roundf(_yaw_target / 90.0) * 90.0
+
+
 func tilt(deg: float) -> void:
 	pitch = clampf(pitch + deg, pitch_min, pitch_max)
 

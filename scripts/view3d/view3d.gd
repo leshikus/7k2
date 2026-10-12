@@ -74,8 +74,11 @@ var extra_nodes: Array = []       # nodes outside the game's object layers (buil
 ##   sync(obj, model)              called every frame the object is on screen
 ## The model is placed at the object's ground anchor before sync(); lines, bars
 ## and labels still come from the object's render() via the overlay.
+##   make_site(site) -> Node3D or null   optional: a raw-material deposit, placed at the
+##                                       centre of its footprint; replaces its ground art
 var model_provider: Object = null
 var _models := {}                 # Node2D -> Node3D (or null: provider has none)
+var _site_models := {}            # Site -> Node3D (or null)
 
 var _terrain: MeshInstance3D
 var _rec := DrawRecorder.new()
@@ -281,6 +284,7 @@ func _fog_at(loc: Vector2) -> int:
 
 ## Ground bitmaps as flat decals, rebuilt when they change.
 func _sync_decals() -> void:
+	_sync_sites()
 	_rec.clear()
 	game.ground_layer.render(_rec)
 	var sig := ""
@@ -294,6 +298,31 @@ func _sync_decals() -> void:
 	_decals.clear()
 	for t in _rec.textures:
 		_decals.append(_decal(t[0], t[1]))
+
+
+## Deposit models from the provider; a site with one is left out of the ground art.
+func _sync_sites() -> void:
+	if model_provider == null or not model_provider.has_method("make_site"):
+		return
+	var live := {}
+	for s in game.sites:
+		live[s] = true
+		if not _site_models.has(s):
+			var m = model_provider.make_site(s)
+			_site_models[s] = m
+			if m != null:
+				var c: Vector2 = s.center_loc()
+				m.position = Vector3(c.x, 0.0, c.y)
+				add_child(m)
+				s.set_meta("model3d", true)
+		var model: Node3D = _site_models[s]
+		if model != null:
+			model.visible = s.mine == null and game.is_explored_rect(s.footprint())
+	for s in _site_models.keys():
+		if not live.has(s):
+			if _site_models[s] != null:
+				_site_models[s].queue_free()
+			_site_models.erase(s)
 
 
 func _decal(tex: Texture2D, pos: Vector2) -> MeshInstance3D:

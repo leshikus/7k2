@@ -23,6 +23,7 @@ var build_code := ""
 var _drag_from := Vector2.ZERO
 var _dragging := false
 var _left_down := false
+var _orbiting := false
 var _groups := {}
 var _music_files: Array[String] = []
 var _music_on := true
@@ -63,12 +64,14 @@ func _ready() -> void:
 		elif a.begins_with("--demo=") and game:
 			_demo(a.substr(7))
 		elif a.begins_with("--yaw=") and camera:
-			camera.turn(roundi(a.substr(6).to_float() / 90.0))
+			camera._yaw_target = a.substr(6).to_float()
 			camera.yaw = camera._yaw_target
-		elif a.begins_with("--free-camera") and camera:
-			camera.yaw_step = 0.0
-			camera.pitch_min = 15.0
-			camera.pitch_max = 89.0
+		elif a.begins_with("--pitch=") and camera:
+			camera.pitch = clampf(a.substr(8).to_float(), camera.pitch_min, camera.pitch_max)
+		elif a == "--free-camera" and camera:
+			camera.set_free(true)
+		elif a == "--fixed-camera" and camera:
+			camera.set_free(false)
 		elif a == "--reveal" and game:
 			game.reveal_all = true
 			game._update_fog()
@@ -392,6 +395,8 @@ func _attach_game() -> void:
 	# 3D models replacing the sprite cards, when the model library is present
 	if ResourceLoader.exists(MODEL_LIBRARY):
 		view3d.model_provider = load(MODEL_LIBRARY).new()
+		# with models the camera is free; sprites alone hold it to quarter turns
+		camera.set_free(true)
 	game.shake.connect(func(strength): _shake = maxf(_shake, strength))
 	game.sound_event.connect(func(k, c, a, wp): sfx.play_event(k, c, a, wp))
 	var p := game.player()
@@ -682,12 +687,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					_last_click_ms = Time.get_ticks_msec()
 					_dragging = false
 					select_box.hide_rect()
+			MOUSE_BUTTON_MIDDLE:
+				_orbiting = mb.pressed
 			MOUSE_BUTTON_RIGHT:
 				if mb.pressed:
 					if build_code != "":
 						_cancel_build()
 					else:
 						_command(mb.ctrl_pressed)
+	elif event is InputEventMouseMotion and _orbiting:
+		camera.orbit((event as InputEventMouseMotion).relative)
 	elif event is InputEventMouseMotion and _left_down:
 		var mm := event as InputEventMouseMotion
 		if mm.position.distance_to(_drag_from) > 6:
