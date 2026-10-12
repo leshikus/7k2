@@ -1,0 +1,21 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+config/name="Seven Kingdoms II: Godot"
+config/description="A Godot 4 reimplementation of Seven Kingdoms II: The Fryhtan Wars that loads assets from an installed copy of the original game."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.3")
+
+[autoload]
+Assets="*res://scripts/assets/assets.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/stretch/mode="disabled"
+
+[rendering]
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
