@@ -38,6 +38,9 @@ var units: Array = []
 var sites: Array = []
 var rocks: Array = []
 var dirts: Array = []
+## Scenario goals from the Game record: {require_all, win: [...], lose: [...]},
+## each condition {id, p1, p2, years, player_only, text, result} (oend_con.h).
+var goals := {}
 var error := ""
 var _p := 0
 
@@ -97,6 +100,7 @@ func load_file(path: String) -> bool:
 	if data.is_empty():
 		error = "cannot read " + path
 		return false
+	_read_goals()
 	if not _read_world():
 		return false
 	var steps := [_read_units, _read_sites, _read_towns, _read_nations, _read_firms, _read_rocks]
@@ -176,6 +180,37 @@ func _read_world() -> bool:
 		planes[spec[0]] = _rle_expand(_p, spec[1], w * h)
 		_p += ln
 	return true
+
+
+## Game::write_file writes the Game object raw (ogame.h, packed): five flags, the
+## win and lose condition counts, then 8 + 8 EndCondition records of 224 bytes.
+const END_CONDITION_SIZE := 224
+
+func _read_goals() -> void:
+	var at := _find(101, 0, func(q): return _u16(q) > 3700 and _s32(q + 7) >= 0 and _s32(q + 7) <= 8 		and _s32(q + 11) >= 0 and _s32(q + 11) <= 8)
+	if at < 0:
+		return
+	var g := at + 2
+	var wc := _s32(g + 5)
+	var lc := _s32(g + 9)
+	goals = {"require_all": _u8(g + 4) != 0, "win": [], "lose": []}
+	for k in 16:
+		if (k < 8 and k >= wc) or (k >= 8 and k - 8 >= lc):
+			continue
+		var c := g + 13 + k * END_CONDITION_SIZE
+		goals["win" if k < 8 else "lose"].append({
+			"id": _s32(c), "p1": _s32(c + 4), "p2": _s32(c + 8), "years": _s32(c + 12),
+			"player_only": _u8(c + 16) != 0, "text": _latin1(c + 17, 101), "result": _latin1(c + 118, 101)})
+
+
+func _latin1(p: int, n: int) -> String:
+	var s := ""
+	for i in n:
+		var b := _u8(p + i)
+		if b == 0:
+			break
+		s += String.chr(b)
+	return s
 
 
 func _rle_expand(p: int, key: int, n: int) -> PackedByteArray:

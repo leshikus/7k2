@@ -28,6 +28,9 @@ var had_base := false         # has owned a town or building (scenario armies st
 # yearly statistics, reset every January
 var income_year := 0.0
 var expense_year := 0.0
+var last_income_year := 0.0
+var last_expense_year := 0.0
+var kill_monster_score := 0.0   # Fryhtans slain: 1 a soldier, 5 a general, 20 a king (Unit::die)
 
 var ai: NationAI = null
 

@@ -14,6 +14,8 @@ var s: ScenarioFile
 var cfg: Dictionary
 var nation_map := {}      # scenario nation recno -> Nation id
 var firm_map := {}        # scenario firm recno -> Firm
+var town_map := {}        # scenario town recno -> Town
+var unit_map := {}        # scenario unit recno -> Unit
 var unit_rows: Array = []
 var firm_codes: Array = []
 var skipped := {}         # what could not be placed, for the log
@@ -46,6 +48,8 @@ func build(game: Game, file: ScenarioFile, config: Dictionary) -> void:
 	_rocks()
 	_plants()
 	_explored()
+	if not s.goals.is_empty():
+		g.goals = Goals.from_scenario(s.goals, _goal_target)
 	for n in g.nations:
 		if n.king == null or not is_instance_valid(n.king):
 			n.king = g._best_heir(n) if not n.is_fryhtan else _strongest(n.id)
@@ -56,6 +60,26 @@ func build(game: Game, file: ScenarioFile, config: Dictionary) -> void:
 	g._ground_dirty = true
 	if not skipped.is_empty():
 		print("scenario: not placed ", skipped)
+
+
+## What a goal's first parameter names, in this game's terms.
+func _goal_target(c: Dictionary):
+	var p1: int = c["p1"]
+	match c["id"]:
+		Goals.DEFEAT_KINGDOM, Goals.FORM_ALLY_WITH_KINGDOM:
+			return nation_map.get(p1)
+		Goals.KILL_UNIT, Goals.KEEP_UNIT_ALIVE, Goals.MEET_UNIT:
+			return unit_map.get(p1)
+		Goals.CONQUER_TOWN:
+			return town_map.get(p1)
+		Goals.DESTROY_FIRM, Goals.CONQUER_FIRM:
+			return firm_map.get(p1)
+		Goals.REACH_UNIT_COUNT:
+			return _sprite_of(p1)
+		Goals.ACQUIRE_TECH:
+			var techs := Assets.table("TECH")
+			return techs[p1 - 1]["TECH"] if p1 >= 1 and p1 <= techs.size() else null
+	return null
 
 
 func _strongest(nid: int) -> Unit:
@@ -153,6 +177,7 @@ func _towns() -> void:
 		if nid >= 1 and nid <= names.size() and not String(names[nid - 1]["NAME"]).begins_with("@"):
 			name = names[nid - 1]["NAME"]
 		var t := g.spawn_town(race, _nid(td["nation"]), Vector2i(td["x"], td["y"]), maxi(1, td["population"]), name)
+		town_map[td["recno"]] = t
 		t.loyalty = clampf(td["loyalty"], 0.0, 100.0)
 		t.target_loyalty = t.loyalty
 		for k in td["resistance"].size():
@@ -234,6 +259,7 @@ func _units() -> void:
 		var u := _spawn(ud["unit_id"], nid, at, ud["combat"], ud["skill"], ud["rank"], ud["race"])
 		if u == null:
 			continue
+		unit_map[ud["recno"]] = u
 		if ud["hero_id"] > 0 and ud["hero_id"] <= heroes.size():
 			u.is_hero = true
 			u.unit_name = heroes[ud["hero_id"] - 1]["NAME"]

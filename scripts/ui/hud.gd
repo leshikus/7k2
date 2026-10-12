@@ -560,11 +560,34 @@ func _kingdom_summary() -> String:
 	var firms := game.firms.filter(func(f): return f.nation_id == p.id).size()
 	var units := game.units.filter(func(u): return u.nation_id == p.id and not u.dead).size()
 	var s := "Towns: %d\nBuildings: %d\nUnits: %d\nIncome this year: %d\nExpenses this year: %d\n" % [towns, firms, units, int(p.income_year), int(p.expense_year)]
+	if game.goals:
+		s += _goals_text()
 	if not p.tech.is_empty():
 		s += "\nTechnology:\n"
 		for k in p.tech:
 			s += "  %s %d\n" % [Defs.tech_def(k).get("name", k), p.tech[k]]
 	s += "\n[color=#b0a890]Left-click to select, drag to box-select. Right-click to give orders. WASD / arrows / screen edge to scroll, wheel to zoom, Space to pause.[/color]"
+	return s
+
+
+## The scenario's goals with their progress and the time left.
+func _goals_text() -> String:
+	var gl: Goals = game.goals
+	var s := "\n[b]Goals[/b] (%s):\n" % ("all of these" if gl.require_all else "any one of these")
+	for c in gl.win:
+		if not c["supported"]:
+			s += "  [color=#807868]%s (not available in this version)[/color]\n" % c["text"]
+		else:
+			var now := Goals.progress(game, game.player(), c)
+			s += "  %s %s%s\n" % ["[color=#80ff80]✓[/color]" if c.get("met", false) else "•", c["text"],
+				"" if now < 0 else " [color=#b0a890](now %d)[/color]" % now]
+	for c in gl.lose:
+		if c["id"] != Goals.DEFEAT_OWN_KINGDOM:
+			s += "  [color=#ff9070]Lose if:[/color] %s\n" % c["text"]
+	var dl := gl.deadline_day()
+	if dl > 0:
+		var left := maxi(0, dl - game.day)
+		s += "  Time left: %d years %d days\n" % [left / 365, left % 365]
 	return s
 
 

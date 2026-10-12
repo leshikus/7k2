@@ -54,6 +54,7 @@ static func save(g: Game, slot: String) -> bool:
 		"towns": g.towns.filter(func(t): return not t.dead).map(func(t): return _town(t)),
 		"firms": g.firms.filter(func(f): return not f.dead).map(func(f): return _firm(g, f)),
 		"units": g.units.filter(func(u): return not u.dead).map(func(u): return _unit(u)),
+		"goals": g.goals.to_dict(_id) if g.goals else null,
 	}
 	var f := FileAccess.open(path_for(slot), FileAccess.WRITE)
 	if f == null:
@@ -86,6 +87,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"king": _id(n.king), "tech": n.tech, "research_progress": n.research_progress,
 		"relations": _int_keys_to_str(n.relations), "prayer_points": n.prayer_points,
 		"income_year": n.income_year, "expense_year": n.expense_year,
+		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 	}
 	if n.ai:
@@ -191,6 +193,9 @@ static func load_into(g: Game, slot: String) -> String:
 		n.prayer_points = float(nd["prayer_points"])
 		n.income_year = float(nd["income_year"])
 		n.expense_year = float(nd["expense_year"])
+		n.last_income_year = float(nd.get("last_income_year", 0.0))
+		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
+		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
 		n.is_fryhtan = nd.get("is_fryhtan", false)
 		n.monster_code = nd.get("monster_code", "")
 		n.live_points = float(nd.get("live_points", 0.0))
@@ -332,6 +337,8 @@ static func load_into(g: Game, slot: String) -> String:
 		if bu is Unit:
 			f.builder = bu
 			_put_inside(bu, f)
+	if d.get("goals") is Dictionary:
+		g.goals = Goals.from_dict(d["goals"], by_id)
 	for n in g.nations:
 		var k = by_id.get(int(n.get_meta("king_id", 0)))
 		n.king = k if k is Unit else null

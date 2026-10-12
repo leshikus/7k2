@@ -31,6 +31,7 @@ var speed := 1.0
 var paused := false
 var reveal_all := false
 var over := false
+var goals: Goals = null      # a scenario's win and lose conditions
 var _accum := 0.0
 
 const GRID_SHIFT := 3                 # unit grid blocks of 8 x 8 locations
@@ -1151,11 +1152,14 @@ func next_day() -> void:
 		if n.ai:
 			n.ai.next_day(day)
 		if day % 365 == 0:
+			n.last_income_year = n.income_year
+			n.last_expense_year = n.expense_year
 			n.income_year = 0.0
 			n.expense_year = 0.0
 	_check_homeless()
-	if day % 30 == 0:
+	if day % 5 == 0:
 		_check_end()
+	_check_goals()
 	_update_fog()
 
 
@@ -1307,10 +1311,13 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 	if u.home_town and is_instance_valid(u.home_town):
 		u.home_town.defender_killed(u, killer)
 		u.home_town._check_empty()
-	if killer and killer.is_monster() == false and killer.nation_id > 0 and u.is_monster():
+	var victim_nation := nation(u.nation_id)
+	if killer and is_instance_valid(killer) and killer.nation_id > 0 and killer.nation_id != u.nation_id 			and (u.is_monster() or (victim_nation and victim_nation.is_fryhtan)):
 		var kn := nation(killer.nation_id)
-		if kn:
-			kn.change_reputation(0.2)
+		if kn and not kn.is_fryhtan:
+			if u.is_monster():
+				kn.change_reputation(0.2)
+			kn.kill_monster_score += [1.0, 5.0, 20.0][clampi(u.rank, 0, 2)]
 	# Fryhtan kingdoms absorb the life of what they kill (Unit::calc_live_points_bonus).
 	if killer and is_instance_valid(killer):
 		var kn := nation(killer.nation_id)
@@ -1509,6 +1516,19 @@ func _check_homeless() -> void:
 		notify("The %s has no strongholds left; its last troops have disbanded." % n.name, Vector2(-1, -1))
 
 
+## Scenario goals, checked daily for the player (NationBase::check_win/check_lose).
+func _check_goals() -> void:
+	if goals == null or over or config.get("autoplay", false) or player() == null:
+		return
+	var dl := goals.deadline_day()
+	if dl > 0 and (dl - day) % 365 == 0 and (dl - day) / 365 in [1, 2, 3, 4, 5]:
+		notify("%d year%s left to achieve the scenario's goals." % [(dl - day) / 365, "" if dl - day == 365 else "s"], Vector2(-1, -1))
+	var r := goals.check(self)
+	if r != "":
+		over = true
+		game_over.emit(r == "won", goals.result_text)
+
+
 func _check_end() -> void:
 	if over:
 		return
@@ -1549,6 +1569,6 @@ func _check_end() -> void:
 		game_over.emit(false, "Your kingdom has fallen.")
 		return
 	var rivals := nations.filter(func(n): return n.id != player_id and n.alive)
-	if rivals.is_empty():
+	if rivals.is_empty() and goals == null:      # a scenario's own goals decide its end
 		over = true
 		game_over.emit(true, "All rival kingdoms have been vanquished. You rule the land!")

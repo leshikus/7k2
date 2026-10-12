@@ -339,6 +339,10 @@ func _start(cfg: Dictionary) -> void:
 	_attach_game()
 	if cfg.get("autoplay", false):
 		game.notify("AI against AI: every kingdom is computer-controlled. Sit back and watch.", Vector2(-1, -1))
+	elif game.goals:
+		var goals := game.goals.win.filter(func(c): return c["supported"]).map(func(c): return c["text"])
+		game.notify("Welcome, ruler of the %s. Your goal%s: %s." % [game.player().name, "s" if game.goals.require_all and goals.size() > 1 else "",
+			(" and " if game.goals.require_all else " or ").join(goals)], Vector2(-1, -1))
 	else:
 		game.notify("Welcome, ruler of the %s. Expand your realm and defeat the rival kingdoms!" % game.player().name, Vector2(-1, -1))
 

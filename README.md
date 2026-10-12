@@ -111,13 +111,16 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   armour and technology bonuses.
 * Save and load (F5/F9, pause menu, yearly autosave, "continue" on the start screen).
 * The original game's 10 premade scenarios, read from your install, playable or
-  watched as **AI vs AI** (also available for random maps).
+  watched as **AI vs AI** (also available for random maps), with their goals: kill
+  or protect a named unit, conquer a town, reach a population, economy or military
+  score, acquire a technology, ally with or defeat a kingdom, within a time limit.
 * Computer kingdoms that expand, build economies, research, recruit, raise armies,
   clear lairs, declare war and make peace.
 
 ## Not yet implemented
 
-The full espionage system (bribery, assassination, disguise), the campaign, scenario goals and items lying on the map, the Fryhtan special buildings (a Fryhtan
+The full espionage system (bribery, assassination, disguise), the campaign, items and
+scrolls lying on the map (and the scenario goals that need them), the Fryhtan special buildings (a Fryhtan
 kingdom you lead has lairs only), and multiplayer. Balance values are adapted where this simplified simulation
 differs from the original (noted in the code).
 
