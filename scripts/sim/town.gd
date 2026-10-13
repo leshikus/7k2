@@ -12,6 +12,8 @@ var employed := 0
 var loyalty := 50.0
 var target_loyalty := 50.0
 var resistance := {}            # nation id -> resistance (independent towns)
+var join_min_rating := -1        # Town::independent_unit_join_nation_min_rating (-1: not drawn yet)
+var base_resistance := 70.0     # what kingdoms it has not met yet start from (Town::init_resistance)
 var target_resistance := {}     # nation id -> target, -1 if no influence
 var quality_of_life := 30
 var bonus_loyalty := 0.0
@@ -90,7 +92,13 @@ func has_linked_camp(nid: int) -> bool:
 
 
 func resistance_to(nid: int) -> float:
-	return resistance.get(nid, 70.0)
+	return resistance.get(nid, base_resistance)
+
+
+func set_wall_level(level: int) -> void:
+	wall_level = level
+	target_wall_level = level
+	wall_hp = wall_max_hp()
 
 
 # -------------------------------------------------------------- influence ---
@@ -264,7 +272,12 @@ func update_resistance() -> void:
 		var tr := float(target_resistance[nid])
 		var cur := resistance_to(nid)
 		if cur > tr:
-			cur = maxf(tr, cur - maxf(1.0, (cur - tr) / 30.0))
+			# the decrease is slower with the Resistance setting (66% moderate, 33% high)
+			var dec := (cur - tr) / 30.0
+			match int(Game.inst.config.get("resistance", GameSetup.LOW)):
+				GameSetup.MODERATE: dec = dec * 2.0 / 3.0
+				GameSetup.HIGH: dec = dec / 3.0
+			cur = maxf(tr, cur - maxf(1.0, dec))
 			resistance[nid] = cur
 	think_surrender()
 

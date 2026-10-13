@@ -8,16 +8,20 @@ const PATH := "user://hall_of_fame.json"
 const SIZE := 10
 
 
-## Config::human_difficulty_rating, approximated from the start screen's
-## settings: more rivals and Fryhtans and less gold make a harder game.
+## Config::human_difficulty_rating / monster_difficulty_rating, worked out when
+## the game was set up (GameSetup.rating); a game started otherwise is rated
+## from the settings it has, the others at their defaults.
 static func difficulty_rating(cfg: Dictionary) -> int:
-	var r := 40 + 12 * int(cfg.get("ai_count", 3)) + 12 * int(cfg.get("fryhtan_count", 1))
-	r += {1500: 20, 3000: 0, 6000: -20}.get(int(cfg.get("cash", 3000)), 0)
-	r += int(cfg.get("lairs", 4)) / 2
-	if cfg.get("reveal", false):
-		r -= 15
-	r += int(cfg.get("random_events", 0)) * 2      # Config: score += random_event_frequency * 2
-	return clampi(r, 10, 200)
+	if cfg.has("difficulty_rating"):
+		return int(cfg["difficulty_rating"])
+	var s := GameSetup.defaults()
+	s["ai_humans"] = int(cfg.get("ai_count", s["ai_humans"]))
+	s["ai_fryhtans"] = int(cfg.get("fryhtan_count", s["ai_fryhtans"]))
+	s["explore"] = cfg.get("reveal", s["explore"])
+	s["random_events"] = int(cfg.get("random_events", s["random_events"]))
+	var cash := int(cfg.get("cash", 7000))
+	s["treasure"] = 1 if cash < 5000 else (2 if cash < 9000 else (3 if cash < 15000 else 4))
+	return GameSetup.rating(s, not Defs.is_monster_code(str(cfg.get("race", ""))))
 
 
 static func load_all() -> Dictionary:

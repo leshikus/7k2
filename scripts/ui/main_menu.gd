@@ -16,17 +16,12 @@ const RACE_IMAGES := {
 var path_edit: LineEdit
 var status: Label
 var race_opt: OptionButton
-var ai_spin: SpinBox
 var size_opt: OptionButton
-var cash_opt: OptionButton
-var towns_opt: OptionButton
-var lairs_opt: OptionButton
-var fryhtan_opt: OptionButton
-var events_opt: OptionButton
+var setup_pages: SetupPages
+const SIZES := [120, 160, 200]      # the original's world is 200 x 200 (MAX_MAP_WIDTH)
 var roster_check: CheckBox
 var seed_edit: LineEdit
 var name_edit: LineEdit
-var reveal_check: CheckBox
 var start_btn: Button
 var picture: TextureRect
 var setup_box: VBoxContainer
@@ -117,21 +112,11 @@ func _ready() -> void:
 	name_edit = _row(grid, "Kingdom name", LineEdit.new())
 	race_opt = _row(grid, "Nationality", OptionButton.new())
 	race_opt.item_selected.connect(func(_i): _update_picture())
-	ai_spin = _row(grid, "Rival kingdoms", SpinBox.new())
-	ai_spin.min_value = 1
-	ai_spin.max_value = 6
-	ai_spin.value = 3
-	size_opt = _options(grid, "Map size", ["Small (90)", "Medium (120)", "Large (160)"], 1)
-	cash_opt = _options(grid, "Starting gold", ["1500", "3000", "6000"], 1)
-	towns_opt = _options(grid, "Independent towns", ["Few", "Normal", "Many"], 1)
-	lairs_opt = _options(grid, "Fryhtan lairs", ["Few", "Normal", "Many"], 1)
-	fryhtan_opt = _options(grid, "Fryhtan kingdoms", ["None", "One", "Two"], 1)
-	events_opt = _options(grid, "Random events", RandomEvents.NAMES, 1)
+	size_opt = _options(grid, "Map size", ["Small (120)", "Medium (160)", "Original (200)"], 2)
 	seed_edit = _row(grid, "Map seed", LineEdit.new())
 	seed_edit.text = str(randi() % 100000)
-	reveal_check = CheckBox.new()
-	reveal_check.text = "Reveal the whole map"
-	setup_box.add_child(reveal_check)
+	setup_pages = SetupPages.new()
+	setup_box.add_child(setup_pages)
 	roster_check = CheckBox.new()
 	roster_check.text = "Bring the heroes and items of your profile"
 	roster_check.tooltip_text = "Heroes who survived your won games, and the items your men carried (PlayerProfile)."
@@ -282,11 +267,10 @@ func _ready() -> void:
 	ed.text = "Scenario editor"
 	ed.tooltip_text = "Make a scenario on a new map with the settings above: place towns, buildings, armies and treasure, set up the kingdoms and their goals."
 	ed.pressed.connect(func():
-		var sizes := [90, 120, 160]
-		start_game.emit({"editor": true, "seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
-			"size": sizes[size_opt.selected], "race": _race_code(), "kingdom_name": name_edit.text, "ai_count": int(ai_spin.value),
-			"cash": [1500, 3000, 6000][cash_opt.selected], "indep_towns": 0 if towns_opt.selected == 0 else maxi(3, int(sizes[size_opt.selected] * sizes[size_opt.selected] / 1000.0)),
-			"lairs": 0 if lairs_opt.selected == 0 else 2, "fryhtan_count": fryhtan_opt.selected, "reveal": true}))
+		var ecfg := GameSetup.to_config(setup_pages.setup, {"editor": true, "seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
+			"size": SIZES[size_opt.selected], "race": _race_code(), "kingdom_name": name_edit.text})
+		ecfg["reveal"] = true
+		start_game.emit(ecfg))
 	vb.add_child(ed)
 	var cred := Button.new()
 	cred.text = "Credits"
@@ -458,20 +442,13 @@ func _refresh_lobby() -> void:
 
 
 func _start_network() -> void:
-	var sizes := [90, 120, 160]
-	var size: int = sizes[size_opt.selected]
-	var area := size * size
-	Net.start_game({
+	var cfg := GameSetup.to_config(setup_pages.setup, {
 		"seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
-		"size": size,
-		"ai_count": int(ai_spin.value) - 1,
-		"cash": [1500, 3000, 6000][cash_opt.selected],
-		"indep_towns": maxi(3, int(area / 1000.0 * [0.6, 1.0, 1.6][towns_opt.selected])),
-		"lairs": maxi(1, int(area / 2600.0 * [0.5, 1.0, 1.8][lairs_opt.selected])),
-		"reveal": reveal_check.button_pressed,
-		"random_events": events_opt.selected,
-		"fryhtan_count": fryhtan_opt.selected,
+		"size": SIZES[size_opt.selected],
 	})
+	# Config::multi_player_difficulty: the other players count as rivals
+	cfg["difficulty_rating"] = GameSetup.rating_multi(setup_pages.setup, maxi(0, Net.players.size() - 1))
+	Net.start_game(cfg)
 
 
 func _row(grid: GridContainer, label: String, ctl: Control) -> Control:
@@ -579,29 +556,20 @@ func _start_scenario() -> void:
 		"scenario": scenarios[scn_opt.selected]["path"],
 		"seed": randi(),
 		"autoplay": spectate_check.button_pressed,
-		"reveal": reveal_check.button_pressed or spectate_check.button_pressed,
+		"reveal": spectate_check.button_pressed,
 	})
 
 
 func _start() -> void:
-	var sizes := [90, 120, 160]
-	var size: int = sizes[size_opt.selected]
-	var area := size * size
-	var towns_mul: float = [0.6, 1.0, 1.6][towns_opt.selected]
-	var lairs_mul: float = [0.5, 1.0, 1.8][lairs_opt.selected]
-	start_game.emit({
+	var cfg := GameSetup.to_config(setup_pages.setup, {
 		"seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
-		"size": size,
+		"size": SIZES[size_opt.selected],
 		"race": _race_code(),
 		"kingdom_name": name_edit.text,
-		"ai_count": int(ai_spin.value),
-		"cash": [1500, 3000, 6000][cash_opt.selected],
-		"indep_towns": maxi(3, int(area / 1000.0 * towns_mul)),
-		"lairs": maxi(1, int(area / 2600.0 * lairs_mul)),
-		"reveal": reveal_check.button_pressed or spectate_check.button_pressed,
-		"fryhtan_count": fryhtan_opt.selected,
-		"random_events": events_opt.selected,
 		"player_name": Profiles.current(),
 		"bring_roster": roster_check.button_pressed and Profiles.current() != "",
 		"autoplay": spectate_check.button_pressed,
 	})
+	if spectate_check.button_pressed:
+		cfg["reveal"] = true
+	start_game.emit(cfg)

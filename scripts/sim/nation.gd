@@ -15,7 +15,8 @@ var food := 0.0
 var reputation := 20.0        # -100..100
 var king: Unit = null
 var tech := {}                # code -> level
-var research_progress := {}   # code -> points toward next level
+var research_progress := {}   # code -> percent done toward its next level (kept when switching)
+var research_tech := ""       # NationBase::research_tech_id: what the Towers of Science work on
 var relations := {}           # other nation id -> Defs.Relation
 var prayer_points := 0.0
 var is_fryhtan := false       # a Fryhtan kingdom: lairs and monsters instead of towns
@@ -50,6 +51,7 @@ var reject_day := {}              # "TALK:nation" -> day our message was last re
 var sent_day := {}                # "TALK:nation" -> day we last sent it
 var prefs := {}                   # the computer's personality, 0..100 (pref_*)
 var last_aid_day := -1000         # last military aid received
+var last_independent_join_day := -1000   # NationBase::last_independent_unit_join_date
 var kill_monster_score := 0.0   # Fryhtans slain: 1 a soldier, 5 a general, 20 a king (Unit::die)
 
 var ai: NationAI = null
@@ -62,6 +64,35 @@ func _init(nation_id: int, nation_race: String, nation_color: Color, ai_controll
 	is_ai = ai_controlled
 	name = "Kingdom of " + Defs.race_name(race)
 	known_gods[race] = true          # NationBase::init: a kingdom knows its own Greater Being
+
+
+## NationBase::start_research: switching keeps the whole percents done.
+func start_research(code: String) -> void:
+	if research_tech != code and research_tech != "":
+		research_progress[research_tech] = floorf(research_progress_of(research_tech))
+	research_tech = code
+
+
+func research_progress_of(code: String) -> float:
+	return float(research_progress.get(code, 0.0))
+
+
+## NationBase::progress_research: at 100% the technology goes up a level.
+func progress_research(points: float, at: Vector2) -> void:
+	if research_tech == "":
+		return
+	var v := research_progress_of(research_tech) + points
+	if v < 100.0:
+		research_progress[research_tech] = v
+		return
+	research_progress[research_tech] = 0.0
+	var t := Defs.tech_def(research_tech)
+	tech[research_tech] = tech_level(research_tech) + 1
+	if Game.inst and id == Game.inst.player_id:
+		Game.inst.notify("Research complete: %s level %d." % [t.get("name", research_tech), tech[research_tech]], at)
+	if tech[research_tech] >= int(t.get("max", 1)):
+		research_progress.erase(research_tech)
+		research_tech = ""
 
 
 func tech_level(code: String) -> int:

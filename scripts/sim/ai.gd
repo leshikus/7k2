@@ -19,6 +19,8 @@ func _init(nation: Nation, game: Game) -> void:
 	n = nation
 	g = game
 	aggression = g.rng.randf_range(0.7, 1.4)
+	# Config::ai_aggressiveness (none .. very high) on top of each kingdom's temper
+	aggression *= [0.5, 0.75, 1.0, 1.3, 1.6][clampi(_aggressiveness(), 0, 4)]
 
 
 var _last_close := -999
@@ -28,8 +30,12 @@ func next_day(day: int) -> void:
 	if not n.alive:
 		return
 	Espionage.ai_think(n, g, war_target, day)
-	# FirmSpecial::process_ai, FirmSpy::process_ai
+	# FirmSpecial::process_ai, FirmSpy::process_ai, FirmFort::think_train_archer
 	for f in my_firms():
+		if f.code == "FORT" and not f.under_construction and f.target_archers == f.archers and f.archers < Firm.MAX_FORT_ARCHER:
+			var importance := Diplomacy._pref(n, "military_development") / 3 + (10 if war_target > 0 else 0)
+			if Training.ai_should_spend(n, importance, Firm.TRAIN_ARCHER_COST):
+				f.set_target_archers(-1)
 		if Training.is_train_firm(f) and not f.under_construction:
 			Training.process_ai(f, self, day)
 	if (day + n.id * 3) % 7 != 0:
@@ -419,6 +425,9 @@ func _military(day: int) -> void:
 			if Diplomacy.has_trade(n, o.id) and Diplomacy.ai_rel(n, o.id) >= 60:
 				continue      # a valued trading partner (think_declare_war wants a poor relation)
 			var s := g.military_strength(o.id)
+			# more aggressive towards human players (oai_attk.cpp: +100/+300/+500 to the rating)
+			if o.is_player and _aggressiveness() >= GameSetup.MODERATE:
+				s *= [1.0, 1.0, 0.8, 0.6, 0.4][_aggressiveness()]
 			if s < weakest_s:
 				weakest_s = s
 				weakest = o.id
@@ -450,7 +459,12 @@ func _military(day: int) -> void:
 				for i in f.soldiers.size() - 2:
 					f.release_unit(f.soldiers[0])
 	army = idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING and not u.is_civilian())
-	if attack_target and army.size() >= 6:
+	# against a human, more troops (maxTargetCombatLevel grows by a third a level)
+	var needed := 6
+	var wt := g.nation(war_target) if war_target > 0 else null
+	if wt and wt.is_player and _aggressiveness() >= GameSetup.MODERATE:
+		needed += needed * (_aggressiveness() - GameSetup.MODERATE + 1) / 3
+	if attack_target and army.size() >= needed:
 		for u in army:
 			u.order_attack(attack_target)
 		return
@@ -517,6 +531,10 @@ func _homeless(day: int) -> void:
 	for u in army:
 		if u.rank != Defs.Rank.KING or army.size() == 1:
 			u.order_attack(best)
+
+
+func _aggressiveness() -> int:
+	return int(g.config.get("aggressiveness", GameSetup.MODERATE))
 
 
 func _pick_target() -> GameObj:

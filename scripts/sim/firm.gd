@@ -42,8 +42,25 @@ var stock := 0.0
 var raw_stock := 0.0
 var goods := {}                     # market: product type -> stock
 var market_sales := 0.0             # market: income this year
-var research_tech := ""
-var research_points := 0.0
+## A Tower of Science works on its kingdom's research (NationBase::research_tech_id):
+## every tower adds to the same technology, whose progress is kept per tech.
+var research_tech: String:
+	get:
+		var n := nation()
+		return n.research_tech if n and code == "RESEARCH" else ""
+	set(v):
+		var n := nation()
+		if n and code == "RESEARCH":
+			n.start_research(v)
+## Percent done of the kingdom's current research.
+var research_points: float:
+	get:
+		var n := nation()
+		return n.research_progress_of(n.research_tech) if n and code == "RESEARCH" else 0.0
+	set(v):
+		var n := nation()
+		if n and code == "RESEARCH" and n.research_tech != "":
+			n.research_progress[n.research_tech] = v
 var weapon := ""
 var weapon_progress := 0.0
 var weapon_queue := 0
@@ -60,6 +77,10 @@ var animals: Array = []             # Keraal: beasts for hire
 var alchemy_mode := ""              # Alchemist Tor: conversion in use (a tech code)
 var propagate := 1                  # Wilde Lishorr: seedlings it may still spread
 var revealed_to := {}              # nation id -> true: a Persian god showed it what goes on inside (reveal_info)
+var archers := 0                    # fort: FirmFort::current_archer_count
+var target_archers := 0             # FirmFort::target_archer_count
+var archer_progress := 0            # FirmFort::train_archer_progress (days)
+var _archer_fired: Array = []       # FirmFort::last_archer_fire_frame
 var rally := Vector2i(-1, -1)       # where the units it makes go (Firm::rally_dest)
 
 var anim_index := 0
@@ -237,8 +258,6 @@ func change_nation(to_nation: int) -> void:
 		if u.sleeper_for == to_nation:
 			u.sleeper_for = 0       # Spy::drop_spy_identity: no longer a spy
 			u.remove_meta("sleeper_skill")
-	research_tech = ""
-	research_points = 0.0
 	alchemy_mode = ""
 	animals.clear()
 	weapon = ""
@@ -333,6 +352,92 @@ func sim_frame() -> void:
 		SpecialFirms.fortress_shoot(self)
 
 
+# -------------------------------------------------------- fort archers ---
+# FirmFort (of_fort.cpp): up to five archers on the walls, trained for 120
+# gold over 60 days each and paid 24 a year; they shoot back at whoever hits
+# the fort (Place::being_attack_hit -> return_fire), and a hit may cost one.
+
+const MAX_FORT_ARCHER := 5
+const MAX_TRAIN_ARCHER_PROGRESS := 60
+const TRAIN_ARCHER_COST := 120
+const COST_PER_ARCHER := 24
+const MIN_ARCHER_DELAY := 5
+const MAX_ARCHER_SIMULTANEOUS := 2
+const FORT_BULLET_DAMAGE := 14.0
+const FORT_BULLET_RANGE := 8.0
+
+
+## FirmFort::set_target_archer: -1 one more, -2 one fewer, else the number.
+func set_target_archers(v: int) -> void:
+	if v == -1:
+		target_archers = mini(MAX_FORT_ARCHER, target_archers + 1)
+	elif v == -2:
+		if target_archers > archers:
+			target_archers -= 1
+	elif v >= 0 and v <= MAX_FORT_ARCHER:
+		target_archers = v
+
+
+## FirmFort::process_train_archer (daily)
+func _train_archer() -> void:
+	var g := Game.inst
+	var n := nation()
+	if archers >= target_archers or (n and n.cash <= TRAIN_ARCHER_COST):
+		return
+	archer_progress += 1
+	if archer_progress > MAX_TRAIN_ARCHER_PROGRESS or (g.fast_build and nation_id == g.player_id):
+		archer_progress = 0
+		archers += 1
+	if n:
+		n.add_cash(-float(TRAIN_ARCHER_COST) / MAX_TRAIN_ARCHER_PROGRESS, "Buildings")
+
+
+## FirmFort::pay_expense: archers are dismissed when they cannot be paid.
+func _pay_archers() -> void:
+	var n := nation()
+	if archers <= 0 or n == null:
+		return
+	var cost := archers * float(COST_PER_ARCHER) / 365.0
+	if n.cash >= cost:
+		n.add_cash(-cost, "Buildings")
+	else:
+		archers = 0
+		target_archers = mini(target_archers, 0)
+
+
+## FirmFort::being_attack_hit: a hit may kill an archer; the others shoot back.
+func _fort_hit(attacker: GameObj) -> void:
+	if archers > 0:
+		var chance := int(hp) - archers * 5
+		if chance <= 0 or Game.inst.rng.randi() % chance == 0:
+			archers -= 1
+			target_archers = mini(target_archers, maxi(archers, target_archers))
+	_return_fire(attacker)
+
+
+## FirmFort::return_fire: a ready archer shoots, at most two in a frame.
+func _return_fire(target: GameObj) -> void:
+	var g := Game.inst
+	if archers <= 0 or target == null or not is_instance_valid(target) or target.dead or not (target is Unit) or target.inside_firm != null:
+		return
+	if distance_to(target) > FORT_BULLET_RANGE:
+		return
+	while _archer_fired.size() < MAX_FORT_ARCHER:
+		_archer_fired.append(-1000)
+	var ready := -1
+	var now := 0
+	for a in archers:
+		var since: int = g.frame - int(_archer_fired[a])
+		if since == 0:
+			now += 1
+		if ready < 0 and since > MIN_ARCHER_DELAY:
+			ready = a
+	if ready < 0 or now >= MAX_ARCHER_SIMULTANEOUS:
+		return
+	_archer_fired[ready] = g.frame
+	g.spawn_town_arrow(self, target, "ARROW" if Assets.has_sprite("ARROW") else "NO_ARROW", FORT_BULLET_DAMAGE)
+
+
 ## Towers fire at the nearest hostile unit in range.
 func _tower_shoot() -> void:
 	var spec: Array = TOWER_FIRMS[code]
@@ -363,6 +468,9 @@ func _tower_shoot() -> void:
 func next_day(day: int) -> void:
 	if dead:
 		return
+	if code == "FORT" and not under_construction:
+		_train_archer()
+		_pay_archers()
 	if under_construction:
 		if builder != null and is_instance_valid(builder) and not builder.dead:
 			progress += 100.0 / 30.0 * Game.inst.work_speed(nation_id)      # about 30 days to build
@@ -607,35 +715,31 @@ func goods_types_available() -> Array:
 	return out
 
 
-static func research_cost(t: Dictionary, level: int) -> float:
-	return float(t["cost"]) * 15.0 * (level + 1)
+## FirmResearch::progress_research: a day's work of the tower, in percent of
+## the technology: productivity / 300 x 30 / complexity, slower at higher levels,
+## 30% faster with an Indian Greater Being.
+func research_rate(t: Dictionary, level: int) -> float:
+	var g := Game.inst
+	var p := productivity() / 100.0 + 0.5 if g.fast_build and nation_id == g.player_id else productivity() / 300.0
+	p = p * 30.0 / maxf(1.0, float(t["cost"])) / ((level + 2) / 2.0)
+	if nation_id > 0 and g.god_worshipped(nation_id, "INDIAN"):
+		p *= 1.3
+	return p
 
 
 func _research() -> void:
 	var n := nation()
-	if n == null:
+	if n == null or n.research_tech == "":
 		return
-	if research_tech == "" or n.tech_level(research_tech) >= Defs.tech_def(research_tech).get("max", 0):
-		research_tech = ""
+	var t := Defs.tech_def(n.research_tech)
+	if t.is_empty() or n.tech_level(n.research_tech) >= t.get("max", 0):
+		n.research_tech = ""
 		return
-	var t := Defs.tech_def(research_tech)
-	research_points += 3.0 * productivity() / 100.0 * Game.inst.work_speed(nation_id)
-	var cost := research_cost(t, n.tech_level(research_tech))
-	n.research_progress[research_tech] = research_points / cost
-	if research_points >= cost:
-		research_points = 0.0
-		n.tech[research_tech] = n.tech_level(research_tech) + 1
-		n.research_progress.erase(research_tech)
-		if nation_id == Game.inst.player_id:
-			Game.inst.notify("Research complete: %s level %d." % [t["name"], n.tech[research_tech]], center_loc())
-		if n.tech[research_tech] >= t["max"]:
-			research_tech = ""
+	n.progress_research(research_rate(t, n.tech_level(n.research_tech)), center_loc())
 
 
 func start_research(tech_code: String) -> void:
-	if research_tech != tech_code:
-		research_tech = tech_code
-		research_points = 0.0
+	research_tech = tech_code
 
 
 func _war_factory() -> void:
@@ -803,6 +907,8 @@ func is_fryhtan_lair() -> bool:
 
 
 func on_attacked(attacker: GameObj) -> void:
+	if code == "FORT" and not under_construction:
+		_fort_hit(attacker)
 	if attacker and is_instance_valid(attacker) and not attacker.dead:
 		Game.inst.on_object_attacked(self, attacker)
 		_defend_timer = 0

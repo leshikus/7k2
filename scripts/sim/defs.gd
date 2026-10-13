@@ -127,11 +127,11 @@ const TECHS := [
 	{"code": "INCIDENT", "name": "Create Incident", "max": 1, "cost": 28, "spy": true, "req": "CAMOUFLG", "req_lvl": 1},
 	{"code": "EXPCART", "name": "Porcupine", "max": 3, "cost": 50, "req": "FLAMETHR", "req_lvl": 2},
 	{"code": "F_BALLIS", "name": "Unicorn", "max": 3, "cost": 50, "req": "EXPCART", "req_lvl": 1},
-	# Offensive Buildings (TECH class OFF_BLD; complexity 200 in the original, shortened here)
-	{"code": "OFF_BLD1", "name": "Teledamnum", "max": 1, "cost": 100, "firm": "OFF_BLD1"},
-	{"code": "OFF_BLD2", "name": "Preuser", "max": 1, "cost": 100, "firm": "OFF_BLD2"},
-	{"code": "OFF_BLD3", "name": "Testudo", "max": 1, "cost": 100, "firm": "OFF_BLD3"},
-	{"code": "OFF_BLD4", "name": "Archimedetron", "max": 1, "cost": 100, "firm": "OFF_BLD4"},
+	# Offensive Buildings (TECH class OFF_BLD, complexity 200)
+	{"code": "OFF_BLD1", "name": "Teledamnum", "max": 1, "cost": 200, "firm": "OFF_BLD1"},
+	{"code": "OFF_BLD2", "name": "Preuser", "max": 1, "cost": 200, "firm": "OFF_BLD2"},
+	{"code": "OFF_BLD3", "name": "Testudo", "max": 1, "cost": 200, "firm": "OFF_BLD3"},
+	{"code": "OFF_BLD4", "name": "Archimedetron", "max": 1, "cost": 200, "firm": "OFF_BLD4"},
 ]
 const WEAPONS := ["CATAPULT", "BALLISTA", "FLAMETHR", "CANNON", "EXPCART", "F_BALLIS"]
 ## Mega weapons cannot be researched: their plans are taken from a fallen king
@@ -155,7 +155,7 @@ const SPU_TECH_SUFFIX := {
 
 ## Fryhtan technologies (TECH classes PLANT ... GREMJERM). A Fryhtan kingdom buys
 ## them at a lair of the species with life points (FirmLair::buy_tech); the price
-## is complexity x 20 in the original, x 10 here to suit this economy.
+## is complexity x 20 (TechInfo::live_points_cost).
 const FRYHTAN_TECHS := [
 	{"code": "LISHORR", "name": "Lishorr", "max": 3, "cost": 50, "species": "PLANT", "firm": "LISHORR"},
 	{"code": "WLISHORR", "name": "Wilde Lishorr", "max": 1, "cost": 70, "species": "PLANT", "firm": "WLISHORR", "req": "LISHORR", "req_lvl": 1},
@@ -180,7 +180,7 @@ const FRYHTAN_TECHS := [
 	{"code": "MAGIC3", "name": "Wound Units", "max": 1, "cost": 60, "species": "GREMJERM", "firm": "MAGIC"},
 	{"code": "MAGIC4", "name": "Teleport Unit", "max": 1, "cost": 40, "species": "GREMJERM", "firm": "MAGIC"},
 ]
-const FRYHTAN_TECH_LIVE_FACTOR := 10.0
+const FRYHTAN_TECH_LIVE_FACTOR := 20.0      # TechInfo::live_points_cost: complexity x 20
 ## Fryhtan special buildings placed like other buildings, in menu order. The
 ## Fortress is not placed: four Grokkens turn into one.
 const FRYHTAN_FIRMS := ["LISHORR", "WLISHORR", "BEE", "TERMITE", "ANIMAL", "ALCHEMY", "INCUBAT", "MAGIC"]
@@ -320,6 +320,14 @@ static func god_for_unit(sprite: String) -> Dictionary:
 		if gods[r]["unit"] == sprite:
 			return gods[r]
 	return {}
+
+
+const MAX_NATION := 7             # gamedef.h: kingdoms in a game
+
+
+## Whether a race code names a Fryhtan species (a monster's unit sprite).
+static func is_monster_code(code: String) -> bool:
+	return monsters.any(func(m): return m["unit"] == code)
 
 
 static func race_name(code: String) -> String:

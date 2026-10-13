@@ -74,7 +74,8 @@ static func save_path(g: Game, path: String, extra := {}) -> bool:
 		"day": g.day,
 		"talks": g.talks,
 		"rebels": Rebels.to_save(g),
-		"event_days": g.event_days,
+		"event_days": g.event_days, "fog_of_war": g.fog_of_war, "std_raw_sites": g.std_raw_sites,
+		"nation_days": [g.last_new_nation_day, g.last_del_nation_day], "wanderers": g.race_wanderers,
 		"quake": g.quake, "day_to_quake": g.day_to_quake, "tornado_count": g.tornado_count,
 		"contacts_ready": g.contacts_ready,
 		"fires": g.fires.keys().map(func(p): return [p.x, p.y, g.fires[p][0], g.fires[p][1]]),
@@ -131,8 +132,8 @@ static func _site(g: Game, s: Site) -> Dictionary:
 static func _nation(n: Nation) -> Dictionary:
 	var d := {
 		"id": n.id, "name": n.name, "race": n.race, "color": n.color.to_html(false), "is_ai": n.is_ai,
-		"is_player": n.is_player, "alive": n.alive, "cash": n.cash, "food": n.food, "reputation": n.reputation,
-		"king": _id(n.king), "tech": n.tech, "research_progress": n.research_progress,
+		"is_player": n.is_player, "alive": n.alive, "join_day": n.last_independent_join_day, "cash": n.cash, "food": n.food, "reputation": n.reputation,
+		"king": _id(n.king), "tech": n.tech, "research_progress": n.research_progress, "research_tech": n.research_tech,
 		"relations": _int_keys_to_str(n.relations), "prayer_points": n.prayer_points,
 		"income_year": n.income_year, "expense_year": n.expense_year,
 		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year,
@@ -153,7 +154,7 @@ static func _town(t: Town) -> Dictionary:
 	return {
 		"id": t.obj_id, "name": t.town_name, "race": t.race, "nation": t.nation_id, "x1": t.x1, "y1": t.y1,
 		"population": t.population, "loyalty": t.loyalty, "target_loyalty": t.target_loyalty,
-		"resistance": _int_keys_to_str(t.resistance), "target_resistance": _int_keys_to_str(t.target_resistance),
+		"resistance": _int_keys_to_str(t.resistance), "base_resistance": t.base_resistance, "join_min": t.join_min_rating, "target_resistance": _int_keys_to_str(t.target_resistance),
 		"qol": t.quality_of_life, "bonus_loyalty": t.bonus_loyalty, "growth": t.population_growth,
 		"tax_penalty": t.tax_penalty, "auto_tax": t.auto_tax_loyalty, "auto_grant": t.auto_grant_loyalty, "recruit_penalty": t.recruit_penalty, "grant_penalty": t.grant_penalty,
 		"last_rebel_day": t.last_rebel_day,
@@ -168,11 +169,10 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"under_construction": f.under_construction, "progress": f.progress, "hp": f.hp,
 		"builder": _id(f.builder), "overseer": _id(f.overseer), "soldiers": f.soldiers.map(func(u): return u.obj_id),
 		"site": g.sites.find(f.site), "raw": f.raw, "reserve": f.reserve, "stock": f.stock, "raw_stock": f.raw_stock,
-		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech,
-		"research_points": f.research_points, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
+		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
-		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees,
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "archers": [f.archers, f.target_archers, f.archer_progress],
 	}
 
 
@@ -235,6 +235,15 @@ static func load_path(g: Game, path: String) -> String:
 	g.frame = int(d["frame"])
 	g.day = int(d["day"])
 	g.event_days = int(d.get("event_days", -1))
+	g.fog_of_war = bool(d.get("fog_of_war", true))
+	g.std_raw_sites = int(d.get("std_raw_sites", 0))
+	var ndays: Array = d.get("nation_days", [-1000, -1000])
+	g.last_new_nation_day = int(ndays[0])
+	g.last_del_nation_day = int(ndays[1])
+	g.race_wanderers = {}
+	var wand: Dictionary = d.get("wanderers", {})
+	for k in wand:
+		g.race_wanderers[k] = int(wand[k])
 	var qk: Dictionary = d.get("quake", {})
 	g.quake = {} if qk.is_empty() else {"x": int(qk["x"]), "y": int(qk["y"]), "radius": int(qk["radius"]), "days": int(qk["days"])}
 	g.day_to_quake = int(d.get("day_to_quake", -1))
@@ -266,11 +275,13 @@ static func load_path(g: Game, path: String) -> String:
 		n.is_player = nd["is_player"]
 		n.alive = nd["alive"]
 		n.cash = float(nd["cash"])
+		n.last_independent_join_day = int(nd.get("join_day", -1000))
 		n.food = float(nd["food"])
 		n.reputation = float(nd["reputation"])
 		for k in nd["tech"]:
 			n.tech[k] = int(nd["tech"][k])
 		n.research_progress = nd["research_progress"]
+		n.research_tech = str(nd.get("research_tech", ""))
 		for k in nd["relations"]:
 			n.relations[int(k)] = int(nd["relations"][k])
 		n.prayer_points = float(nd["prayer_points"])
@@ -343,6 +354,8 @@ static func load_path(g: Game, path: String) -> String:
 		t.loyalty = float(td["loyalty"])
 		t.target_loyalty = float(td["target_loyalty"])
 		t.resistance = _str_keys_to_int(td["resistance"])
+		t.base_resistance = float(td.get("base_resistance", 70.0))
+		t.join_min_rating = int(td.get("join_min", -1))
 		t.target_resistance = _str_keys_to_int(td["target_resistance"])
 		t.quality_of_life = int(td["qol"])
 		t.bonus_loyalty = float(td["bonus_loyalty"])
@@ -378,8 +391,8 @@ static func load_path(g: Game, path: String) -> String:
 		f.raw_stock = float(fd["raw_stock"])
 		f.goods = fd["goods"]
 		f.market_sales = float(fd["market_sales"])
-		f.research_tech = fd["research_tech"]
-		f.research_points = float(fd["research_points"])
+		if fd.get("research_tech", "") != "" and f.nation() and f.nation().research_tech == "":
+			f.research_tech = fd["research_tech"]          # a game saved when each tower had its own
 		f.weapon = fd["weapon"]
 		f.weapon_progress = float(fd["weapon_progress"])
 		f.weapon_queue = int(fd["weapon_queue"])
@@ -395,6 +408,10 @@ static func load_path(g: Game, path: String) -> String:
 		f.propagate = int(fd.get("propagate", 1))
 		var ra: Array = fd.get("rally", [-1, -1])
 		f.rally = Vector2i(int(ra[0]), int(ra[1]))
+		var arc: Array = fd.get("archers", [0, 0, 0])
+		f.archers = int(arc[0])
+		f.target_archers = int(arc[1])
+		f.archer_progress = int(arc[2])
 		f.trainees = []
 		for rec in fd.get("trainees", []):
 			var trd: Dictionary = rec

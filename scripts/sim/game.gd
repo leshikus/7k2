@@ -64,6 +64,11 @@ var event_days := -1                 # days to the next random event (RandomEven
 var war_points := {}                 # zone -> strength
 const WAR_ZONE := 8
 var talk_log: Array = []             # the latest messages and their answers
+var fog_of_war := true             # Config::fog_of_war: what is out of sight goes dark again
+var last_new_nation_day := -1000    # NationArray::last_new_nation_date
+var last_del_nation_day := -1000    # NationArray::last_del_nation_date
+var race_wanderers := {}            # TownArray::race_wander_pop_array: race -> people
+var std_raw_sites := 0              # SiteArray::std_raw_site_count (0: not a set-up game)
 var fast_build := false              # tutorial lessons: building and training ten times faster (config.fast_build)
 
 
@@ -135,6 +140,7 @@ func start(cfg: Dictionary) -> void:
 	world.generate(rng)
 	setup_layers()
 	reveal_all = cfg.get("reveal", false)
+	fog_of_war = cfg.get("fog", true) if cfg.get("setup", false) else true
 	_create_nations(cfg)
 	_generate_starts(size)
 	_generate_sites(size)
@@ -144,8 +150,48 @@ func start(cfg: Dictionary) -> void:
 	_generate_rocks(size)
 	_generate_trees(size)
 	update_links()
+	if cfg.get("setup", false):
+		_apply_setup(cfg)
 	_update_fog()
 	_ground_dirty = true
+
+
+## Config settings applied once the map is made: the explored map, the spying
+## methods everyone knows, the goals (Battle::create_pregame_object, ogame.cpp).
+func _apply_setup(cfg: Dictionary) -> void:
+	if cfg.get("explore", false):
+		# explore_whole_map: the land is known from the start; with fog of war
+		# off what has been seen stays in view (Location::visit_level)
+		fog.fill(1 if fog_of_war else 2)
+		for a in nations:
+			for b in nations:
+				if a != b:
+					a.contact[b.id] = true
+	if cfg.get("spy_methodology", false):
+		# NationBase::init: inc_tech_class_level(TECH_CLASS_SPYING)
+		for n in nations:
+			if not n.is_fryhtan:
+				for t in Defs.TECHS:
+					if t.get("spy", false) and n.tech_level(t["code"]) == 0:
+						n.tech[t["code"]] = 1
+	var wins: Array = []
+	if cfg.get("goal_destroy_monster", false):
+		wins.append({"id": Goals.DEFEAT_ALL_FRYHTAN})
+	if cfg.get("goal_population_flag", false):
+		wins.append({"id": Goals.REACH_POPULATION, "p2": int(cfg["goal_population"])})
+		wins.append({"id": Goals.REACH_FRYHTAN, "p2": int(cfg["goal_population"])})
+	if cfg.get("goal_economic_flag", false):
+		wins.append({"id": Goals.REACH_ECONOMY, "p2": int(cfg["goal_economic"])})
+	if cfg.get("goal_total_flag", false):
+		wins.append({"id": Goals.REACH_TOTAL, "p2": int(cfg["goal_total"])})
+	if cfg.get("goal_alliance_flag", false) and nations.size() >= 4:
+		wins.append({"id": Goals.DEFEAT_EXCEPT_ALLIANCE, "player_only": true})
+	var years := int(cfg.get("goal_years", 0)) if cfg.get("goal_year_flag", false) else 0
+	if wins.is_empty() and years == 0:
+		return
+	# ogame.cpp: every game is won by defeating the others and lost with one's own kingdom
+	wins.push_front({"id": Goals.DEFEAT_ALL_OTHER_KINGDOMS, "player_only": true})
+	goals = Goals.random_map(wins, years)
 
 
 ## Creates the render layers for an existing `world` (new game or loaded game).
@@ -169,6 +215,28 @@ func setup_layers() -> void:
 	fog.resize(size * size)
 
 
+## NationArray::new_nation during a game: a computer-run kingdom of `race`
+## (Town::form_new_nation), neutral to all, in an unused colour.
+func add_nation(race: String) -> Nation:
+	var used := nations.map(func(x): return x.color)
+	var col: Color = Defs.NATION_COLORS[nations.size() % Defs.NATION_COLORS.size()]
+	for cc in Defs.NATION_COLORS:
+		if not cc in used:
+			col = cc
+			break
+	var n := Nation.new(nations.size() + 1, race, col, true)
+	for o in nations:
+		o.relations[n.id] = Defs.Relation.NEUTRAL
+		n.relations[o.id] = Defs.Relation.NEUTRAL
+	nations.append(n)
+	var start := GameSetup.start_cash(config, true, false)
+	n.cash = start[0]
+	n.food = start[1]
+	n.ai = NationAI.new(n, self)
+	n.had_base = true
+	return n
+
+
 ## Kingdoms: the player first, then AI rivals with different races.
 func _create_nations(cfg: Dictionary) -> void:
 	var race_pool: Array = Defs.races.map(func(r): return r["code"])
@@ -186,6 +254,8 @@ func _create_nations(cfg: Dictionary) -> void:
 	for i in count:
 		var human := i < humans.size()
 		var race: String = humans[i]["race"] if human else race_pool[(i - humans.size()) % race_pool.size()]
+		if not human and cfg.get("random_start", false):
+			race = Defs.races[rng.randi() % Defs.races.size()]["code"]     # Battle::create_ai_nation: any race
 		var n := Nation.new(i + 1, race, Defs.NATION_COLORS[i % Defs.NATION_COLORS.size()], not human or cfg.get("autoplay", false))
 		n.is_player = human
 		player_species = {}
@@ -200,6 +270,12 @@ func _create_nations(cfg: Dictionary) -> void:
 			n.live_points = 600.0
 		n.cash = float(cfg.get("cash", 3000))
 		n.food = 0.0 if n.is_fryhtan else 1500.0
+		if cfg.get("setup", false):
+			var start := GameSetup.start_cash(cfg, n.is_ai and not human, n.is_fryhtan)
+			n.cash = start[0]
+			n.food = start[1]
+			if n.is_fryhtan:
+				n.live_points = start[2]
 		if human and str(humans[i].get("name", "")) != "":
 			if not cfg.has("mp"):
 				n.name = humans[i]["name"]          # the kingdom's name from the start screen
@@ -215,6 +291,8 @@ func _create_nations(cfg: Dictionary) -> void:
 		if species.is_empty():
 			break
 		var m: Dictionary = species[i % species.size()]
+		if cfg.get("random_start", false):
+			m = Defs.monsters[rng.randi() % Defs.monsters.size()]
 		var n := Nation.new(nations.size() + 1, m["unit"], Defs.NATION_COLORS[nations.size() % Defs.NATION_COLORS.size()], true)
 		n.is_fryhtan = true
 		n.monster_code = m["unit"]
@@ -222,6 +300,11 @@ func _create_nations(cfg: Dictionary) -> void:
 		n.cash = float(cfg.get("cash", 3000)) * 0.7
 		n.food = 0.0
 		n.live_points = 600.0
+		if cfg.get("setup", false):
+			var start := GameSetup.start_cash(cfg, true, true)
+			n.cash = start[0]
+			n.food = start[1]
+			n.live_points = start[2]
 		nations.append(n)
 	for a in nations:
 		for b in nations:
@@ -300,8 +383,11 @@ func _generate_starts(size: int) -> void:
 		if nat.is_fryhtan:
 			_start_fryhtan(nat, tpos)
 			continue
-		var town := spawn_town(nat.race, nat.id, tpos, rng.randi_range(32, 42))
-		town.loyalty = 70.0
+		var setup: bool = config.get("setup", false)
+		# Battle::create_town: 60 people of loyalty 100 (30-60 with a random start)
+		var pop := (30 + rng.randi() % 31 if config.get("random_start", false) else 60) if setup else rng.randi_range(32, 42)
+		var town := spawn_town(nat.race, nat.id, tpos, pop)
+		town.loyalty = 100.0 if setup else 70.0
 		# Fort next to the town, commanded by the king.
 		var fort_build := Assets.firm_build("FORT", nat.race)
 		var fw: int = fort_build.get("loc_w", 6)
@@ -316,14 +402,35 @@ func _generate_starts(size: int) -> void:
 			king.unit_name = str(config["player_name"])
 		nat.king = king
 		if fort:
+			if config.get("setup", false):
+				fort.archers = 5           # create_human_town_unit: five archers on the walls
+				fort.target_archers = 5
 			fort.accept_unit(king)
 			# create_human_town_unit: seven soldiers of basic training (combat 20)
 			for k in 7:
 				var s := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), 20.0)
 				s.leadership = 20.0
 				fort.accept_unit(s)
-		# A general and two soldiers outside, ready to build and explore.
 		var spot := world.adjacent_to_rect(town.footprint(), Vector2i(tpos.x + 3, tpos.y + 7))
+		if setup:
+			# create_one_human_asset: only a random start adds men outside, the
+			# fewer people the town has the more (soldiers 20-80, generals 30-100)
+			if config.get("random_start", false):
+				for k in (60 - town.population) / 3:
+					var r: String = nat.race if rng.randi() % 2 == 0 else Defs.races[rng.randi() % Defs.races.size()]["code"]
+					var gen := rng.randi() % 4 == 0
+					var u := spawn_unit(Defs.unit_sprite(r, "INF"), nat.id, spot + Vector2i(k % 4, k / 4), float(30 + rng.randi() % 70) if gen else float(20 + rng.randi() % 60))
+					if u:
+						u.rank = Defs.Rank.GENERAL if gen else Defs.Rank.SOLDIER
+						u.leadership = float(40 + rng.randi() % 50) if gen else float(10 + rng.randi() % 10)
+						u.loyalty = float(80 + rng.randi() % 20)
+			# start_up_has_mine_nearby: a deposit by the player's town
+			if config.get("mine_nearby", false) and nat.id == player_id:
+				var rows: Array = Assets.table("RAW").slice(0, 3)
+				if not rows.is_empty():
+					_add_site(rows[rng.randi() % rows.size()], Vector2(town.center_loc()), 9.0, 16.0)
+			continue
+		# A general and two soldiers outside, ready to build and explore.
 		# generals 30-100 combat, 40-90 leadership; soldiers 20-80 (Battle::create_unit)
 		var g := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, spot, float(30 + rng.randi() % 70))
 		g.rank = Defs.Rank.GENERAL
@@ -345,6 +452,19 @@ func _start_fryhtan(nat: Nation, at: Vector2i) -> void:
 		leader.leadership = float(20 + rng.randi() % 80)
 		nat.king = leader
 		lair.accept_unit(leader)
+	if config.get("setup", false):
+		# Battle::create_one_monster_asset: a king of skill 100 and 300 hit
+		# points' worth of brood at combat 20, inside the lair
+		if leader:
+			leader.leadership = 100.0
+			leader.combat = 100.0
+		var hp := int(Defs.unit_types.get(nat.monster_code, {}).get("hp", 100))
+		for k in 300 / maxi(1, hp * 20 / 100):
+			var u := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), 20.0)
+			if u:
+				u.leadership = 20.0
+				lair.accept_unit(u)
+		return
 	for k in 5:
 		var u := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), 20.0)
 		if u:
@@ -380,6 +500,12 @@ func _place_near(r: Rect2i, fw: int, fh: int, max_gap := 8, anchors: Array = [])
 func _generate_sites(size: int) -> void:
 	var raw_rows: Array = Assets.table("RAW").slice(0, 3)
 	if raw_rows.is_empty():
+		return
+	if config.get("setup", false):
+		# SiteArray::generate_raw_site(start_up_raw_site) anywhere on the land
+		std_raw_sites = int(config.get("raw_sites", 6))
+		for i in std_raw_sites:
+			_add_site(raw_rows[rng.randi() % raw_rows.size()], Vector2(-1, -1), 0, 0)
 		return
 	var count := maxi(nations.size() + 2, size * size / 1100)
 	# One deposit near every kingdom so each can start an economy.
@@ -421,10 +547,35 @@ func _add_site(row: Dictionary, near: Vector2, min_r: float, max_r: float) -> Si
 func _generate_independents(size: int, cfg: Dictionary) -> void:
 	var count: int = cfg.get("indep_towns", maxi(6, size * size / 1000))
 	var used := _used_town_names
+	var setup: bool = cfg.get("setup", false)
+	# Battle::create_independent_town: the kingdoms' races and others up to seven
+	var town_races: Array = []
+	for n in nations:
+		if not n.is_fryhtan and not town_races.has(n.race):
+			town_races.append(n.race)
+	while setup and town_races.size() < mini(7, Defs.races.size()):
+		var r: String = Defs.races[rng.randi() % Defs.races.size()]["code"]
+		if not town_races.has(r):
+			town_races.append(r)
 	for i in count:
 		var avoid := _occupied_centers()
 		var p := _random_free_rect(6, 6, 4, avoid, 13.0)
 		if p.x < 0:
+			continue
+		if setup:
+			var race_s: String = town_races[i % town_races.size()]
+			var ts := spawn_town(race_s, 0, p, 30 + rng.randi() % 21, _town_name(used, race_s))
+			var res := GameSetup.town_resistance(cfg, rng)
+			for n in nations:
+				ts.resistance[n.id] = float(res)
+			ts.base_resistance = float(res)
+			# independent towns with walls by the Resistance setting
+			var wr := rng.randi() % 11
+			match int(cfg.get("resistance", GameSetup.MODERATE)):
+				GameSetup.MODERATE:
+					ts.set_wall_level(2 if wr >= 9 else (1 if wr >= 4 else 0))
+				GameSetup.HIGH:
+					ts.set_wall_level(2 if wr >= 7 else 1)
 			continue
 		var race: String = Defs.races[rng.randi() % Defs.races.size()]["code"]
 		var name := _town_name(used, race)
@@ -445,6 +596,8 @@ func _town_name(used: Dictionary, race := "") -> String:
 
 func _generate_lairs(size: int, cfg: Dictionary) -> void:
 	var count: int = cfg.get("lairs", maxi(3, size * size / 2600))
+	if cfg.get("setup", false):
+		count = 7          # Battle::create_monster_lair(0, MAX_MONSTER_TYPE)
 	for i in count:
 		var m: Dictionary = Defs.monsters[rng.randi() % Defs.monsters.size()]
 		var b := Assets.firm_build("LAIR", m["unit"])
@@ -469,6 +622,18 @@ func _generate_lairs(size: int, cfg: Dictionary) -> void:
 		if lair == null:
 			continue
 		lair.monster_code = m["unit"]
+		if cfg.get("setup", false):
+			# a general of combat 50-99 and skill 20-99, and 15/4 + 0-4 + 1 recruits
+			var chief := spawn_unit(m["unit"], GameObj.MONSTER_NATION, Vector2i(p.x, p.y + lh), float(50 + rng.randi() % 50))
+			if chief:
+				chief.rank = Defs.Rank.GENERAL
+				chief.leadership = float(20 + rng.randi() % 80)
+				lair.accept_unit(chief)
+			for k in 15 / 4 + rng.randi() % 5 + 1:
+				var su := spawn_unit(m["unit"], GameObj.MONSTER_NATION, Vector2i(p.x, p.y + lh), 20.0)
+				if su:
+					lair.accept_unit(su)
+			continue
 		for k in rng.randi_range(3, 6):
 			var u := spawn_unit(m["unit"], GameObj.MONSTER_NATION, Vector2i(p.x, p.y + lh), 20.0)
 			if u:
@@ -1111,7 +1276,7 @@ func reveal_area(nid: int, c: Vector2i, r: int) -> void:
 		return
 	_reveal(c, r)
 	for i in fog.size():
-		if fog[i] == 2:
+		if fog[i] == 2 and fog_of_war:
 			fog[i] = 1
 	_reveal(c, r)
 	fog_view.update_from(fog)
@@ -1791,6 +1956,7 @@ func next_day() -> void:
 	_quake_next_day()
 	_natural_tornado()
 	Rebels.next_day(self)
+	Independents.next_day(self)
 	for u in units:
 		if not u.dead and (u.is_hero or u.combat > 200.0):
 			u.think_special_ability()
@@ -1953,7 +2119,7 @@ func _update_fog() -> void:
 		fog_view.update_from(fog)
 		return
 	for i in fog.size():
-		if fog[i] == 2:
+		if fog[i] == 2 and fog_of_war:
 			fog[i] = 1
 	for u in units:
 		if u.nation_id == player_id and not u.dead and not u.inside_firm:
@@ -2387,6 +2553,7 @@ func _check_homeless() -> void:
 			if u.nation_id == n.id and not u.dead:
 				remove_unit(u)
 		n.alive = false
+		last_del_nation_day = day
 		notify("The %s has no strongholds left; its last troops have disbanded." % n.name, Vector2(-1, -1))
 
 
@@ -2426,6 +2593,7 @@ func _check_end() -> void:
 					break
 		if not has_any:
 			n.alive = false
+			last_del_nation_day = day
 			if n.id != player_id:
 				notify("The %s has been destroyed." % n.name, Vector2(-1, -1))
 	if config.get("autoplay", false):

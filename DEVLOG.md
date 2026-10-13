@@ -765,3 +765,44 @@ New test: `fidelity_test`.
   and chances beside it; the words are the tooltip and the help line.
 
 New test: `training_test`.
+
+## Game settings and independent towns (13 Oct 2026)
+
+- **The original's game settings** (Config, ogamsing.cpp) replace the start
+  screen's own: eight difficulty levels that set everything
+  (Config::change_difficulty) or a custom mix; human and Fryhtan rivals (0-6);
+  the computer's aggressiveness; new kingdoms emerging; explored world map; fog
+  of war; your and the computer's treasure (4000 / 7000 / 12000 / 20000 gold and
+  5000 food, Fryhtans half and 800-4000 life points); espionage methods known
+  without research; random start-up; natural resources (1-7 sites); a deposit by
+  your town; 7 / 15 / 30 independent towns; their resistance; new towns
+  emerging; random events; and the goals (destroy the Fryhtans, last kingdom but
+  an ally, population, economic or total score, a time limit). The difficulty
+  rating is Config::single_player_difficulty (multi_player_difficulty in a
+  network game) and scales the Hall of Fame score.
+- **The start-up** follows Battle::create_pregame_object for such games: a town
+  of 60 at loyalty 100 and a fort with the king and seven trained soldiers, no
+  one outside (a random start adds men of several races and smaller towns);
+  Fryhtan kingdoms a lair with a king of skill 100 and 300 hit points' worth of
+  brood; seven independent lairs with a general and 4-8 recruits; independent
+  towns of 30-50 people of the kingdoms' races and others, up to seven races,
+  with the setting's resistance and walls. The map is 200 x 200 by default, as
+  the original's; 120 and 160 remain.
+- **Fog of war off** keeps explored land in view; an explored map starts
+  known, and every kingdom has met the others.
+- **Independent towns** (otownind.cpp, otowna.cpp) raise walls (by resistance
+  setting and population), send a villager now and then to the kingdom of their
+  race with the best reputation and standing, may proclaim a kingdom of their own
+  when a rival has fallen (king of combat 70-100, two years without accepting a
+  purchase, perhaps extra gold, food or leaders), and wanderers found new
+  villages while there are fewer than ten. Resistance falls more slowly with a
+  higher Resistance setting.
+- The computer's aggressiveness scales its temper, makes it pick on the human
+  player and send more troops against him.
+
+- **Fort archers** (FirmFort): up to five on the walls (five in the start-up
+  fort), each trained in 60 days for 120 gold and paid 24 a year, dismissed when
+  the kingdom cannot pay; they shoot back at whoever hits the fort, at most two
+  in a frame, and a hit may kill one. The computer trains them when it can spend.
+
+New test: `setup_test`.

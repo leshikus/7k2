@@ -1280,7 +1280,7 @@ func on_attacked(attacker: GameObj) -> void:
 		return
 	if (order == Order.IDLE or order == Order.RETURN) and can_attack() and not attacking:
 		order_attack(attacker)
-	elif order == Order.ATTACK and can_attack() and attacker is Unit and not (target is Unit) and Game.inst.is_hostile(self, attacker):
+	elif order == Order.ATTACK and can_attack() and attacker is Unit and not (is_instance_valid(target) and target is Unit) and Game.inst.is_hostile(self, attacker):
 		# Defend ourselves first, then go back to the building or town we were attacking.
 		var building := target
 		order_attack(attacker)

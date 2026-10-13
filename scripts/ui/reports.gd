@@ -271,7 +271,7 @@ func _technology() -> String:
 	for f in game.firms:
 		if f.nation_id == p.id and f.code == "RESEARCH" and f.research_tech != "":
 			var t := Defs.tech_def(f.research_tech)
-			s += "  %s %d at %s: %d%%\n" % [t["name"], p.tech_level(f.research_tech) + 1, f.display_name(), int(100.0 * f.research_points / Firm.research_cost(t, p.tech_level(f.research_tech)))]
+			s += "  %s %d at %s: %d%%\n" % [t["name"], p.tech_level(f.research_tech) + 1, f.display_name(), int(f.research_points)]
 			any = true
 	if not any:
 		s += "  none\n"

@@ -24,6 +24,22 @@ var lose: Array = []
 var result_text := ""
 var won_id := -1        # the condition that won or lost the game (result_win/lose_condition_id)
 var lost_id := -1
+var year_limit := 0     # Config::goal_year_limit (Game::set_win_deadline)
+
+
+## The goals chosen on the start screen (Battle::create_pregame_object):
+## win conditions any one of which wins, and a time limit in years.
+static func random_map(wins: Array, years: int) -> Goals:
+	var gl := Goals.new()
+	gl.year_limit = years
+	for w in wins:
+		var c := {"id": w["id"], "p1": 0, "p2": w.get("p2", 0), "years": 0, "player_only": w.get("player_only", false),
+			"text": "", "result": "", "target": null, "met": false}
+		c["supported"] = _supported(c)
+		gl.win.append(c)
+	gl.lose.append({"id": DEFEAT_OWN_KINGDOM, "p1": 0, "p2": 0, "years": 0, "player_only": true, "text": "", "result": "",
+		"target": null, "met": false, "supported": true})
+	return gl
 
 
 ## Built by ScenarioLoader, which resolves the scenario's record numbers.
@@ -53,7 +69,7 @@ static func _supported(c: Dictionary) -> bool:
 
 ## Years until the last win condition's time limit runs out (0 = no deadline).
 func deadline_day() -> int:
-	var years := 0
+	var years := year_limit
 	for c in win:
 		years = maxi(years, c["years"])
 	return years * 365
@@ -257,12 +273,13 @@ func to_dict(id_of: Callable) -> Dictionary:
 			d["target"] = id_of.call(t) if t is Object else t
 			d["target_obj"] = t is Object
 			return d)
-	return {"require_all": require_all, "win": pack.call(win), "lose": pack.call(lose)}
+	return {"require_all": require_all, "win": pack.call(win), "lose": pack.call(lose), "year_limit": year_limit}
 
 
 static func from_dict(d: Dictionary, by_id: Dictionary) -> Goals:
 	var gl := Goals.new()
 	gl.require_all = d.get("require_all", false)
+	gl.year_limit = int(d.get("year_limit", 0))
 	for side in ["win", "lose"]:
 		for c in d.get(side, []):
 			var cond: Dictionary = c.duplicate()

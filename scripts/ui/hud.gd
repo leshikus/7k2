@@ -1395,6 +1395,8 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				elif f.code != "LAIR":
 					s += "[color=#ff9060]No general. Send a general here to gain influence.[/color]\n"
 				s += "Soldiers %d / %d\n" % [f.soldiers.size(), f.capacity()]
+				if f.code == "FORT" and (f.archers > 0 or f.target_archers > 0):
+					s += "Archers %d%s\n" % [f.archers, (" (training %d of %d days)" % [f.archer_progress, Firm.MAX_TRAIN_ARCHER_PROGRESS]) if f.target_archers > f.archers else ""]
 				for u in f.soldiers:
 					s += "  %s — combat %d, HP %d%s\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.hp),
 						", loyalty %d" % int(u.loyalty) if u.is_human() else ""]
@@ -1418,7 +1420,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				if f.research_tech != "":
 					var t := Defs.tech_def(f.research_tech)
 					var lvl := game.player().tech_level(f.research_tech)
-					s += "Researching %s %d: %d%%\n" % [t["name"], lvl + 1, int(100.0 * f.research_points / Firm.research_cost(t, lvl))]
+					s += "Researching %s %d: %d%%  (+%.2f%% a day here)\n" % [t["name"], lvl + 1, int(f.research_points), f.research_rate(t, lvl)]
 				else:
 					s += "Choose a technology to research.\n"
 			"BEE", "TERMITE", "INCUBAT":
@@ -1499,6 +1501,11 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 	var p := game.player()
 	match f.code:
 		"CAMP", "FORT":
+			if f.code == "FORT":
+				_add_action("Archers %d/%d: train one (%d)" % [f.archers, f.target_archers, Firm.TRAIN_ARCHER_COST], func(): _do(f, "set_target_archers", [-1]),
+					f.target_archers < Firm.MAX_FORT_ARCHER and p.cash > Firm.TRAIN_ARCHER_COST,
+					"Archers on the walls shoot back at whoever attacks the fort. Each takes 60 days to train and costs %d a year. Right-click: one fewer." % Firm.COST_PER_ARCHER,
+					func(): _do(f, "set_target_archers", [-2]), "🏹")
 			_add_action("Eject all", func(): _do(f, "eject_all"))
 			_add_action("Fill from towns", func(): _fill_camp(f), true, "Villagers from your linked towns join this fort at once (towns need loyalty %d+)." % Defs.MIN_RECRUIT_LOYALTY)
 			if not f.soldiers.is_empty():
