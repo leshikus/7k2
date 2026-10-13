@@ -528,3 +528,19 @@ Scenarios are saved as saved games with a name and briefing in
 `user://scenarios/`. They are listed with the premade scenarios and start on
 day 0 with fresh fog. `--editor` opens it. New test `editor_test`.
 
+## Waypoints, rally points and tips (13 Oct 2026)
+
+- **Waypoints** (`owaypnt.cpp`): Shift+right-click queues a further place to
+  go after the current move.
+- **Rally points** (`send_to_rally_point`): a "Rally point" action on buildings
+  that make units sets where the units gather; right-click clears it. Units
+  from war factories, training centres, colleges, inns, Seats of Power,
+  breeding grounds, the Keraal and the Vapngart walk there. Rally points are
+  saved.
+- **Tips** (`otips.cpp`): a tip from the install's TIPS.RES (human, Fryhtan or
+  campaign section) at the start of a game, with Next tip and "Don't show
+  tips". The original's P (pause) and K (find the king) keys work as aliases.
+- The help file (HELP.RES) only positions tooltips on the original's screen
+  layout; this interface has its own tooltips.
+- New test `waypoint_test`.
+

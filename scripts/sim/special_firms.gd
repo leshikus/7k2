@@ -167,6 +167,7 @@ static func _build_unit(f: Firm, weapon: bool) -> void:
 	f.weapon_progress = 0.0
 	var c := Game.inst.world.adjacent_to_rect(f.footprint(), f.door())
 	var u := Game.inst.spawn_unit(f.weapon, f.nation_id, c, 20.0 if not weapon else 30.0)
+	f.send_to_rally(u)
 	if u:
 		u.loyalty = float(70 + Game.inst.rng.randi_range(0, 19))
 		if f.nation_id == Game.inst.player_id and not Game.inst.observer():
@@ -219,6 +220,7 @@ static func hire_animal(f: Firm, i: int) -> Unit:
 	var u := Game.inst.spawn_unit(a["unit"], f.nation_id, c, a["combat"])
 	if u == null:
 		return null
+	f.send_to_rally(u)
 	n.add_cash(-a["cost"], "Hiring")
 	n.live_points -= a["live"]
 	u.loyalty = clampf(30.0 + n.reputation / 2.0, 40.0, 100.0)

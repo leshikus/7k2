@@ -58,6 +58,7 @@ var extra_units: Array[Unit] = []   # Fortress: the Grokkens it was made of
 var animals: Array = []             # Keraal: beasts for hire
 var alchemy_mode := ""              # Alchemist Tor: conversion in use (a tech code)
 var propagate := 1                  # Wilde Lishorr: seedlings it may still spread
+var rally := Vector2i(-1, -1)       # where the units it makes go (Firm::rally_dest)
 
 var anim_index := 0
 var anim_timer := 0
@@ -240,6 +241,24 @@ func change_nation(to_nation: int) -> void:
 	# spies of the new owner now sit in their own building
 	Game.inst.on_firm_changed(self, old)
 	queue_redraw()
+
+
+## Buildings that make units and may have a rally point (send_to_rally_point).
+const RALLY_FIRMS := ["WAR", "STABLE", "SPY", "INN", "BASE", "BEE", "TERMITE", "INCUBAT", "ANIMAL"]
+
+
+func set_rally(at: Vector2i) -> void:
+	rally = at
+
+
+func clear_rally() -> void:
+	rally = Vector2i(-1, -1)
+
+
+## A unit just made here walks to the rally point, if there is one.
+func send_to_rally(u: Unit) -> void:
+	if u and rally.x >= 0 and not u.dead:
+		u.order_move(rally)
 
 
 func release_all_soldiers() -> void:
@@ -612,6 +631,7 @@ func _war_factory() -> void:
 		weapon_progress = 0.0
 		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
 		var u := Game.inst.spawn_unit(weapon, nation_id, c, 30.0)
+		send_to_rally(u)
 		if u and nation_id == Game.inst.player_id:
 			Game.inst.notify("%s built." % u.type_name(), center_loc())
 		weapon_queue -= 1
@@ -652,6 +672,7 @@ func _train_special() -> void:
 		weapon_progress = 0.0
 		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
 		var u := Game.inst.spawn_unit(weapon, nation_id, c, float(Game.inst.rng.randi_range(35, 55)))
+		send_to_rally(u)
 		if u:
 			u.leadership = float(Game.inst.rng.randi_range(20, 50))
 			if nation_id == Game.inst.player_id and not Game.inst.observer():
@@ -711,6 +732,7 @@ func hire_hero(i: int) -> Unit:
 	var sprite := Defs.unit_sprite(hdef["race"], "SPU" if hdef["special"] else "INF")
 	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
 	var u := Game.inst.spawn_unit(sprite, nation_id, c, hdef["combat"])
+	send_to_rally(u)
 	if u:
 		u.unit_name = hdef["name"]
 		u.leadership = hdef["leadership"]
@@ -743,6 +765,7 @@ func invoke_god() -> Unit:
 	n.prayer_points -= god_cost()
 	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
 	var u := Game.inst.spawn_unit(g["unit"], nation_id, c, 100.0)
+	send_to_rally(u)
 	if u:
 		u.life_frames = int(Defs.FRAMES_PER_DAY * 120)
 	return u

@@ -159,7 +159,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"research_points": f.research_points, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
-		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate,
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y],
 	}
 
 
@@ -337,6 +337,8 @@ static func load_path(g: Game, path: String) -> String:
 		if f.alchemy_mode != "" and not f.alchemy_mode in SpecialFirms.ALCHEMY_MODES:
 			f.alchemy_mode = ""
 		f.propagate = int(fd.get("propagate", 1))
+		var ra: Array = fd.get("rally", [-1, -1])
+		f.rally = Vector2i(int(ra[0]), int(ra[1]))
 		f.set_meta("save", fd)
 		by_id[f.obj_id] = f
 

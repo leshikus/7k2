@@ -874,6 +874,7 @@ func spy_spawn(college: Firm) -> Unit:
 	if u:
 		u.is_spy = true
 		u.spy_skill = float(rng.randi_range(25, 50))
+		college.send_to_rally(u)
 	return u
 
 

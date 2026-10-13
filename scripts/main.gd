@@ -22,6 +22,7 @@ var rain_player: AudioStreamPlayer
 var build_code := ""
 var build_race := ""
 var _editor_tool := {}         # scenario editor: what a left click places
+var _rally_firm: Firm = null   # building waiting for its rally point click
 var _spell_firm: Firm = null   # spell building waiting for its target click
 var _spell_code := ""
 var _spell_unit: Unit = null    # teleport: the unit picked by the first click
@@ -506,6 +507,15 @@ func _start(cfg: Dictionary) -> void:
 	_attach_game()
 	if cfg.get("autoplay", false):
 		game.notify("AI against AI: every kingdom is computer-controlled. Sit back and watch.", Vector2(-1, -1))
+	if not cfg.get("autoplay", false) and not cfg.has("mp") and not cfg.has("tutorial") and not cfg.get("editor", false) 			and not cfg.get("no_tips", false) and TipsBox.enabled() and not Array(OS.get_cmdline_user_args()).any(func(a): return a.begins_with("--shot") or a.begins_with("--demo")):
+		var tb := TipsBox.new()
+		var section := "CAMPAIGN" if game.campaign_battle != null else ("FRYHTAN" if game.player() and game.player().is_fryhtan else "HUMAN")
+		if tb.setup(section, randi()):
+			hud.ui_root.add_child(tb)
+		else:
+			tb.free()
+	if cfg.get("autoplay", false):
+		pass
 	elif cfg.get("editor", false):
 		game.reveal_all = true
 		game._update_fog()
@@ -611,6 +621,9 @@ func _attach_game() -> void:
 	hud.item_target_requested.connect(func(u):
 		_item_user = u
 		game.notify("Click the target for the %s; right-click to cancel." % Items.item_name(u.item_id), Vector2(-1, -1)))
+	hud.rally_requested.connect(func(f):
+		_rally_firm = f
+		game.notify("Click where the units made here should gather; right-click to cancel.", Vector2(-1, -1)))
 	hud.spell_target_requested.connect(func(f, sp):
 		_spell_firm = f
 		_spell_code = sp
@@ -924,6 +937,12 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _spell_firm != null:
 						_cast_on_click()
 						return
+					if _rally_firm != null:
+						if is_instance_valid(_rally_firm) and not _rally_firm.dead:
+							Net.cmd(_rally_firm, "set_rally", [Vector2i(_mouse_loc().floor())])
+							game.notify("Rally point set.", Vector2(-1, -1))
+						_rally_firm = null
+						return
 					if not _editor_tool.is_empty() and hud.editor:
 						var l := _mouse_loc()
 						if not hud.editor.place(_editor_tool, Vector2i(floori(l.x), floori(l.y))):
@@ -953,6 +972,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_item_user = null
 					elif _spell_firm != null:
 						_spell_firm = null
+					elif _rally_firm != null:
+						_rally_firm = null
 					elif not _editor_tool.is_empty():
 						_editor_tool = {}
 					else:
@@ -972,8 +993,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_T:
 				if hud.tutorial_panel:
 					hud.tutorial_panel.visible = not hud.tutorial_panel.visible
-			KEY_SPACE:
+			KEY_SPACE, KEY_P:
 				hud._set_speed(0.0)
+			KEY_K:
+				_center_home()
 			KEY_F5:
 				save_game("quick")
 			KEY_F9:
@@ -1151,6 +1174,10 @@ func _command(force_attack: bool) -> void:
 					if u.can_attack():
 						Net.cmd(u, "order_attack", [target])
 				return
+	if Input.is_key_pressed(KEY_SHIFT):
+		for u in own:
+			Net.cmd(u, "add_waypoint", [Vector2i(_mouse_loc().floor())])
+		return
 	_formation_move(own, Vector2i(_mouse_loc().floor()))
 
 

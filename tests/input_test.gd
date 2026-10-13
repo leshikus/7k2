@@ -17,7 +17,7 @@ func _ready() -> void:
 		print("FAIL: no game data")
 		get_tree().quit(1)
 		return
-	main._start({"seed": 7, "size": 100, "race": "NORMAN", "ai_count": 1, "cash": 3000, "lairs": 0})
+	main._start({"seed": 7, "size": 100, "race": "NORMAN", "ai_count": 1, "cash": 3000, "lairs": 0, "no_tips": true})
 	game = main.game
 	game.make_peace(1, 2)
 	await _frames(5)

@@ -98,6 +98,10 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   item), set up the kingdoms (yours, names, gold, food, life points, reputation,
   technologies, new kingdoms), diplomacy, and victory and defeat goals. Saved
   scenarios appear in the start screen's scenario list.
+* **Rally points**: the buildings that make units (War Factory, training centre,
+  Espionage College, Inn, Seat of Power, Fryhtan breeding grounds, Keraal, Vapngart)
+  can send what they make to a chosen spot. A tip from the original's TIPS.RES
+  greets each game (it can be switched off).
 * **Reports** (top bar): rankings of the kingdoms by population, military, economy,
   reputation and Fryhtans slain; your towns; income and expenses by kind for this
   year and last; your forts and armies; technologies; markets and caravans; and the
@@ -136,6 +140,8 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | M | Toggle music |
 | Enter | Message to the other players (network game) |
 | T | Show or hide the tutorial box |
+| Shift + right click | Add a waypoint: the units go there after their current move |
+| P / K | Pause (as Space) / centre on your king (as H), the original's keys |
 | Esc | Cancel / deselect / game menu |
 
 ## What is implemented

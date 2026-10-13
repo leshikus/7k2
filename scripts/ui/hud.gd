@@ -6,6 +6,7 @@ extends CanvasLayer
 signal build_requested(code: String)
 signal item_target_requested(u: Unit)
 signal spell_target_requested(f: Firm, spell: String)
+signal rally_requested(f: Firm)
 
 var inspected_treasure: Treasure = null   # a scroll or item clicked on the map
 signal center_on(loc: Vector2)
@@ -1330,6 +1331,9 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		"BASE":
 			var invoke := func(): _do(f, "invoke_god")
 			_add_action("Invoke Greater Being", invoke, p.prayer_points >= f.god_cost())
+	if f.code in Firm.RALLY_FIRMS:
+		_add_action("Rally point" + (" ✓" if f.rally.x >= 0 else ""), func(): rally_requested.emit(f), true,
+			"Click: choose where the units made here gather. Right-click: clear it.", func(): _do(f, "clear_rally"))
 	_add_action("Demolish", func(): _do(f, "die", [null]), true, "Destroy this building. Units inside will leave.")
 
 

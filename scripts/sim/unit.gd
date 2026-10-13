@@ -53,6 +53,7 @@ var caravan_leg := 0              # 0 heading to dest, 1 heading home
 var cargo := {}                   # goods type -> quantity
 var _caravan_wait := 0
 var frozen_until := -1           # Amaterasu's freeze (frame)
+var waypoints: Array = []       # further places to go after this move (Shift+right-click)
 var weapon_version := 0          # war machine / Fryhtan unit: tech level it was built at (get_weapon_version)
 var item_id := 0                  # the item carried (Items.TABLE), 0 = none
 var item_para := 0                # its charges, uses or time (Item::para)
@@ -331,7 +332,16 @@ func can_settle() -> bool:
 ## A move ordered by the player: the unit no longer belongs to a camp's sally.
 func order_move_free(dest: Vector2i) -> void:
 	home_firm = null
+	waypoints.clear()
 	order_move(dest)
+
+
+## Shift+right-click: one more place on the way (owaypnt.cpp).
+func add_waypoint(dest: Vector2i) -> void:
+	if order == Order.MOVE:
+		waypoints.append(dest)
+	else:
+		order_move_free(dest)
 
 
 func order_settle() -> bool:
@@ -404,7 +414,10 @@ func sim_frame() -> void:
 			Order.MOVE:
 				moved = true
 				if _step_move():
-					stop()
+					if waypoints.is_empty():
+						stop()
+					else:
+						order_move(waypoints.pop_front())
 			Order.ATTACK:
 				moved = _do_attack()
 			Order.ENTER, Order.BUILD:
