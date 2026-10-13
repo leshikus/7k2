@@ -242,6 +242,29 @@ func change_nation(to_nation: int) -> void:
 	queue_redraw()
 
 
+func release_all_soldiers() -> void:
+	for s in soldiers.duplicate():
+		release_unit(s)
+
+
+## "Fill from towns": villagers of linked loyal towns join at once.
+func fill_from_towns() -> int:
+	var n := 0
+	for t in linked_towns:
+		if t.nation_id != nation_id:
+			continue
+		while soldiers.size() < capacity() and t.can_recruit():
+			if t.draft_into(self) == null:
+				break
+			n += 1
+	return n
+
+
+## Espionage College: one more spy to train.
+func queue_spy() -> void:
+	weapon_queue += 1
+
+
 func eject_all() -> void:
 	for s in soldiers.duplicate():
 		release_unit(s)
@@ -330,7 +353,7 @@ func next_day(day: int) -> void:
 		return
 	# Badly damaged buildings burn (Firm::next_day fires below 30% / 10% hit points).
 	if visible and hp < max_hp * 0.3:
-		var rng := Game.inst.rng
+		var rng := Game.inst.fx_rng
 		var tries := 2 if hp < max_hp * 0.1 else 1
 		for i in tries:
 			if rng.randf() < 0.7:

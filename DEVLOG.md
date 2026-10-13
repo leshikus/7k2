@@ -418,3 +418,46 @@ A port of `CampaignEastWest` (`ocampgn*.cpp`, `oc_east*.cpp`, `oc_easte.cpp`,
   straight to its first battle. New test `campaign_test`: every stage's battle
   built and run for 40 days, the event chain to the end, save and load.
 
+## Network play (13 Oct 2026)
+
+Lockstep multiplayer as the original plays it (`remote.cpp`), in
+`scripts/net/net.gd` (autoload `Net`), over Godot's ENet.
+
+- **Commands**: every action a player takes is a command,
+  `Net.cmd(target, "method", [args])`. The target is a unit, building or town
+  (by id), a nation, the game, or the static `Espionage` / `SpecialFirms`.
+  Alone, a command runs at once, so single-player play is unchanged. All HUD
+  actions and the map orders in `main.gd` go through it. Multi-step actions
+  became single methods on the simulation: `Firm.fill_from_towns`,
+  `release_all_soldiers`, `queue_spy`, `Unit.promote` / `demote` /
+  `order_move_free` / `use_item_cmd`, `Town.collect_tax_cmd`,
+  `Game.cmd_place_building`, `offer_peace`, `set_speed`, `set_paused`.
+- **Lockstep**: a turn is 4 frames. Commands issued during turn t run at turn
+  t+2 on every machine. Clients send their commands to the host; the host
+  sends each turn's bundle (in player order) to all; a machine runs a turn
+  only when it has the bundle, so faster machines wait. If a player leaves, the
+  host stops waiting for them and adds `mp_drop_player` to the next bundle: the
+  computer takes over that kingdom on every machine at the same turn.
+- **Checksums**: every 25 turns each machine sends a hash of positions, hit
+  points, populations, treasuries and the random state to the host, which
+  warns everyone if they differ.
+- **Determinism audit**: the simulation draws random numbers only from the
+  game's seeded generator. A burning building's flames drew from it only when
+  the building was on screen; flames now use a separate generator for
+  pictures. A plot shuffle used the global generator. Everything that depends
+  on the local player (fog, sounds, messages, selection) leaves the simulation
+  untouched. A finished player's game keeps running in step.
+- **Lobby**: "Network game" on the start screen (address, port, Host, Join,
+  Leave), a player list with nationalities, and Start for the host with the
+  map settings. Kingdoms are created for each player in the host's order, then
+  computer kingdoms and Fryhtans. Peace between players is offered and then
+  accepted in the Diplomacy window. Enter opens a chat line. Speed and pause
+  are the host's. Network games cannot be saved.
+- The start screen now scrolls when the window is too short.
+- `tests/net_test`: the host launches a second Godot process as the client.
+  Both issue orders: moves, recruits, filling a fort, a declaration of war and
+  a speed change. The two simulations must end identical: 4,000 frames (400
+  days) with computer kingdoms passed, with no drift reported along the way.
+  `drop=N` has the client leave at frame N, and the computer must take over
+  its kingdom.
+

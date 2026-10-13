@@ -32,6 +32,11 @@ var spectate_check: CheckBox
 var scn_opt: OptionButton
 var scn_text: Label
 var scenarios: Array = []
+var addr_edit: LineEdit
+var port_edit: LineEdit
+var mp_status: Label
+var mp_players: Label
+var mp_start: Button
 
 
 func _ready() -> void:
@@ -53,10 +58,15 @@ func _ready() -> void:
 	add_child(center)
 	var panel := PanelContainer.new()
 	center.add_child(panel)
+	# the panel scrolls when the window is too short for all of it
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(560, minf(780.0, get_viewport_rect().size.y - 24.0))
+	panel.add_child(scroll)
 	var vb := VBoxContainer.new()
-	vb.custom_minimum_size = Vector2(520, 0)
+	vb.custom_minimum_size = Vector2(540, 0)
 	vb.add_theme_constant_override("separation", 8)
-	panel.add_child(vb)
+	scroll.add_child(vb)
 	var title := Label.new()
 	title.text = "Seven Kingdoms II"
 	title.add_theme_font_size_override("font_size", 34)
@@ -135,6 +145,66 @@ func _ready() -> void:
 	scn_text.custom_minimum_size = Vector2(520, 0)
 	scn_text.add_theme_font_size_override("font_size", 12)
 	setup_box.add_child(scn_text)
+	# a network game (Net): host or join, then the host starts with the settings above
+	var mp_box := VBoxContainer.new()
+	setup_box.add_child(mp_box)
+	var mh := HBoxContainer.new()
+	mp_box.add_child(mh)
+	var ml := Label.new()
+	ml.text = "Network game"
+	mh.add_child(ml)
+	addr_edit = LineEdit.new()
+	addr_edit.text = "127.0.0.1"
+	addr_edit.placeholder_text = "Host address"
+	addr_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mh.add_child(addr_edit)
+	port_edit = LineEdit.new()
+	port_edit.text = str(Net.PORT)
+	port_edit.custom_minimum_size = Vector2(64, 0)
+	mh.add_child(port_edit)
+	var hb := Button.new()
+	hb.text = "Host"
+	hb.pressed.connect(func():
+		var err := Net.host(port_edit.text.to_int(), _player_name(), _race_code())
+		if err != "":
+			mp_status.text = err)
+	mh.add_child(hb)
+	var jb := Button.new()
+	jb.text = "Join"
+	jb.pressed.connect(func():
+		var err := Net.join(addr_edit.text.strip_edges(), port_edit.text.to_int(), _player_name(), _race_code())
+		if err != "":
+			mp_status.text = err)
+	mh.add_child(jb)
+	var lb2 := Button.new()
+	lb2.text = "Leave"
+	lb2.pressed.connect(func():
+		Net.leave()
+		mp_status.text = ""
+		mp_status.visible = false)
+	mh.add_child(lb2)
+	mp_status = Label.new()
+	mp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mp_status.add_theme_font_size_override("font_size", 12)
+	mp_box.add_child(mp_status)
+	mp_players = Label.new()
+	mp_players.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mp_box.add_child(mp_players)
+	mp_start = Button.new()
+	mp_start.text = "Start the network game"
+	mp_start.visible = false
+	mp_start.pressed.connect(_start_network)
+	mp_box.add_child(mp_start)
+	mp_status.visible = false
+	mp_players.visible = false
+	Net.net_status.connect(func(t):
+		mp_status.text = t
+		mp_status.visible = t != "")
+	Net.lobby_changed.connect(_refresh_lobby)
+	race_opt.item_selected.connect(func(_i):
+		if Net.online():
+			Net.set_race(_race_code()))
+	_refresh_lobby()
 	# the campaign: the Fryhtan Wars
 	var ch := HBoxContainer.new()
 	setup_box.add_child(ch)
@@ -179,6 +249,58 @@ func _ready() -> void:
 	note.add_theme_color_override("font_color", Color(0.65, 0.6, 0.5))
 	vb.add_child(note)
 	_load_data()
+
+
+func _player_name() -> String:
+	var n := name_edit.text.strip_edges()
+	for pre in ["Kingdom of ", "The "]:
+		if n.begins_with(pre):
+			n = n.substr(pre.length())
+	if n.ends_with(" Fryhtans"):
+		n = n.substr(0, n.length() - 9)
+	return n if n != "" else "Player"
+
+
+func _refresh_lobby() -> void:
+	if mp_players == null:
+		return
+	if not Net.online() or Net.players.is_empty():
+		mp_players.text = ""
+		mp_players.visible = false
+		mp_start.visible = false
+		return
+	mp_players.visible = true
+	var ids: Array = Net.players.keys()
+	ids.sort()
+	var lines := []
+	for id in ids:
+		var p: Dictionary = Net.players[id]
+		var race := Defs.race_name(p["race"])
+		for m in Defs.monsters:
+			if m["unit"] == p["race"]:
+				race = m["name"] + " Fryhtans"
+		lines.append("%s%s — %s" % ["(host) " if id == 1 else "", p["name"], race])
+	mp_players.text = "Players:
+" + "
+".join(lines)
+	mp_start.visible = Net.is_host
+	mp_start.disabled = Net.players.size() < 2
+
+
+func _start_network() -> void:
+	var sizes := [90, 120, 160]
+	var size: int = sizes[size_opt.selected]
+	var area := size * size
+	Net.start_game({
+		"seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
+		"size": size,
+		"ai_count": int(ai_spin.value) - 1,
+		"cash": [1500, 3000, 6000][cash_opt.selected],
+		"indep_towns": maxi(3, int(area / 1000.0 * [0.6, 1.0, 1.6][towns_opt.selected])),
+		"lairs": maxi(1, int(area / 2600.0 * [0.5, 1.0, 1.8][lairs_opt.selected])),
+		"reveal": reveal_check.button_pressed,
+		"fryhtan_count": fryhtan_opt.selected,
+	})
 
 
 func _row(grid: GridContainer, label: String, ctl: Control) -> Control:

@@ -46,6 +46,7 @@ func _ready() -> void:
 	music.volume_db = -10.0
 	music.finished.connect(_next_track)
 	add_child(music)
+	Net.game_start.connect(_start, CONNECT_DEFERRED)
 	_show_menu()
 	# Command-line shortcut for automated runs: --autostart [seed]
 	var args := OS.get_cmdline_user_args()
@@ -388,6 +389,8 @@ func _take_shot() -> void:
 func _show_menu() -> void:
 	_teardown()
 	campaign = null
+	if Net.active:
+		Net.leave()
 	menu = MainMenu.new()
 	add_child(menu)
 	menu.start_game.connect(_start)
@@ -473,11 +476,18 @@ func _teardown() -> void:
 func _start(cfg: Dictionary) -> void:
 	_teardown()
 	game = Game.new()
+	if cfg.has("mp"):
+		# a network game: this machine leads one of the players' kingdoms
+		game.player_id = Net.nation_of(Net.my_id())
+		Net.game = game
 	add_child(game)
 	game.start(cfg)
 	_attach_game()
 	if cfg.get("autoplay", false):
 		game.notify("AI against AI: every kingdom is computer-controlled. Sit back and watch.", Vector2(-1, -1))
+	elif cfg.has("mp"):
+		var others := game.nations.filter(func(n): return n.is_player and n.id != game.player_id).map(func(n): return n.name)
+		game.notify("A network game with %s. Press Enter to send a message." % ", ".join(others), Vector2(-1, -1))
 	elif game.goals:
 		var goals := game.goals.win.filter(func(c): return c["supported"]).map(func(c): return c["text"])
 		game.notify("Welcome, ruler of the %s. Your goal%s: %s." % [game.player().name, "s" if game.goals.require_all and goals.size() > 1 else "",
@@ -488,6 +498,8 @@ func _start(cfg: Dictionary) -> void:
 
 ## Loads a saved game ("quick", "autosave" ...) and resumes play.
 func load_game(slot: String) -> bool:
+	if Net.active:
+		return false
 	if not SaveGame.exists(slot):
 		if game:
 			game.notify("No saved game to load.", Vector2(-1, -1))
@@ -509,6 +521,9 @@ func load_game(slot: String) -> bool:
 
 func save_game(slot: String) -> void:
 	if game == null or game.over:
+		return
+	if Net.active:
+		game.notify("A network game cannot be saved.", Vector2(-1, -1))
 		return
 	if SaveGame.save(game, slot):
 		if slot != "autosave":
@@ -739,9 +754,7 @@ func _use_item_on_click() -> void:
 		target = Vector2i(floori(l.x), floori(l.y))
 	else:
 		target = _pick()
-	var err := u.use_manual_item(target)
-	if err != "":
-		game.notify(err, Vector2(-1, -1))
+	Net.cmd(u, "use_item_cmd", [target])
 	hud.refresh_selection(true)
 
 
@@ -763,8 +776,7 @@ func _cast_on_click() -> void:
 	var o := _pick()
 	if o and _spell_code == "DESTROY":
 		at = o.center_loc()
-	if not SpecialFirms.cast(f, _spell_code, at, _spell_unit):
-		game.notify("The spell finds no target there (or cannot be afforded).", Vector2(-1, -1))
+	Net.cmd(SpecialFirms, "cast", [f, _spell_code, at, _spell_unit])
 	_spell_firm = null
 	_spell_unit = null
 	hud.refresh_selection(true)
@@ -837,16 +849,10 @@ func _place_building() -> void:
 		game.notify("Select a unit to construct the building.", Vector2(-1, -1))
 		_cancel_build()
 		return
-	var f := game.spawn_firm(build_code, p.id, build_race if build_race != "" else p.race, pl["pos"], false)
-	if f == null:
-		return
-	p.add_cash(-cost)
-	p.live_points -= live
-	if build_code == "LAIR":
-		f.monster_code = p.monster_code
-	var c := f.center_loc()
-	builders.sort_custom(func(a, b): return a.center_loc().distance_to(c) < b.center_loc().distance_to(c))
-	builders[0].order_build(f)
+	var b := pl["build"] as Dictionary
+	var c := Vector2(pl["pos"]) + Vector2(b.get("loc_w", 3), b.get("loc_h", 3)) * 0.5
+	builders.sort_custom(func(a, bb): return a.center_loc().distance_to(c) < bb.center_loc().distance_to(c))
+	Net.cmd(game, "cmd_place_building", [p.id, build_code, build_race if build_race != "" else p.race, pl["pos"], builders[0], cost, live, p.monster_code])
 	if not Input.is_key_pressed(KEY_SHIFT):
 		_cancel_build()
 
@@ -921,6 +927,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var k := event as InputEventKey
 		match k.keycode:
+			KEY_ENTER, KEY_KP_ENTER:
+				hud.open_chat()
 			KEY_SPACE:
 				hud._set_speed(0.0)
 			KEY_F5:
@@ -1062,8 +1070,10 @@ func _command(force_attack: bool) -> void:
 	if target and not spies_sel.is_empty() and (target is Town or Espionage.is_camp(target)):
 		var refused := 0
 		for u in spies_sel:
-			if not u.order_infiltrate(target):
+			if not Espionage.can_enter(u, target) or (Espionage.cloak_needed(u, target) > 0 and not Espionage.can_change_cloak(u, Espionage.cloak_needed(u, target))):
 				refused += 1
+			else:
+				Net.cmd(u, "order_infiltrate", [target])
 		if refused > 0:
 			var tn := game.nation(target.nation_id)
 			game.notify("A spy cannot put on the colours of the %s with enemies nearby." % tn.name if tn else "The spy cannot go there.", spies_sel[0].center_loc())
@@ -1076,17 +1086,17 @@ func _command(force_attack: bool) -> void:
 			if f.under_construction:
 				var humans := own.filter(func(u): return u.is_human())
 				if not humans.is_empty():
-					humans[0].order_build(f)
+					Net.cmd(humans[0], "order_build", [f])
 				return
 			if f.is_military() or f.code == "FORTRESS":
 				for u in own:
-					u.order_enter(f)
+					Net.cmd(u, "order_enter", [f])
 				return
 		elif target.nation_id != game.player_id:
 			var hostile := game.is_hostile(own[0], target) or target.is_monster()
 			if not hostile and target is Town and target.nation_id == 0:
 				hostile = true
-				game.player().change_reputation(-1.0)
+				Net.cmd(game.player(), "change_reputation", [-1.0])
 			elif not hostile and target.nation_id > 0:
 				if force_attack:
 					hostile = true
@@ -1096,7 +1106,7 @@ func _command(force_attack: bool) -> void:
 			if hostile:
 				for u in own:
 					if u.can_attack():
-						u.order_attack(target)
+						Net.cmd(u, "order_attack", [target])
 				return
 	_formation_move(own, Vector2i(_mouse_loc().floor()))
 
@@ -1115,8 +1125,7 @@ func _formation_move(units: Array, dest: Vector2i) -> void:
 		r += 1
 	for i in units.size():
 		var u: Unit = units[i]
-		u.home_firm = null
-		u.order_move(cells[i] if i < cells.size() else dest)
+		Net.cmd(u, "order_move_free", [cells[i] if i < cells.size() else dest])
 
 
 ## --bench=<seconds>: after a second's warm-up, print frame time, draw calls and

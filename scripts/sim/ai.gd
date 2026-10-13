@@ -352,7 +352,7 @@ func _economy(day: int) -> void:
 			return
 	for wf in my_firms("WAR"):
 		if wf.weapon == "" and n.cash > 1500:
-			for wcode in ["CANNON", "F_BALLIS", "FLAMETHR", "BALLISTA", "EXPCART", "CATAPULT"]:
+			for wcode in Defs.MEGA_WEAPONS + ["CANNON", "F_BALLIS", "FLAMETHR", "BALLISTA", "EXPCART", "CATAPULT"]:
 				if n.tech_level(wcode) > 0:
 					wf.queue_weapon(wcode)
 					break

@@ -9,6 +9,7 @@ config/features=PackedStringArray("4.3")
 
 [autoload]
 Assets="*res://scripts/assets/assets.gd"
+Net="*res://scripts/net/net.gd"
 
 [display]
 window/size/viewport_width=1280

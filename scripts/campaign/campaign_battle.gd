@@ -1749,7 +1749,7 @@ func _plot_create() -> void:
 		"A6":
 			# three populous villages; items that turn a town to you lie nearby
 			var indep := g.towns.filter(func(t): return t.nation_id == 0)
-			indep.shuffle()
+			g._shuffle(indep)
 			for t in indep.slice(0, 3):
 				t.population = mini(Defs.MAX_TOWN_POPULATION, t.population + 20 + rnd(20))
 				t.resistance[g.player_id] = minf(100.0, t.resistance_to(g.player_id) + 30.0)

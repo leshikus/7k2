@@ -35,6 +35,7 @@ var overlay: PanelContainer
 var overlay_label: Label
 var overlay_image: TextureRect
 var overlay_new_btn: Button
+var chat_edit: LineEdit
 var pause_menu: PanelContainer
 var tooltip_label: Label
 var build_menu_open := false
@@ -270,6 +271,29 @@ func _build_ui() -> void:
 	oq.pressed.connect(func(): get_tree().quit())
 	ov.add_child(oq)
 	_sync_speed_buttons()
+	# network game: a line to talk to the other players (Enter)
+	chat_edit = LineEdit.new()
+	chat_edit.placeholder_text = "Message to the other players (Enter to send, Esc to close)"
+	chat_edit.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	chat_edit.offset_left = -260
+	chat_edit.offset_right = 260
+	chat_edit.offset_top = -96
+	chat_edit.offset_bottom = -64
+	chat_edit.visible = false
+	chat_edit.text_submitted.connect(func(t):
+		if t.strip_edges() != "":
+			Net.say(t.strip_edges())
+		chat_edit.text = ""
+		chat_edit.visible = false
+		chat_edit.release_focus())
+	root.add_child(chat_edit)
+
+
+func open_chat() -> void:
+	if not Net.active:
+		return
+	chat_edit.visible = true
+	chat_edit.grab_focus()
 
 
 ## True when the mouse is over an interface element (the map should ignore it).
@@ -283,11 +307,13 @@ func is_over_ui(p: Vector2) -> bool:
 
 
 func _set_speed(s: float) -> void:
+	if Net.active and not Net.is_host:
+		game.notify("The host sets the game speed.", Vector2(-1, -1))
+		return
 	if s == 0.0:
-		game.paused = not game.paused
+		_do(game, "set_paused", [not game.paused])
 	else:
-		game.paused = false
-		game.speed = s
+		_do(game, "set_speed", [s])
 	_sync_speed_buttons()
 	speed_changed.emit()
 
@@ -358,8 +384,8 @@ func _fill_spies() -> void:
 			mode.text = "Sow dissent" if u.spy_action == "dissent" else "Sleep"
 			mode.tooltip_text = "Click to switch between sowing dissent and lying low."
 			mode.pressed.connect(func():
-				u.spy_action = "idle" if u.spy_action == "dissent" else "dissent"
-				_fill_spies())
+				_do(u, "set", ["spy_action", "idle" if u.spy_action == "dissent" else "dissent"])
+				_fill_spies.call_deferred())
 			row.add_child(mode)
 		var go := Button.new()
 		go.text = "Show"
@@ -376,8 +402,8 @@ func _fill_spies() -> void:
 			var rc := Button.new()
 			rc.text = "Recall"
 			rc.pressed.connect(func():
-				game.spy_leave(u)
-				_fill_spies())
+				_do(game, "spy_leave", [u])
+				_fill_spies.call_deferred())
 			row.add_child(rc)
 
 
@@ -409,23 +435,29 @@ func _fill_diplomacy() -> void:
 		if not n.alive:
 			continue
 		var rel := p.relation(n.id)
+		if game.peace_offers.get(p.id, {}).has(n.id) and rel == Defs.Relation.WAR or game.peace_offers.get(p.id, {}).has(n.id) and rel == Defs.Relation.NEUTRAL:
+			var acc := Button.new()
+			acc.text = "Accept peace"
+			var nid3 := n.id
+			acc.pressed.connect(func():
+				_do(game, "make_peace", [nid3, p.id])
+				_fill_diplomacy.call_deferred())
+			row.add_child(acc)
 		if rel == Defs.Relation.WAR or rel == Defs.Relation.NEUTRAL:
 			var b := Button.new()
 			b.text = "Propose peace"
 			var nid := n.id
 			b.pressed.connect(func():
-				var ok := game.propose_peace(p.id, nid)
-				if not ok:
-					game.notify("The %s rejects your offer of peace." % game.nation(nid).name, Vector2(-1, -1))
-				_fill_diplomacy())
+				_do(game, "offer_peace", [p.id, nid])
+				_fill_diplomacy.call_deferred())
 			row.add_child(b)
 		if rel != Defs.Relation.WAR:
 			var w := Button.new()
 			w.text = "Declare war"
 			var nid2 := n.id
 			w.pressed.connect(func():
-				game.declare_war(p.id, nid2)
-				_fill_diplomacy())
+				_do(game, "declare_war", [p.id, nid2])
+				_fill_diplomacy.call_deferred())
 			row.add_child(w)
 
 
@@ -715,25 +747,25 @@ func _unit_actions(sel: Array) -> void:
 		return
 	_add_action("Stop", func():
 		for u in own:
-			u.stop())
+			_do(u, "stop"))
 	if own.any(func(u): return u.is_human()) or game.player().is_fryhtan:
 		_add_action("Build...", func(): build_menu_open = true, true, "Choose a building to construct. The nearest selected unit will build it.")
 	if own.any(func(u): return u.sprite_code == Defs.FORTRESS_BUILDER) and game.player().tech_level("FORTRESS") > 0:
 		var cost := int(Defs.firm_types.get("FORTRESS", {}).get("cost", 50))
 		_add_action("Fortress (%d)" % cost, func():
-			if SpecialFirms.transform_to_fortress(own) == null:
-				game.notify("Four Grokkens standing together on open ground are needed.", Vector2(-1, -1)),
+			if SpecialFirms.fortress_spot(own).x < 0:
+				game.notify("Four Grokkens standing together on open ground are needed.", Vector2(-1, -1))
+			else:
+				_do(SpecialFirms, "transform_to_fortress", [own]),
 			SpecialFirms.fortress_spot(own).x >= 0 and game.player().cash >= cost,
 			"Four selected Grokkens standing side by side turn into a Fortress, from which Fryhtans posted inside shoot at enemies within %d." % int(SpecialFirms.FORTRESS_RANGE))
 	if own.size() == 1:
 		var u: Unit = own[0]
 		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian():
-			var promote := func():
-				u.rank = Defs.Rank.GENERAL
-				u.leadership = maxf(u.leadership, 25.0)
+			var promote := func(): _do(u, "promote")
 			_add_action("Promote to General", promote, true, "A general can command a camp, extending the kingdom's influence over nearby towns.")
 		if u.rank == Defs.Rank.GENERAL and not u.is_hero:
-			_add_action("Demote to Soldier", func(): u.rank = Defs.Rank.SOLDIER)
+			_add_action("Demote to Soldier", func(): _do(u, "demote"))
 		if u.home_town == null and u.is_human():
 			_add_action("Settle in town", func(): _settle(u), true, "Walk to the nearest own town and rejoin its population.")
 		if u.item_id > 0:
@@ -741,11 +773,11 @@ func _unit_actions(sel: Array) -> void:
 		if u.is_spy:
 			_spy_unit_actions(u)
 		if u.sprite_code == "EXPCART":
-			_add_action("Detonate", func(): u.explode(), true, "Blow the Porcupine up where it stands, hurting everything next to it.")
+			_add_action("Detonate", func(): _do(u, "explode"), true, "Blow the Porcupine up where it stands, hurting everything next to it.")
 		if u.is_god:
 			var gi := u.god_info()
 			if not gi.is_empty() and Defs.GOD_POWERS.has(gi["race"]):
-				_add_action("Cast power (%d)" % gi["power_pray"], func(): u.cast_power(), u.can_cast_power(), Defs.GOD_POWERS[gi["race"]] + ". Costs prayer points.")
+				_add_action("Cast power (%d)" % gi["power_pray"], func(): _do(u, "cast_power"), u.can_cast_power(), Defs.GOD_POWERS[gi["race"]] + ". Costs prayer points.")
 
 
 ## Use, switch on or drop the carried item.
@@ -753,16 +785,13 @@ func _item_actions(u: Unit) -> void:
 	var name := Items.item_name(u.item_id)
 	var aim: String = Items.MANUAL_TARGET.get(u.item_id, "")
 	if aim == "self":
-		_add_action("Use " + name, func():
-			var err := u.use_manual_item()
-			if err != "":
-				game.notify(err, Vector2(-1, -1)), true, Items.info(u.item_id)[Items.DESC])
+		_add_action("Use " + name, func(): _do(u, "use_item_cmd"), true, Items.info(u.item_id)[Items.DESC])
 	elif aim != "":
 		_add_action("Use " + name + "...", func(): item_target_requested.emit(u), true,
 			Items.info(u.item_id)[Items.DESC] + ". Then click the %s." % {"unit": "unit", "town": "town", "place": "place to go"}[aim])
 	elif Items.info(u.item_id)[Items.PARA] in [Items.Para.USE_TIMED, Items.Para.CHARGE_TIMED]:
-		_add_action("Activate " + name, func(): u.turn_on_item(), Items.can_turn_on(u.item_id, u.item_para), "Works for a while once activated.")
-	_add_action("Drop item", func(): game._drop_item(u), true, "Leave the item on the ground for another unit.")
+		_add_action("Activate " + name, func(): _do(u, "turn_on_item"), Items.can_turn_on(u.item_id, u.item_para), "Works for a while once activated.")
+	_add_action("Drop item", func(): _do(game, "_drop_item", [u]), true, "Leave the item on the ground for another unit.")
 
 
 ## Disguise and camouflage for a spy in the field.
@@ -772,13 +801,15 @@ func _spy_unit_actions(u: Unit) -> void:
 	var next: int = choices[(cur + 1) % choices.size()]
 	var cn := game.nation(u.cloak_id) if u.cloak_id > 0 else null
 	_add_action("Disguise: %s" % (cn.name if cn else "own colours"), func():
-		if not Espionage.set_cloak(u, next):
-			game.notify("Your spy cannot change colours with enemies nearby.", u.center_loc()),
+		if not Espionage.can_change_cloak(u, next):
+			game.notify("Your spy cannot change colours with enemies nearby.", u.center_loc())
+		else:
+			_do(Espionage, "set_cloak", [u, next]),
 		choices.size() > 1,
 		"Click: pass for the next kingdom. Right-click: back to your own colours. Units of the kingdom you pass for leave the spy alone; attacking gives the disguise away. Not possible with enemies within %d." % Espionage.ENEMY_RANGE,
-		func(): Espionage.set_cloak(u, u.nation_id))
+		func(): _do(Espionage, "set_cloak", [u, u.nation_id]))
 	if game.player().tech_level("CAMOUFLG") > 0:
-		_add_action("Camouflage (%d)" % u.camouflage_power, func(): Espionage.start_camouflage(u), Espionage.can_camouflage(u),
+		_add_action("Camouflage (%d)" % u.camouflage_power, func(): _do(Espionage, "start_camouflage", [u]), Espionage.can_camouflage(u),
 			"Become unseen by other kingdoms for as many days as the camouflage power (at least %d). Needs a disguise." % Espionage.MIN_CAMOUFLAGE_POWER)
 
 
@@ -819,13 +850,13 @@ func _spy_actions(place: GameObj) -> void:
 	mine.sort_custom(func(a, b): return a.spy_skill > b.spy_skill)
 	var spy: Unit = mine[0]
 	var p := game.player()
-	_add_action("Recall spy", func(): game.spy_leave(mine[-1]), true, "Your least skilled spy here walks out, wearing the place's colours.")
+	_add_action("Recall spy", func(): _do(game, "spy_leave", [mine[-1]]), true, "Your least skilled spy here walks out, wearing the place's colours.")
 	if place.nation_id == game.player_id:
 		return
 	_add_action("Mission: " + ("Dissent" if spy.spy_action == "dissent" else "Sleep"), func():
 		var to := "idle" if spy.spy_action == "dissent" else "dissent"
 		for x in mine:
-			x.spy_action = to, true,
+			_do(x, "set", ["spy_action", to]), true,
 		"Sow dissent: lower the town's loyalty (or its resistance to you), or the loyalty of the men of their own race. Sleep: lie low; a sleeping spy is almost never caught.")
 	if place.nation_id > 0 and p.tech_level("STEALINF") > 0:
 		_add_action("Secret report", func(): secret_for = null if secret_for == place else place, Espionage.can_view_secret(spy),
@@ -840,34 +871,42 @@ func _spy_actions(place: GameObj) -> void:
 		var amt: int = Espionage.BRIBE_AMOUNTS[bribe_amount % Espionage.BRIBE_AMOUNTS.size()]
 		var ch := clampi(Espionage.bribe_chance(spy, f, who, amt), 0, 100)
 		_add_action("Bribe: %s" % who.display_name().get_slice(" ", 0) if who != f.overseer else "Bribe: general", func(): bribe_target += 1, men.size() > 1, "Click: choose another man.")
-		_add_action("Offer %d: %d%%" % [amt, ch], func(): Espionage.bribe(spy, f, who, amt),
+		_add_action("Offer %d: %d%%" % [amt, ch], func(): _do(Espionage, "bribe", [spy, f, who, amt]),
 			spy.spy_skill >= Espionage.MIN_BRIBE_SKILL and p.cash >= amt,
 			"Click: offer the bribe; the gold is spent and, if refused, your spy is executed. Right-click: change the sum. Needs spying skill %d. A bought general can hand the fort over to you." % Espionage.MIN_BRIBE_SKILL,
 			func(): bribe_amount = (bribe_amount + 1) % Espionage.BRIBE_AMOUNTS.size())
 	if Espionage.can_capture(f, game.player_id):
-		_add_action("Capture %s" % f.display_name(), func(): Espionage.capture(f, game.player_id), true,
+		_add_action("Capture %s" % f.display_name(), func(): _do(Espionage, "capture", [f, game.player_id]), true,
 			"Your bribed general hands the fort over. Soldiers who will not follow him walk out and attack it.")
 	if f.overseer and f.overseer.sleeper_for != game.player_id:
-		_add_action("Assassinate: %d%%" % Espionage.assassinate_chance(spy, f), func(): Espionage.assassinate(spy, f),
+		_add_action("Assassinate: %d%%" % Espionage.assassinate_chance(spy, f), func(): _do(Espionage, "assassinate", [spy, f]),
 			Espionage.can_assassinate(spy, f),
 			"Kill the commander, %s. Needs spying skill %d. Guards make it harder, and with guards about your spy may be caught even when he succeeds." % [f.overseer.display_name(), Espionage.MIN_ASSASSIN_SKILL])
 	if p.tech_level("STEALTEC") > 0:
-		_add_action("Steal tech: %d%%" % Espionage.steal_rating(spy, f), func(): Espionage.steal_tech(spy, f),
+		_add_action("Steal tech: %d%%" % Espionage.steal_rating(spy, f), func(): _do(Espionage, "steal_tech", [spy, f]),
 			Espionage.can_steal_tech(spy, f), "Learn one technology they know better than you. Needs spying skill %d. Failure costs the spy." % Espionage.MIN_STEAL_TECH_SKILL)
 	if p.tech_level("INCIDENT") > 0:
 		var others := Espionage.incident_choices(spy, f)
 		if not others.is_empty():
 			incident_with = incident_with % others.size()
 			var other: Nation = game.nation(others[incident_with])
-			_add_action("Incident: %s %d%%" % [Defs.race_name(other.race), Espionage.steal_rating(spy, f, other.id)], func(): Espionage.create_incident(spy, f, other.id),
+			_add_action("Incident: %s %d%%" % [Defs.race_name(other.race), Espionage.steal_rating(spy, f, other.id)], func(): _do(Espionage, "create_incident", [spy, f, other.id]),
 				Espionage.can_create_incident(spy, f),
 				"Stage an incident: the %s and the %s break their treaties and go to war. Right-click: choose another kingdom. Needs spying skill %d." % [f.nation().name, other.name, Espionage.MIN_INCIDENT_SKILL],
 				func(): incident_with += 1)
 
 
 func _settle(u: Unit) -> void:
-	if not u.order_settle():
+	if not u.can_settle():
 		game.notify("No town of the same race to settle in.", Vector2(-1, -1))
+		return
+	_do(u, "order_settle")
+
+
+## A player action: runs at once, or in a network game on every machine at
+## the same turn (Net.cmd).
+func _do(target, method: String, args: Array = []) -> void:
+	Net.cmd(target, method, args)
 
 
 func _build_menu() -> void:
@@ -989,27 +1028,21 @@ func _show_town(t: Town, rebuild: bool) -> void:
 		return
 	_clear_actions()
 	if t.nation_id == game.player_id:
-		var do_recruit := func():
-			var u := t.recruit()
-			if u:
-				game.selected = [u]
-				u.selected = true
+		var do_recruit := func(): _do(t, "recruit")
 		_add_action("Recruit peasant", do_recruit, t.can_recruit(), "Send a villager out as a peasant, to build, found a town or work as a spy. Soldiers come from a fort's \"Fill from towns\". Needs loyalty %d+." % Defs.MIN_RECRUIT_LOYALTY)
-		var do_tax := func():
-			var tax := t.collect_tax()
-			game.notify("Collected %d gold from %s." % [int(tax), t.town_name], t.center_loc())
+		var do_tax := func(): _do(t, "collect_tax_cmd")
 		_add_action("Collect tax" + (" (auto %d)" % t.auto_tax_loyalty if t.auto_tax_loyalty > 0 else ""), do_tax, t.has_linked_camp(t.nation_id),
 			"Needs a linked camp with a general. Lowers loyalty. Right-click: collect automatically when loyalty reaches %s." % "/".join(Town.AUTO_TAX_LEVELS.slice(1).map(func(v): return str(v))),
-			func(): t.auto_tax_loyalty = Town.next_level(Town.AUTO_TAX_LEVELS, t.auto_tax_loyalty))
-		_add_action("Grant gold (%d)" % int(t.grant_cost()) + (" (auto <%d)" % t.auto_grant_loyalty if t.auto_grant_loyalty > 0 else ""), func(): t.grant(game.player_id), game.player().cash >= t.grant_cost(),
+			func(): _do(t, "set", ["auto_tax_loyalty", Town.next_level(Town.AUTO_TAX_LEVELS, t.auto_tax_loyalty)]))
+		_add_action("Grant gold (%d)" % int(t.grant_cost()) + (" (auto <%d)" % t.auto_grant_loyalty if t.auto_grant_loyalty > 0 else ""), func(): _do(t, "grant", [game.player_id]), game.player().cash >= t.grant_cost(),
 			"Raise the town's loyalty. Right-click: grant automatically when loyalty falls below %s." % "/".join(Town.AUTO_GRANT_LEVELS.slice(1).map(func(v): return str(v))),
-			func(): t.auto_grant_loyalty = Town.next_level(Town.AUTO_GRANT_LEVELS, t.auto_grant_loyalty))
+			func(): _do(t, "set", ["auto_grant_loyalty", Town.next_level(Town.AUTO_GRANT_LEVELS, t.auto_grant_loyalty)]))
 		if t.target_wall_level < 2:
 			var lvl := t.target_wall_level + 1
-			_add_action("Build %s (%d)" % ["wall" if lvl == 1 else "fortified wall", Town.WALL_COST[lvl]], func(): t.build_wall(), game.player().cash > 0,
+			_add_action("Build %s (%d)" % ["wall" if lvl == 1 else "fortified wall", Town.WALL_COST[lvl]], func(): _do(t, "build_wall"), game.player().cash > 0,
 				"Jobless villagers build it. Walls absorb attacks and shield the town from enemy influence.")
 	elif t.nation_id == 0:
-		_add_action("Grant gold (%d)" % int(t.grant_cost()), func(): t.grant(game.player_id),
+		_add_action("Grant gold (%d)" % int(t.grant_cost()), func(): _do(t, "grant", [game.player_id]),
 			game.player().cash >= t.grant_cost() and t.has_linked_camp(game.player_id), "Lower the town's resistance to you. Needs one of your camps linked to it.")
 	_spy_actions(t)
 
@@ -1136,19 +1169,17 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 	_clear_actions()
 	if not own:
 		if f.code == "LAIR" and game.player().is_fryhtan and f.is_monster():
-			_add_action("Take over (%d)" % int(SpecialFirms.take_lair_cost(f)), func(): SpecialFirms.take_lair(f, game.player_id),
+			_add_action("Take over (%d)" % int(SpecialFirms.take_lair_cost(f)), func(): _do(SpecialFirms, "take_lair", [f, game.player_id]),
 				SpecialFirms.can_take_lair(f, game.player_id), "Buy this lair's allegiance. Needs a lair of yours with a commander nearby.")
 		_spy_actions(f)
 		return
 	var p := game.player()
 	match f.code:
 		"CAMP", "FORT":
-			_add_action("Eject all", func(): f.eject_all())
+			_add_action("Eject all", func(): _do(f, "eject_all"))
 			_add_action("Fill from towns", func(): _fill_camp(f), true, "Villagers from your linked towns join this fort at once (towns need loyalty %d+)." % Defs.MIN_RECRUIT_LOYALTY)
 			if not f.soldiers.is_empty():
-				_add_action("Send out soldiers", func():
-					for su in f.soldiers.duplicate():
-						f.release_unit(su))
+				_add_action("Send out soldiers", func(): _do(f, "release_all_soldiers"))
 			_occupant_buttons(f)
 		"LAIR":
 			if f.is_fryhtan_lair():
@@ -1157,21 +1188,19 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					var lvl := p.tech_level(tc)
 					if lvl >= t["max"]:
 						continue
-					_add_action("Learn %s %d (%d life)" % [t["name"], lvl + 1, int(Defs.fryhtan_tech_live_cost(t))], func(): SpecialFirms.buy_tech(f, tc),
+					_add_action("Learn %s %d (%d life)" % [t["name"], lvl + 1, int(Defs.fryhtan_tech_live_cost(t))], func(): _do(SpecialFirms, "buy_tech", [f, tc]),
 						SpecialFirms.can_buy_tech(f, t), _fryhtan_tech_tip(t))
 				var ut: Dictionary = Defs.unit_types.get(f.monster_code, {})
-				_add_action("Breed %s (%d gold, %d life)" % [ut.get("name", f.monster_code), int(ut.get("cost", 100)), int(ut.get("live_cost", 50))], func(): f.breed(),
+				_add_action("Breed %s (%d gold, %d life)" % [ut.get("name", f.monster_code), int(ut.get("cost", 100)), int(ut.get("live_cost", 50))], func(): _do(f, "breed"),
 					f.soldiers.size() < f.capacity() and p.cash >= ut.get("cost", 100) and p.live_points >= ut.get("live_cost", 50),
 					"Breed a new Fryhtan in this lair. Life points come from slaying enemies.")
 			if not f.soldiers.is_empty():
-				_add_action("Send out brood", func():
-					for su in f.soldiers.duplicate():
-						f.release_unit(su))
+				_add_action("Send out brood", func(): _do(f, "release_all_soldiers"))
 			_occupant_buttons(f)
 		"MARKET":
 			var partner := game.find_trade_partner(f, f.nation_id)
 			var tip := "A caravan carries goods to %s." % (partner.display_name() + " of the " + (partner.nation().name if partner.nation() else "") if partner else "another market (none in reach yet: build one further away, or make peace with a neighbour)")
-			_add_action("Hire caravan (%d)" % int(Firm.CARAVAN_COST), func(): f.hire_caravan(), p.cash >= Firm.CARAVAN_COST and game.caravans_of(f) < Firm.MAX_CARAVANS, tip)
+			_add_action("Hire caravan (%d)" % int(Firm.CARAVAN_COST), func(): _do(f, "hire_caravan"), p.cash >= Firm.CARAVAN_COST and game.caravans_of(f) < Firm.MAX_CARAVANS, tip)
 		"RESEARCH":
 			for t in Defs.research_techs():
 				if t.has("race") and not game.nation_has_race_town(p.id, t["race"]):
@@ -1180,45 +1209,43 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				var ok := Defs.can_research(p, t)
 				var tc: String = t["code"]
 				var label := "%s %d" % [t["name"], lvl + 1] if lvl < t["max"] else "%s (max)" % t["name"]
-				var b := _add_action(label, func(): f.start_research(tc), ok)
+				var b := _add_action(label, func(): _do(f, "start_research", [tc]), ok)
 				if f.research_tech == tc:
 					b.text = "▶ " + label
 		"WAR":
-			for wcode in Defs.WEAPONS:
+			for wcode in Defs.WEAPONS + Defs.MEGA_WEAPONS.filter(func(w): return p.tech_level(w) > 0 and Assets.has_sprite(w)):
 				var ut: Dictionary = Defs.unit_types.get(wcode, {})
 				var wc: String = wcode
-				_add_action("%s (%d)" % [ut.get("name", wcode), ut.get("cost", 0)], func(): f.queue_weapon(wc), p.tech_level(wcode) > 0,
+				_add_action("%s (%d)" % [ut.get("name", wcode), ut.get("cost", 0)], func(): _do(f, "queue_weapon", [wc]), p.tech_level(wcode) > 0,
 					"Research %s at a Tower of Science first." % ut.get("name", wcode) if p.tech_level(wcode) == 0 else "")
 		"SPY":
 			var can_spy := f.linked_towns.any(func(t): return t.nation_id == f.nation_id and t.can_recruit())
-			_add_action("Train spy (%d)" % Defs.SPY_COST, func(): f.weapon_queue += 1, can_spy and p.cash >= Defs.SPY_COST,
+			_add_action("Train spy (%d)" % Defs.SPY_COST, func(): _do(f, "queue_spy"), can_spy and p.cash >= Defs.SPY_COST,
 				"Needs a linked town of yours with loyalty %d+. Right-click a spy on an enemy or independent town or building to infiltrate it." % Defs.MIN_RECRUIT_LOYALTY)
 		"BEE", "TERMITE", "INCUBAT":
 			for sprite in SpecialFirms.buildable_units(f):
 				var sc: String = sprite
 				var price := SpecialFirms.unit_price(sc)
 				_add_action("%s %s (%d gold, %d life)" % ["Grow" if f.code == "INCUBAT" else "Breed", Defs.unit_types[sc]["name"], int(price[0]), int(price[1])],
-					func(): f.queue_weapon(sc), p.cash >= price[0] and p.live_points >= price[1],
+					func(): _do(f, "queue_weapon", [sc]), p.cash >= price[0] and p.live_points >= price[1],
 					"Version %d (from the tech level)." % maxi(1, p.tech_level(Defs.unit_tech(sc))))
 		"ANIMAL":
 			for i in f.animals.size():
 				var idx := i
 				var a: Dictionary = f.animals[i]
-				_add_action("Hire %s (%d)" % [Defs.unit_types.get(a["unit"], {}).get("name", a["unit"]), int(a["cost"])], func(): SpecialFirms.hire_animal(f, idx),
+				_add_action("Hire %s (%d)" % [Defs.unit_types.get(a["unit"], {}).get("name", a["unit"]), int(a["cost"])], func(): _do(SpecialFirms, "hire_animal", [f, idx]),
 					SpecialFirms.can_hire_animal(f, idx), "Also costs %d life points." % int(a["live"]))
 		"ALCHEMY":
-			_add_action(("▶ " if f.alchemy_mode == "" else "") + "Stop converting", func(): f.alchemy_mode = "")
+			_add_action(("▶ " if f.alchemy_mode == "" else "") + "Stop converting", func(): _do(f, "set", ["alchemy_mode", ""]))
 			for mode in SpecialFirms.ALCHEMY_MODES:
 				var m: String = mode
 				if p.tech_level(m) <= 0:
 					continue
-				_add_action(("▶ " if f.alchemy_mode == m else "") + Defs.tech_def(m)["name"], func(): f.alchemy_mode = m, SpecialFirms.can_convert(f, m),
+				_add_action(("▶ " if f.alchemy_mode == m else "") + Defs.tech_def(m)["name"], func(): _do(f, "set", ["alchemy_mode", m]), SpecialFirms.can_convert(f, m),
 					"Needs the tor to stand on a mineral deposit." if m.begins_with("MINE") and f.site == null else "")
 		"FORTRESS":
 			if not f.soldiers.is_empty():
-				_add_action("Send out defenders", func():
-					for su in f.soldiers.duplicate():
-						f.release_unit(su))
+				_add_action("Send out defenders", func(): _do(f, "release_all_soldiers"))
 			_occupant_buttons(f)
 		"MAGIC", "OFF_BLD1", "OFF_BLD2", "OFF_BLD4":
 			for sp in Defs.FIRM_SPELLS[f.code]:
@@ -1229,32 +1256,25 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				var price: int = d["live"] if d["live"] > 0 else d["cost"]
 				_add_action("%s (%d)" % [d.get("short", d["name"]), price], func():
 					if SpecialFirms.self_aimed(spc):
-						if not SpecialFirms.cast(f, spc, f.center_loc()):
-							game.notify("No effect.", f.center_loc())
+						_do(SpecialFirms, "cast", [f, spc, f.center_loc()])
 					else:
 						spell_target_requested.emit(f, spc), SpecialFirms.can_cast(f, spc), _spell_tip(spc))
 		"STABLE":
 			var spu := f.special_unit()
 			var ut: Dictionary = Defs.unit_types.get(spu, {})
 			var can := f.linked_towns.any(func(t): return t.nation_id == f.nation_id and t.can_recruit())
-			_add_action("Train %s (%d)" % [ut.get("name", spu), ut.get("cost", 0)], func(): f.queue_weapon(spu), can and p.cash >= ut.get("cost", 0),
+			_add_action("Train %s (%d)" % [ut.get("name", spu), ut.get("cost", 0)], func(): _do(f, "queue_weapon", [spu]), can and p.cash >= ut.get("cost", 0),
 				"Needs a linked town of yours with loyalty %d+ to supply a volunteer." % Defs.MIN_RECRUIT_LOYALTY)
 		"INN":
 			for i in f.heroes.size():
 				var hdef: Dictionary = f.heroes[i]
 				var idx := i
-				var hire := func():
-					var u := f.hire_hero(idx)
-					if u:
-						game.notify("%s has joined you." % u.unit_name, u.center_loc())
+				var hire := func(): _do(f, "hire_hero", [idx])
 				_add_action("Hire %s" % hdef["name"], hire, p.cash >= hdef["cost"])
 		"BASE":
-			var invoke := func():
-				var u := f.invoke_god()
-				if u:
-					game.notify("%s answers your prayers!" % u.type_name(), u.center_loc())
+			var invoke := func(): _do(f, "invoke_god")
 			_add_action("Invoke Greater Being", invoke, p.prayer_points >= f.god_cost())
-	_add_action("Demolish", func(): f.die(null), true, "Destroy this building. Units inside will leave.")
+	_add_action("Demolish", func(): _do(f, "die", [null]), true, "Destroy this building. Units inside will leave.")
 
 
 ## One button per occupant: left-click sends him out and selects him,
@@ -1265,7 +1285,7 @@ func _occupant_buttons(f: Firm) -> void:
 		var who: Unit = su
 		var lbl := ("★ " if who == f.overseer else "") + (who.display_name() if who.is_human() else who.type_name()) + " (%d)" % int(who.combat)
 		var out := func():
-			f.release_unit(who)
+			_do(f, "release_unit", [who])
 			for o in game.selected:
 				if is_instance_valid(o):
 					o.selected = false
@@ -1273,7 +1293,7 @@ func _occupant_buttons(f: Firm) -> void:
 			who.selected = true
 		var promote := func():
 			if who != f.overseer and who.can_lead():
-				f.make_overseer(who)
+				_do(f, "make_overseer", [who])
 		_add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote)
 
 
@@ -1305,13 +1325,7 @@ func _spell_tip(sp: String) -> String:
 
 
 func _fill_camp(f: Firm) -> void:
-	var n := 0
-	for t in f.linked_towns:
-		if t.nation_id != f.nation_id:
-			continue
-		while f.soldiers.size() < f.capacity() and t.can_recruit():
-			if t.draft_into(f) == null:
-				break
-			n += 1
-	if n == 0:
+	if not f.linked_towns.any(func(t): return t.nation_id == f.nation_id and t.can_recruit()):
 		game.notify("No loyal linked town can supply recruits.", f.center_loc())
+		return
+	_do(f, "fill_from_towns")

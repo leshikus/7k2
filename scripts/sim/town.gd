@@ -493,6 +493,13 @@ func collect_tax() -> float:
 	return tax
 
 
+## The player's "Collect tax" (reports the sum to the town's ruler).
+func collect_tax_cmd() -> void:
+	var tax := collect_tax()
+	if nation_id == Game.inst.player_id:
+		Game.inst.notify("Collected %d gold from %s." % [int(tax), town_name], center_loc())
+
+
 func grant_cost() -> float:
 	return float(population * Defs.GRANT_COST_PER_UNIT)
 

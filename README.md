@@ -86,6 +86,15 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   royal generals carry on from battle to battle. Texts come from your install.
 * **Diplomacy:** declare war or propose peace. Attacking a kingdom you are not at
   war with requires Ctrl+right-click and starts a war.
+* **Network games** for up to seven players. One player hosts from the start screen:
+  "Network game", Host, with the map settings above. The others enter the host's
+  address and press Join. Each picks a nationality, Fryhtans included. The host
+  starts the game; computer kingdoms fill the remaining places. The games run in
+  lockstep, as in the original: every machine simulates the same world and only
+  the players' orders travel, a turn of four frames later. The host sets the speed.
+  Players can offer each other peace, which the other accepts in the Diplomacy
+  window, and talk with Enter. If a player leaves, the computer takes over their
+  kingdom. Network games cannot be saved.
 
 ### Controls
 
@@ -105,6 +114,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | N | Toggle sound effects |
 | F5 / F9 | Quicksave / quickload |
 | M | Toggle music |
+| Enter | Message to the other players (network game) |
 | Esc | Cancel / deselect / game menu |
 
 ## What is implemented
@@ -150,10 +160,12 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 * Computer kingdoms that expand, build economies, research, recruit, raise armies,
   clear lairs, declare war and make peace.
 
-## Not yet implemented
+## Differences from the original
 
-Multiplayer. Balance values are adapted where this simplified simulation
-differs from the original (noted in the code).
+Every part of the original game is now in place. Balance values are adapted where
+this simplified simulation differs from the original; the code notes each one.
+Network play uses Godot's ENet (TCP/UDP over the internet or a LAN) instead of the
+original's DirectPlay; the original's IPX and modem connections are gone.
 
 ## Project layout
 
@@ -164,7 +176,9 @@ scripts/sim/      defs.gd (rules/constants), game.gd (world, time, links, fog,
                   events), unit.gd, firm.gd, town.gd, site.gd, bullet.gd,
                   nation.gd, ai.gd, world_map.gd (grid, A*), iso.gd (projection)
 scripts/view/     terrain shader, fog, ground layer, trees, placement preview
-scripts/ui/       start menu, HUD, minimap, selection box
+scripts/ui/       start menu, HUD, minimap, selection box, campaign screen
+scripts/campaign/ the Fryhtan Wars campaign: story, provinces, battles, texts
+scripts/net/      net.gd (autoload): lobby and lockstep network play
 scripts/models/   model_library.gd (3D models for View3D), unit_models.gd (clips, weapons)
 assets/models/    generated low-poly glTF models and their credits
 tools/blender/    headless Blender scripts that build assets/models from CC0 packs
@@ -179,6 +193,8 @@ godot --headless --path . res://tests/sim_test.tscn -- days=1500 seed=7   # all-
 godot --headless --path . res://tests/player_test.tscn                    # scripted player actions
 godot --headless --path . res://tests/save_test.tscn                      # save/load round trip
 godot --path . res://tests/input_test.tscn                                # drives the UI with mouse/keyboard events
+godot --headless --path . res://tests/campaign_test.tscn                  # every campaign stage, the event chain
+godot --headless --path . res://tests/net_test.tscn -- frames=4000        # two processes in lockstep
 godot --headless --path . -s tests/asset_dump.gd                          # decode samples to user://dump
 ```
 

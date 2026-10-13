@@ -125,6 +125,13 @@ func turn_on_item() -> bool:
 ## ItemRes::use_manually: Heimdall's Horn summons a Fryhtan to fight for us, the
 ## Judas Ring wins over a unit and the Judas Rod a town, the Neutralizer frees a
 ## town, the Telecordial carries the unit anywhere. Returns "" or why it failed.
+## The player's use of the item: a refusal is reported to its owner.
+func use_item_cmd(target = null) -> void:
+	var err := use_manual_item(target)
+	if err != "" and nation_id == Game.inst.player_id:
+		Game.inst.notify(err, Vector2(-1, -1))
+
+
 func use_manual_item(target = null) -> String:
 	var g := Game.inst
 	match item_id:
@@ -281,6 +288,28 @@ func order_enter(f: Firm) -> void:
 
 
 ## Walk to the nearest own town of the same race and rejoin its population.
+## Player commands (sent through Net.cmd in a network game).
+func promote() -> void:
+	if is_human() and rank == Defs.Rank.SOLDIER and not is_civilian():
+		rank = Defs.Rank.GENERAL
+		leadership = maxf(leadership, 25.0)
+
+
+func demote() -> void:
+	if rank == Defs.Rank.GENERAL and not is_hero:
+		rank = Defs.Rank.SOLDIER
+
+
+func can_settle() -> bool:
+	return Game.inst.towns.any(func(t): return t.nation_id == nation_id and t.race == race and not t.dead)
+
+
+## A move ordered by the player: the unit no longer belongs to a camp's sally.
+func order_move_free(dest: Vector2i) -> void:
+	home_firm = null
+	order_move(dest)
+
+
 func order_settle() -> bool:
 	var best: Town = null
 	var best_d := INF

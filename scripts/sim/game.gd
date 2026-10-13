@@ -50,6 +50,10 @@ var year0 := START_YEAR              # the year the game starts in (a campaign b
 ## Campaign: technologies unveiled so far (code -> highest level); null elsewhere.
 var tech_available = null
 var campaign_battle = null           # CampaignBattle building and running this game
+## Random numbers for pictures only (fires, smoke): what one player sees must
+## never change the game shared in lockstep (Net).
+var fx_rng := RandomNumberGenerator.new()
+var peace_offers := {}               # nation -> {nation that offered peace: true}
 
 
 func _init() -> void:
@@ -145,12 +149,21 @@ func _create_nations(cfg: Dictionary) -> void:
 	for m in Defs.monsters:
 		if m["unit"] == cfg.get("race", ""):
 			player_species = m
+	# a network game: one kingdom for each player, in the host's order
+	var humans: Array = cfg.get("mp", [{"race": cfg.get("race", "NORMAN"), "name": cfg.get("kingdom_name", "")}])
+	for h in humans:
+		race_pool.erase(h["race"])
 	_shuffle(race_pool)
-	var count: int = 1 + cfg.get("ai_count", 3)
+	var count: int = humans.size() + cfg.get("ai_count", 3)
 	for i in count:
-		var race: String = cfg.get("race", "NORMAN") if i == 0 else race_pool[(i - 1) % race_pool.size()]
-		var n := Nation.new(i + 1, race, Defs.NATION_COLORS[i % Defs.NATION_COLORS.size()], i > 0 or cfg.get("autoplay", false))
-		n.is_player = i == 0
+		var human := i < humans.size()
+		var race: String = humans[i]["race"] if human else race_pool[(i - humans.size()) % race_pool.size()]
+		var n := Nation.new(i + 1, race, Defs.NATION_COLORS[i % Defs.NATION_COLORS.size()], not human or cfg.get("autoplay", false))
+		n.is_player = human
+		player_species = {}
+		for m in Defs.monsters:
+			if human and m["unit"] == race:
+				player_species = m
 		if n.is_player and not player_species.is_empty():
 			# the player leads a Fryhtan kingdom
 			n.is_fryhtan = true
@@ -159,11 +172,16 @@ func _create_nations(cfg: Dictionary) -> void:
 			n.live_points = 600.0
 		n.cash = float(cfg.get("cash", 3000))
 		n.food = 0.0 if n.is_fryhtan else 1500.0
-		if n.is_player:
-			n.name = cfg.get("kingdom_name", n.name)
+		if human and str(humans[i].get("name", "")) != "":
+			if not cfg.has("mp"):
+				n.name = humans[i]["name"]          # the kingdom's name from the start screen
+			elif player_species.is_empty():
+				n.name = "%s's Kingdom" % humans[i]["name"]
+			else:
+				n.name = "%s's Fryhtans" % humans[i]["name"]
 		nations.append(n)
 	# Fryhtan kingdoms (NationMonster): each a species with a lair and a brood.
-	var species: Array = Defs.monsters.filter(func(m): return m["unit"] != cfg.get("race", ""))
+	var species: Array = Defs.monsters.filter(func(m): return not humans.any(func(h): return h["race"] == m["unit"]))
 	_shuffle(species)
 	for i in int(cfg.get("fryhtan_count", 1)):
 		if species.is_empty():
@@ -1247,11 +1265,15 @@ func object_at_screen(p: Vector2) -> GameObj:
 # ------------------------------------------------------------------- time ---
 
 func _process(delta: float) -> void:
-	if world == null or paused or over:
+	# a network game runs on even after this player's end, in step with the others
+	if world == null or paused or (over and not Net.active):
 		return
 	_accum += delta * speed * Defs.SIM_FPS
 	var steps := 0
 	while _accum >= 1.0 and steps < 12:
+		if not Net.can_run_frame(frame + 1):
+			_accum = minf(_accum, 2.0)
+			break
 		_accum -= 1.0
 		steps += 1
 		sim_frame()
@@ -1348,6 +1370,74 @@ func next_day() -> void:
 		_check_end()
 	_check_goals()
 	_update_fog()
+
+
+# -------------------------------------------------------- network play ---
+
+func set_speed(s: float) -> void:
+	paused = false
+	speed = s
+
+
+func set_paused(p: bool) -> void:
+	paused = p
+
+
+## The object a network command names by its id.
+func find_obj(id: int) -> GameObj:
+	for u in units:
+		if u.obj_id == id:
+			return u
+	for f in firms:
+		if f.obj_id == id:
+			return f
+	for t in towns:
+		if t.obj_id == id:
+			return t
+	return null
+
+
+## A checksum of the simulation, compared between the machines of a network game.
+func state_hash() -> int:
+	var h := hash([frame, rng.state, units.size(), firms.size(), towns.size()])
+	var acc := 0
+	for u in units:
+		acc = (acc * 31 + int(u.loc.x * 64.0) * 7 + int(u.loc.y * 64.0) * 13 + int(u.hp * 16.0)) % 2147483647
+	for t in towns:
+		acc = (acc * 31 + t.population * 5 + int(t.loyalty * 16.0)) % 2147483647
+	for n in nations:
+		acc = (acc * 31 + int(n.cash) + int(n.live_points) * 3) % 2147483647
+	return hash([h, acc])
+
+
+## A player has left a network game: the computer takes over the kingdom.
+func mp_drop_player(nid: int) -> void:
+	var n := nation(nid)
+	if n == null or n.is_ai:
+		return
+	n.is_ai = true
+	n.ai = FryhtanAI.new(n, self) if n.is_fryhtan else NationAI.new(n, self)
+	notify("The computer takes over the %s." % n.name, Vector2(-1, -1))
+
+
+## The player puts up a building: it costs gold (and life points for Fryhtans)
+## and the nearest of the chosen units goes to build it.
+func cmd_place_building(nid: int, code: String, race: String, pos: Vector2i, builder: Unit, cost: float, live: float, species: String) -> void:
+	var n := nation(nid)
+	if n == null or n.cash < cost or n.live_points < live:
+		return
+	var b := Assets.firm_build(code, race)
+	if not world.can_place(pos.x, pos.y, b.get("loc_w", 3), b.get("loc_h", 3), code == "MINE"):
+		return
+	var f := spawn_firm(code, nid, race, pos, false)
+	if f == null:
+		return
+	n.add_cash(-cost)
+	n.live_points -= live
+	if code == "LAIR":
+		f.monster_code = species
+	if builder and is_instance_valid(builder) and not builder.dead:
+		builder.order_build(f)
 
 
 ## Month of the year, 1-12, as date_string counts it.
@@ -1666,6 +1756,10 @@ func make_peace(a: int, b: int) -> void:
 	var nb := nation(b)
 	if na == null or nb == null:
 		return
+	if peace_offers.has(a):
+		peace_offers[a].erase(b)
+	if peace_offers.has(b):
+		peace_offers[b].erase(a)
 	na.relations[b] = Defs.Relation.PEACE
 	nb.relations[a] = Defs.Relation.PEACE
 	for u in units:
@@ -1673,6 +1767,25 @@ func make_peace(a: int, b: int) -> void:
 			u.stop()
 	if a == player_id or b == player_id or observer():
 		notify("Peace treaty signed between the %s and the %s." % [na.name, nb.name], Vector2(-1, -1))
+
+
+## The player's offer of peace: a computer kingdom answers at once; another
+## player sees the offer in the Diplomacy window and may accept it.
+func offer_peace(from: int, to: int) -> void:
+	var nt := nation(to)
+	if nt == null:
+		return
+	if nt.ai != null:
+		if not propose_peace(from, to) and from == player_id:
+			notify("The %s rejects your offer of peace." % nt.name, Vector2(-1, -1))
+		return
+	if not peace_offers.has(to):
+		peace_offers[to] = {}
+	peace_offers[to][from] = true
+	if to == player_id:
+		notify("The %s offers you peace. Accept it in the Diplomacy window." % nation(from).name, Vector2(-1, -1))
+	elif from == player_id:
+		notify("Your offer of peace has been sent to the %s." % nt.name, Vector2(-1, -1))
 
 
 ## Player diplomacy: the AI accepts peace when it is weaker or tired of war.
