@@ -381,7 +381,7 @@ static func bribe(spy: Unit, f: Firm, target: Unit, amount: int) -> bool:
 	if n == null or not can_bribe(f, target, spy.nation_id) or n.cash < amount or spy.spy_place != f:
 		return false
 	var chance := bribe_chance(spy, f, target, amount)
-	n.add_cash(-float(amount))
+	n.add_cash(-float(amount), "Spies")
 	if chance > 0 and g.rng.randi() % 100 < chance:
 		target.sleeper_for = spy.nation_id
 		target.loyalty = clampf(float(chance), 30.0, 100.0)

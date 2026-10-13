@@ -238,6 +238,10 @@ func _ready() -> void:
 			var sl: String = slot[0]
 			lb.pressed.connect(func(): load_game.emit(sl))
 			setup_box.add_child(lb)
+	var hall := Button.new()
+	hall.text = "Hall of Fame"
+	hall.pressed.connect(_show_hall)
+	vb.add_child(hall)
 	var quit := Button.new()
 	quit.text = "Quit"
 	quit.pressed.connect(func(): get_tree().quit())
@@ -249,6 +253,18 @@ func _ready() -> void:
 	note.add_theme_color_override("font_color", Color(0.65, 0.6, 0.5))
 	vb.add_child(note)
 	_load_data()
+
+
+func _show_hall() -> void:
+	var dlg := AcceptDialog.new()
+	dlg.title = "Hall of Fame"
+	var r := RichTextLabel.new()
+	r.bbcode_enabled = true
+	r.custom_minimum_size = Vector2(620, 380)
+	r.text = HallOfFame.describe()
+	dlg.add_child(r)
+	add_child(dlg)
+	dlg.popup_centered()
 
 
 func _player_name() -> String:

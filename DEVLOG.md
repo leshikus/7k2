@@ -461,3 +461,21 @@ Lockstep multiplayer as the original plays it (`remote.cpp`), in
   `drop=N` has the client leave at frame N, and the computer must take over
   its kingdom.
 
+## Reports and the Hall of Fame (13 Oct 2026)
+
+- **Reports window** (`ui/reports.gd`, after `or_*.cpp`). It has pages for
+  Kingdoms (the five ranking scores and the total), Towns, Economy,
+  Military, Technology, Trade and News (the last 300 messages).
+- **Money by kind**: `Nation.add_cash(v, kind)` books income and expenses by kind,
+  as the original's INCOME_* / EXPENSE_* types do: taxes, sale of goods,
+  exports, tribute, treasure, conversion; buildings, construction, training,
+  hiring, weapons, spies, grants, imports, walls, caravans. The totals of this
+  year and last are kept and saved.
+- **Hall of Fame** (`sim/hall_of_fame.gd`, after `ogamhall.cpp` / `ogamend.cpp`).
+  A finished game of one player scores its total ranking score times a
+  difficulty rating derived from the start settings, divided by 100. The ten best
+  human and Fryhtan games are kept in `user://hall_of_fame.json` and shown from
+  the start screen.
+- `--autostart --demo=reports --report=N` opens a report page after 120 days.
+  New test `reports_test`.
+

@@ -98,7 +98,7 @@ static func take_lair(lair: Firm, nid: int) -> bool:
 	if not can_take_lair(lair, nid):
 		return false
 	var n := Game.inst.nation(nid)
-	n.add_cash(-take_lair_cost(lair))
+	n.add_cash(-take_lair_cost(lair), "Grants")
 	lair.change_nation(nid)
 	for u in Espionage.occupants(lair):
 		u.loyalty = 60.0
@@ -157,7 +157,7 @@ static func _build_unit(f: Firm, weapon: bool) -> void:
 		var price := unit_price(f.weapon)
 		if n.cash < price[0] or n.live_points < price[1]:
 			return
-		n.add_cash(-price[0])
+		n.add_cash(-price[0], "Training")
 		n.live_points -= price[1]
 		f.weapon_progress = 0.01
 	var days := float(Defs.unit_types.get(f.weapon, {}).get("build_days", 30))
@@ -219,7 +219,7 @@ static func hire_animal(f: Firm, i: int) -> Unit:
 	var u := Game.inst.spawn_unit(a["unit"], f.nation_id, c, a["combat"])
 	if u == null:
 		return null
-	n.add_cash(-a["cost"])
+	n.add_cash(-a["cost"], "Hiring")
 	n.live_points -= a["live"]
 	u.loyalty = clampf(30.0 + n.reputation / 2.0, 40.0, 100.0)
 	f.animals.remove_at(i)
@@ -273,7 +273,7 @@ static func _alchemy(f: Firm) -> void:
 				if f.nation_id == Game.inst.player_id:
 					Game.inst.notify("The deposit under the %s is exhausted." % f.display_name(), f.center_loc())
 	if gold != 0.0:
-		n.add_cash(gold)
+		n.add_cash(gold, "Conversion")
 	if live != 0.0:
 		n.live_points = maxf(0.0, n.live_points + live)
 	f.stock += maxf(gold, 0.0) + maxf(live, 0.0)     # produced this year, for the panel
@@ -401,7 +401,7 @@ static func transform_to_fortress(units: Array) -> Firm:
 	var f := Game.inst.spawn_firm("FORTRESS", nid, "", at, true)
 	if f == null:
 		return null
-	n.add_cash(-cost)
+	n.add_cash(-cost, "Construction")
 	# FirmMonsterFortress::init_derived: hit points grow with the tech level
 	f.max_hp *= 0.75 + 0.25 * n.tech_level("FORTRESS")
 	f.hp = f.max_hp
@@ -551,7 +551,7 @@ static func cast(f: Firm, sp: String, at: Vector2, unit: Unit = null) -> bool:
 		return false
 	if n:
 		n.live_points -= price[0]
-		n.add_cash(-price[1])
+		n.add_cash(-price[1], "Weapons")
 	f.cast_charge -= int(d["delay"])
 	f.shown_until = g.frame + SHOWN_AFTER_FIRING
 	g.spawn_effect(1, at - Vector2(0.5, 0.5))

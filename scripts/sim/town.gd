@@ -169,11 +169,11 @@ func _process_wall() -> void:
 		if man > 0 and (n == null or n.cash > 0):
 			wall_hp = minf(wall_max_hp(), wall_hp + man)
 			if n:
-				n.add_cash(-float(WALL_COST[wall_level]) * man / wall_max_hp())
+				n.add_cash(-float(WALL_COST[wall_level]) * man / wall_max_hp(), "Walls")
 	elif wall_level < target_wall_level and man > 0 and (n == null or n.cash > 0):
 		wall_progress += man * 10.0
 		if n:
-			n.add_cash(-float(WALL_COST[wall_level + 1]) * man * 10.0 / MAX_WALL_PROGRESS)
+			n.add_cash(-float(WALL_COST[wall_level + 1]) * man * 10.0 / MAX_WALL_PROGRESS, "Walls")
 		if wall_progress >= MAX_WALL_PROGRESS:
 			wall_progress = 0.0
 			wall_level += 1
@@ -365,7 +365,7 @@ func next_day(day: int) -> void:
 		n.food += jobless() * farm * Defs.PEASANT_FOOD_YEAR_PRODUCTION / 365.0
 		n.food -= population * float(Defs.UNIT_FOOD_YEAR_CONSUMPTION) / 365.0
 		if day % 365 == 0 and day > 0:
-			n.add_cash(population * float(Defs.TAX_PER_UNIT))
+			n.add_cash(population * float(Defs.TAX_PER_UNIT), "Taxes")
 	_auto_tax_and_grant()
 	tax_penalty = maxi(0, tax_penalty - 1)
 	recruit_penalty = maxi(0, recruit_penalty - 1)
@@ -403,7 +403,7 @@ func _pay_tribute() -> void:
 		var amount := population * 5.0 / lairs.size() * (100.0 + skill) / 200.0
 		var n: Nation = f.nation()
 		if n:
-			n.add_cash(amount)
+			n.add_cash(amount, "Tribute")
 			n.live_points += population * 0.5 / lairs.size()
 
 
@@ -489,7 +489,7 @@ func collect_tax() -> float:
 	var before := loyalty
 	loyalty = maxf(0.0, loyalty - dec)
 	var tax := (before - loyalty) * population * Defs.TAX_PER_UNIT / dec
-	nation().add_cash(tax)
+	nation().add_cash(tax, "Taxes")
 	return tax
 
 
@@ -530,7 +530,7 @@ func grant(from_nation: int) -> bool:
 		return false
 	var amount := maxf(3.0, Defs.GRANT_RESISTANCE_DECREASE - grant_penalty / 5.0)
 	grant_penalty += 10
-	n.add_cash(-grant_cost())
+	n.add_cash(-grant_cost(), "Grants")
 	if nation_id == from_nation:
 		loyalty = minf(100.0, loyalty + amount)
 	elif nation_id == 0:

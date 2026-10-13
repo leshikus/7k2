@@ -84,6 +84,12 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   get random twists (rebels who join you, Viking Seats of Power, hidden spies,
   invisible Fryhtans …). Technologies are unveiled stage by stage, and your king and
   royal generals carry on from battle to battle. Texts come from your install.
+* **Reports** (top bar): rankings of the kingdoms by population, military, economy,
+  reputation and Fryhtans slain; your towns; income and expenses by kind for this
+  year and last; your forts and armies; technologies; markets and caravans; and the
+  news so far.
+* **Hall of Fame**: a finished game's total score times the difficulty rating of
+  its settings; the ten best human and Fryhtan rulers are listed on the start screen.
 * **Diplomacy:** declare war or propose peace. Attacking a kingdom you are not at
   war with requires Ctrl+right-click and starts a war.
 * **Network games** for up to seven players. One player hosts from the start screen:

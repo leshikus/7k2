@@ -282,6 +282,15 @@ func _demo(what: String) -> void:
 			var home: Town = game.towns.filter(func(t): return t.nation_id == p.id)[0]
 			camera.iso_pos = Iso.to_screen(home.center_loc())
 			get_tree().create_timer(1.6).timeout.connect(func(): game._lightning_strike(); _on_lightning(camera.iso_pos + Vector2(-120, 60)))
+		"reports":
+			# the Reports window on a page (--report=0..6), after some days of play
+			for i in Defs.FRAMES_PER_DAY * 120:
+				game.sim_frame()
+			hud.reports.open()
+			for a in OS.get_cmdline_user_args():
+				if a.begins_with("--report="):
+					hud.reports.tabs.current_tab = a.substr(9).to_int()
+			hud.reports.refresh()
 		"specials":
 			# every special building of the kingdom (Fryhtan or offensive), all techs known
 			p.cash = 30000.0

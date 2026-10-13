@@ -508,10 +508,10 @@ func _trade_at(m: Firm, next_stop: Firm) -> void:
 		if m.nation_id != nation_id:
 			var value := qty * Defs.PRODUCT_PRICE * TRADE_SHARE
 			if n:
-				n.add_cash(value)
+				n.add_cash(value, "Exports")
 			var other := m.nation()
 			if other:
-				other.add_cash(value)
+				other.add_cash(value, "Exports")
 	cargo = _nonzero(cargo)
 	if next_stop == null or not is_instance_valid(next_stop):
 		return

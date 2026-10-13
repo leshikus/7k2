@@ -366,7 +366,7 @@ func next_day(day: int) -> void:
 		# Firm::pay_expense: a building the treasury cannot pay for decays instead
 		var cost := float(ftype["year_cost"]) / 365.0
 		if n.cash >= cost:
-			n.add_cash(-cost)
+			n.add_cash(-cost, "Buildings")
 		else:
 			unpaid = true
 			hp -= 1.0
@@ -492,10 +492,10 @@ func _factory() -> void:
 			var qty := minf(f.stock, STOCK_CAP - raw_stock)
 			if f.nation_id != nation_id:
 				qty = minf(qty, n.cash / Defs.RAW_PRICE)
-				n.add_cash(-qty * Defs.RAW_PRICE)
+				n.add_cash(-qty * Defs.RAW_PRICE, "Imports")
 				var other := f.nation()
 				if other:
-					other.add_cash(qty * Defs.RAW_PRICE)
+					other.add_cash(qty * Defs.RAW_PRICE, "Exports")
 			f.stock -= qty
 			raw_stock += qty
 	var rate := 1.0 + 0.25 * n.tech_level("MANUFACT")
@@ -514,9 +514,9 @@ func _market(day: int) -> void:
 				if f.nation_id != nation_id:
 					var n := nation()
 					qty = minf(qty, n.cash / Defs.PRODUCT_PRICE)
-					n.add_cash(-qty * Defs.PRODUCT_PRICE)
+					n.add_cash(-qty * Defs.PRODUCT_PRICE, "Imports")
 					if f.nation():
-						f.nation().add_cash(qty * Defs.PRODUCT_PRICE)
+						f.nation().add_cash(qty * Defs.PRODUCT_PRICE, "Exports")
 				f.stock -= qty
 				goods[f.raw] = cur + qty
 	# Sell to linked towns of any nation: demand is proportional to their population.
@@ -536,7 +536,7 @@ func _market(day: int) -> void:
 		market_sales += income
 		var n := nation()
 		if n:
-			n.add_cash(income)
+			n.add_cash(income, "Sale of goods")
 
 
 const CARAVAN_COST := 100.0
@@ -552,7 +552,7 @@ func hire_caravan() -> Unit:
 	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
 	var u := Game.inst.spawn_unit("CARAVAN", nation_id, c, 10.0)
 	if u:
-		n.add_cash(-CARAVAN_COST)
+		n.add_cash(-CARAVAN_COST, "Caravans")
 		u.caravan_home = self
 	return u
 
@@ -604,7 +604,7 @@ func _war_factory() -> void:
 		var cost := float(Defs.unit_types.get(weapon, {}).get("cost", 100))
 		if not n.can_afford(cost):
 			return
-		n.add_cash(-cost)
+		n.add_cash(-cost, "Weapons")
 		weapon_progress = 0.01
 	var days := float(Defs.unit_types.get(weapon, {}).get("build_days", 60))
 	weapon_progress += 100.0 / days * productivity() / 100.0 * (1.0 + 0.25 * n.tech_level("WAR_PROD"))
@@ -644,7 +644,7 @@ func _train_special() -> void:
 		town.population -= 1
 		town._check_empty()
 		town.loyalty = maxf(0.0, town.loyalty - 1.0)
-		n.add_cash(-cost)
+		n.add_cash(-cost, "Training")
 		weapon_progress = 0.01
 	var days := float(Defs.unit_types.get(weapon, {}).get("build_days", 30))
 	weapon_progress += 100.0 / days
@@ -706,7 +706,7 @@ func hire_hero(i: int) -> Unit:
 	var n := nation()
 	if n == null or not n.can_afford(hdef["cost"]):
 		return null
-	n.add_cash(-float(hdef["cost"]))
+	n.add_cash(-float(hdef["cost"]), "Hiring")
 	heroes.remove_at(i)
 	var sprite := Defs.unit_sprite(hdef["race"], "SPU" if hdef["special"] else "INF")
 	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
@@ -788,7 +788,7 @@ func breed() -> Unit:
 	var u := Game.inst.spawn_unit(monster_code, nation_id, Vector2i(x1, y1 + h), float(Game.inst.rng.randi_range(25, 50)))
 	if u == null:
 		return null
-	n.add_cash(-cost)
+	n.add_cash(-cost, "Training")
 	n.live_points -= live
 	accept_unit(u)
 	return u

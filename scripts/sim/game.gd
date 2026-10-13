@@ -850,7 +850,7 @@ func spy_spawn(college: Firm) -> Unit:
 		return null
 	town.population -= 1
 	town._check_empty()
-	n.add_cash(-float(Defs.SPY_COST))
+	n.add_cash(-float(Defs.SPY_COST), "Spies")
 	var c := world.adjacent_to_rect(college.footprint(), Vector2i(college.center_loc()))
 	var u := spawn_unit(Defs.unit_sprite(town.race, "CIV"), college.nation_id, c, 10.0)
 	if u:
@@ -1007,7 +1007,7 @@ func _take(t: Treasure, u: Unit) -> bool:
 			n.known_gods[t.race()] = true
 			what = "the %s Scroll of Power" % Defs.race_name(t.race())
 		Treasure.Kind.GOLD:
-			n.add_cash(float(t.object_id))
+			n.add_cash(float(t.object_id), "Treasure")
 			if n.is_fryhtan:
 				n.live_points += float(t.para)
 			what = "a treasure of %d gold" % t.object_id
@@ -1358,10 +1358,7 @@ func next_day() -> void:
 		if n.ai:
 			n.ai.next_day(day)
 		if day % 365 == 0:
-			n.last_income_year = n.income_year
-			n.last_expense_year = n.expense_year
-			n.income_year = 0.0
-			n.expense_year = 0.0
+			n.new_year()
 	if campaign_battle != null:
 		campaign_battle.next_day()
 	_check_homeless()
@@ -1432,7 +1429,7 @@ func cmd_place_building(nid: int, code: String, race: String, pos: Vector2i, bui
 	var f := spawn_firm(code, nid, race, pos, false)
 	if f == null:
 		return
-	n.add_cash(-cost)
+	n.add_cash(-cost, "Construction")
 	n.live_points -= live
 	if code == "LAIR":
 		f.monster_code = species
@@ -1671,7 +1668,7 @@ func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 		var kn := nation(killer.nation_id)
 		if kn:
 			var treasure := float(rng.randi_range(500, 1500))
-			kn.add_cash(treasure)
+			kn.add_cash(treasure, "Treasure")
 			kn.change_reputation(5.0)
 			notify_nation(kn.id, "Fryhtan lair destroyed! Treasure found: %d gold." % int(treasure), f.center_loc())
 	elif observer() and f.nation_id > 0 and nation(f.nation_id):

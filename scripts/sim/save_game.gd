@@ -92,7 +92,8 @@ static func _nation(n: Nation) -> Dictionary:
 		"king": _id(n.king), "tech": n.tech, "research_progress": n.research_progress,
 		"relations": _int_keys_to_str(n.relations), "prayer_points": n.prayer_points,
 		"income_year": n.income_year, "expense_year": n.expense_year,
-		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year, "kill_monster_score": n.kill_monster_score,
+		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year,
+		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 		"known_gods": n.known_gods.keys(), "items_acquired": n.items_acquired.keys(),
 	}
@@ -204,6 +205,10 @@ static func load_into(g: Game, slot: String) -> String:
 		n.income_year = float(nd["income_year"])
 		n.expense_year = float(nd["expense_year"])
 		n.last_income_year = float(nd.get("last_income_year", 0.0))
+		n.income_by = nd.get("income_by", {})
+		n.expense_by = nd.get("expense_by", {})
+		n.last_income_by = nd.get("last_income_by", {})
+		n.last_expense_by = nd.get("last_expense_by", {})
 		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
 		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
 		if nd.has("known_gods"):

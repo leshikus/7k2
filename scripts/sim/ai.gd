@@ -150,7 +150,7 @@ func _try_build(code: String, near: Rect2i, anchors: Array = []) -> Firm:
 	var f := g.spawn_firm(code, n.id, n.race, pos, false)
 	if f == null:
 		return null
-	n.add_cash(-cost)
+	n.add_cash(-cost, "Construction")
 	builder.order_build(f)
 	return f
 
@@ -304,7 +304,7 @@ func _economy(day: int) -> void:
 					if b:
 						var f := g.spawn_firm("MINE", n.id, n.race, Vector2i(s.x1, s.y1), false)
 						if f:
-							n.add_cash(-float(Defs.firm_types["MINE"]["cost"]))
+							n.add_cash(-float(Defs.firm_types["MINE"]["cost"]), "Construction")
 							b.order_build(f)
 							return
 				break

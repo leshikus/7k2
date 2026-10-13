@@ -28,6 +28,12 @@ var had_base := false         # has owned a town or building (scenario armies st
 # yearly statistics, reset every January
 var income_year := 0.0
 var expense_year := 0.0
+## This year's and last year's money by kind (the original's INCOME_* and
+## EXPENSE_* types), for the economy report.
+var income_by := {}
+var expense_by := {}
+var last_income_by := {}
+var last_expense_by := {}
 var last_income_year := 0.0
 var last_expense_year := 0.0
 var known_gods := {}             # race -> true: Scrolls of Power held (GodInfo::nation_know_array)
@@ -62,12 +68,26 @@ func is_hostile_to(other_id: int) -> bool:
 	return other_id != id and other_id > 0 and relation(other_id) == Defs.Relation.WAR
 
 
-func add_cash(v: float) -> void:
+## Money in (v > 0) or out, of a kind such as "Taxes" or "Buildings".
+func add_cash(v: float, kind := "Other") -> void:
 	cash += v
 	if v >= 0:
 		income_year += v
+		income_by[kind] = income_by.get(kind, 0.0) + v
 	else:
 		expense_year -= v
+		expense_by[kind] = expense_by.get(kind, 0.0) - v
+
+
+func new_year() -> void:
+	last_income_year = income_year
+	last_expense_year = expense_year
+	income_year = 0.0
+	expense_year = 0.0
+	last_income_by = income_by
+	last_expense_by = expense_by
+	income_by = {}
+	expense_by = {}
 
 
 func change_reputation(v: float) -> void:

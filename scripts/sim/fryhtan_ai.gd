@@ -36,7 +36,7 @@ func _alchemy() -> void:
 	if n.live_points >= 800.0 or n.cash <= ALCHEMY_RESERVE or not my_firms("ALCHEMY").is_empty():
 		return
 	var gold := minf(n.cash - ALCHEMY_RESERVE, ALCHEMY_WEEKLY)
-	n.add_cash(-gold)
+	n.add_cash(-gold, "Conversion")
 	n.live_points += gold * 0.5
 
 
@@ -170,7 +170,7 @@ func _expand_lairs(day: int, lairs: Array) -> void:
 		return
 	lair.monster_code = n.monster_code
 	if not homeless:
-		n.add_cash(-LAIR_COST)
+		n.add_cash(-LAIR_COST, "Construction")
 		n.live_points -= LAIR_LIVE
 	builders[0].order_build(lair)
 

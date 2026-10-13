@@ -36,6 +36,7 @@ var overlay_label: Label
 var overlay_image: TextureRect
 var overlay_new_btn: Button
 var chat_edit: LineEdit
+var reports: ReportsWindow
 var pause_menu: PanelContainer
 var tooltip_label: Label
 var build_menu_open := false
@@ -130,6 +131,10 @@ func _build_ui() -> void:
 	spy_btn.text = "Spies"
 	spy_btn.pressed.connect(toggle_spies)
 	hb.add_child(spy_btn)
+	var rep_btn := Button.new()
+	rep_btn.text = "Reports"
+	rep_btn.pressed.connect(func(): reports.open())
+	hb.add_child(rep_btn)
 	var menu := Button.new()
 	menu.text = "Menu"
 	menu.pressed.connect(toggle_pause_menu)
@@ -217,6 +222,11 @@ func _build_ui() -> void:
 	dclose.pressed.connect(toggle_diplomacy)
 	dv.add_child(dclose)
 
+	# --- reports
+	reports = ReportsWindow.new()
+	reports.game = game
+	root.add_child(reports)
+
 	# --- pause menu
 	pause_menu = PanelContainer.new()
 	pause_menu.set_anchors_preset(Control.PRESET_CENTER)
@@ -298,7 +308,7 @@ func open_chat() -> void:
 
 ## True when the mouse is over an interface element (the map should ignore it).
 func is_over_ui(p: Vector2) -> bool:
-	for c in [panel, diplo, pause_menu, overlay, spies_panel]:
+	for c in [panel, diplo, pause_menu, overlay, spies_panel, reports]:
 		if c == null:
 			continue
 		if c.visible and c.get_global_rect().has_point(p):
@@ -462,6 +472,8 @@ func _fill_diplomacy() -> void:
 
 
 func _on_message(text: String, _loc: Vector2) -> void:
+	if reports:
+		reports.add_news(game.date_string(), text)
 	var l := Label.new()
 	l.text = "[%s] %s" % [game.date_string(), text]
 	l.add_theme_color_override("font_color", Color(1, 0.93, 0.7))
@@ -481,6 +493,22 @@ func _on_game_over(victory: bool, text: String) -> void:
 	overlay.visible = true
 	overlay_label.text = text
 	overlay_image.texture = Assets.image("Huwin01.jpg" if victory else "Losegame.jpg")
+	# the final score and the Hall of Fame, for games of one player (ogamend.cpp)
+	if game.observer() or Net.active or game.campaign_battle != null or game.config.get("campaign", false):
+		return
+	var p := game.player()
+	if p == null:
+		return
+	var total := Goals.total_score(game, p)
+	var rating := HallOfFame.difficulty_rating(game.config)
+	var final_score := total * rating / 100
+	overlay_label.text += "
+
+Total score %d × difficulty %d%% = final score %d" % [total, rating, final_score]
+	var place := HallOfFame.add(game, final_score, rating)
+	if place > 0:
+		overlay_label.text += "
+You enter the Hall of Fame in place %d!" % place
 
 
 ## A campaign battle: the end-of-battle panel leads back to the campaign.
