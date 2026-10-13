@@ -215,6 +215,16 @@ func setup_layers() -> void:
 	fog.resize(size * size)
 
 
+## NationBase::repair_all_building: order (or stop) repairs everywhere.
+func repair_all(nid: int, on: bool) -> void:
+	for f in firms:
+		if f.nation_id == nid and not f.dead and (not on or f.hp < f.max_hp):
+			f.repair = on
+	for t in towns:
+		if t.nation_id == nid and not t.dead and (not on or (t.wall_level > 0 and t.wall_hp < t.wall_max_hp())):
+			t.repair_wall = on
+
+
 ## NationArray::new_nation during a game: a computer-run kingdom of `race`
 ## (Town::form_new_nation), neutral to all, in an unused colour.
 func add_nation(race: String) -> Nation:

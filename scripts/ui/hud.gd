@@ -1367,6 +1367,10 @@ func _show_town(t: Town, rebuild: bool) -> void:
 			var lvl := t.target_wall_level + 1
 			_add_action("Build %s (%d)" % ["wall" if lvl == 1 else "fortified wall", Town.WALL_COST[lvl]], func(): _do(t, "build_wall"), game.player().cash > 0,
 				"Jobless villagers build it. Walls absorb attacks and shield the town from enemy influence.")
+		if t.wall_level > 0 and t.wall_hp < t.wall_max_hp():
+			_add_action("Repair wall" + (" ✓" if t.repair_wall else ""), func(): _do(t, "set", ["repair_wall", not t.repair_wall]), true,
+				"A villager mends the wall a point a day at its cost. Right-click: repair all your buildings and walls.",
+				func(): _do(game, "repair_all", [game.player_id, true]), "🔧")
 	elif t.nation_id == 0:
 		_add_action("Grant gold (%d)" % int(t.grant_cost()), func(): _do(t, "grant", [game.player_id]),
 			game.player().cash >= t.grant_cost() and t.has_linked_camp(game.player_id), "Lower the town's resistance to you. Needs one of your camps linked to it.")
@@ -1618,6 +1622,10 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		_add_action("Workers wanted %d/%d: more" % [f.workers(), f.needed_workers], func(): _do(f, "set_needed_workers", [f.needed_workers + 1]),
 			f.needed_workers < Defs.MAX_WORKER, "How many people this building employs. Right-click: fewer.", func(): _do(f, "set_needed_workers", [f.needed_workers - 1]), "👷")
 	_link_actions(f)
+	if not f.under_construction and f.code != "LAIR":
+		_add_action("Repair" + (" ✓" if f.repair else ""), func(): _do(f, "set_repair", [not f.repair]), f.hp < f.max_hp or f.repair,
+			"A point a day at the building's cost while not under attack. Right-click: repair all your buildings and walls.",
+			func(): _do(game, "repair_all", [game.player_id, true]), "🔧")
 	if f.code in Firm.RALLY_FIRMS:
 		_add_action("Rally point" + (" ✓" if f.rally.x >= 0 else ""), func(): rally_requested.emit(f), true,
 			"Click: choose where the units made here gather. Right-click: clear it.", func(): _do(f, "clear_rally"))

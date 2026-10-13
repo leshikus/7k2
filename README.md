@@ -26,6 +26,10 @@ original game's premade ones, and can be played or watched as AI vs AI. To use t
 in the original game instead, copy them to `My Games\Seven Kingdoms 2 HD\SCENARIO`.
 `docs/` has strategy guides for the original game.
 
+Six new scenarios come with this edition (`scenario/*.json`, listed as "new"):
+The Silk Road, The Siege of Carthage, The Fryhtan Plague, Shadow War, Lord of the
+Lair and The Keeper of the Relic. `tools/make_scenarios.tscn` rebuilds them.
+
 ## Development
 
 `PROMPT.md` is the project prompt: the goals, constraints and working rules given to

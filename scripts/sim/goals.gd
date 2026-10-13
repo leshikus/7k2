@@ -27,6 +27,56 @@ var lost_id := -1
 var year_limit := 0     # Config::goal_year_limit (Game::set_win_deadline)
 
 
+## EndCondition::cond_text: what a condition asks, for one without a text of
+## its own (the start screen's goals, scenarios made here).
+static func describe(c: Dictionary) -> String:
+	var t = c.get("target")
+	var tname := ""
+	if t is Town:
+		tname = t.town_name
+	elif t is Unit:
+		tname = t.unit_name
+	elif t is Firm:
+		tname = t.display_name()
+	elif t is int and Game.inst and Game.inst.nation(t):
+		tname = Game.inst.nation(t).name
+	elif t is String:
+		tname = Defs.tech_def(t).get("name", t)
+	var y := int(c.get("years", 0))
+	var p2 := int(c.get("p2", 0))
+	match int(c["id"]):
+		DEFEAT_ALL_OTHER_KINGDOMS: return "Defeat all other kingdoms"
+		DEFEAT_OWN_KINGDOM: return "Your kingdom is defeated"
+		DEFEAT_KINGDOM: return "Defeat the %s" % tname
+		FORM_ALLY_WITH_KINGDOM: return "Form an alliance with the %s" % tname
+		DEFEAT_ALL_FRYHTAN: return "Destroy all the Fryhtans"
+		DEFEAT_EXCEPT_ALLIANCE: return "Be the last kingdom standing but for an ally"
+		REACH_POPULATION: return "Reach a population of %d" % p2
+		REACH_FRYHTAN: return "Command %d Fryhtans" % p2
+		REACH_ECONOMY: return "Reach an economic score of %d" % p2
+		REACH_MILITARY: return "Reach a military score of %d" % p2
+		REACH_TOTAL: return "Reach a total score of %d" % p2
+		KILL_MONSTER_SCORE: return "Reach a Fryhtan battling score of %d" % p2
+		TRAIN_10_GENERAL: return "Train ten generals of leadership %d" % p2
+		KILL_UNIT: return "%s is killed" % tname
+		KEEP_UNIT_ALIVE: return "Keep %s alive for %d year%s" % [tname, y, "" if y == 1 else "s"]
+		MEET_UNIT: return "Meet %s" % tname
+		CONQUER_ALL_TOWN: return "Bring every independent town under your rule"
+		CONQUER_TOWN: return "Conquer %s" % tname
+		DESTROY_FIRM: return "Destroy %s" % tname
+		ACQUIRE_TECH: return "Acquire the secret of %s" % tname
+		NATION_SURVIVE: return "Survive for %d years" % p2
+		CONQUER_ALL_FIRM: return "Take every building"
+		CONQUER_FIRM: return "Take %s" % tname
+	return "A goal"
+
+
+static func _fill_texts(gl: Goals) -> void:
+	for c in gl.win + gl.lose:
+		if str(c.get("text", "")) == "":
+			c["text"] = describe(c)
+
+
 ## The goals chosen on the start screen (Battle::create_pregame_object):
 ## win conditions any one of which wins, and a time limit in years.
 static func random_map(wins: Array, years: int) -> Goals:
@@ -36,6 +86,7 @@ static func random_map(wins: Array, years: int) -> Goals:
 		var c := {"id": w["id"], "p1": 0, "p2": w.get("p2", 0), "years": 0, "player_only": w.get("player_only", false),
 			"text": "", "result": "", "target": null, "met": false}
 		c["supported"] = _supported(c)
+		c["text"] = describe(c)
 		gl.win.append(c)
 	gl.lose.append({"id": DEFEAT_OWN_KINGDOM, "p1": 0, "p2": 0, "years": 0, "player_only": true, "text": "", "result": "",
 		"target": null, "met": false, "supported": true})
@@ -53,6 +104,7 @@ static func from_scenario(data: Dictionary, resolve: Callable) -> Goals:
 			cond["supported"] = _supported(cond)
 			cond["met"] = false
 			(gl.win if side == "win" else gl.lose).append(cond)
+	_fill_texts(gl)
 	return gl
 
 
@@ -289,4 +341,5 @@ static func from_dict(d: Dictionary, by_id: Dictionary) -> Goals:
 			for k in ["id", "p1", "p2", "years"]:
 				cond[k] = int(cond[k])
 			(gl.win if side == "win" else gl.lose).append(cond)
+	_fill_texts(gl)
 	return gl

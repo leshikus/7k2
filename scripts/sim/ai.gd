@@ -35,6 +35,9 @@ func next_day(day: int) -> void:
 			Caravans.process_ai(u, day)
 	# FirmSpecial::process_ai, FirmSpy::process_ai, FirmFort::think_train_archer
 	for f in my_firms():
+		# Firm::process_common_ai: repair when it can spend
+		if not f.repair and f.hp < f.max_hp and not f.under_construction and Training.ai_should_spend(n, 50 + Diplomacy._pref(n, "repair_concern") / 2):
+			f.repair = true
 		if f.code == "FORT" and not f.under_construction and f.target_archers == f.archers and f.archers < Firm.MAX_FORT_ARCHER:
 			var importance := Diplomacy._pref(n, "military_development") / 3 + (10 if war_target > 0 else 0)
 			if Training.ai_should_spend(n, importance, Firm.TRAIN_ARCHER_COST):

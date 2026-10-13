@@ -852,3 +852,37 @@ New test: `setup_test`.
   each technology is kept when switching.
 
 New test: `economy_test`.
+
+## Towns under attack, repairs, new scenarios (14 Oct 2026)
+
+- **Town defence** (Town::being_attack_hit, mobilize_defender): a wall takes a
+  fifth of each (slowed) blow; with the wall down, villagers come out against an
+  attacker within 10 - never the last one, and not once loyalty (or resistance
+  to the attacker) is below 30 or below five per defender - each taking twice
+  the loyalty over the population with him, given back (and 2 more) if he comes
+  home; independent defenders fight at 10, 30 or 50 by the Resistance setting,
+  give or take 10. Without defenders out, blows wear loyalty or resistance down
+  (faster in small towns), every 200 points kill a villager (the killer's and
+  the owner's people lose heart, a Fryhtan killer gains life points), at zero
+  the attackers call it off and a Fryhtan kingdom may win villagers over; an
+  empty town is razed after 800.
+- **Surrender and tribute**: a town surrenders only to a human kingdom's camp,
+  the most influential (an independent town at resistance below 30; a kingdom's
+  town without a camp of its own, to an influence above its loyalty); it then
+  has loyalty 60 (50 of another race) and its links to the new owner on. A
+  village pays a Fryhtan lair 5 a villager a month once its resistance to that
+  kingdom is below 1, and only then. Camp influence is the original's: human
+  commanders only, a camp 80% of a fort; a foreign camp sways a town only
+  while it has none of its own; the Egyptian god slows Egyptian loyalty.
+- **Walls** are raised by one villager, 10 of 1000 a day (a Greek god's 20),
+  and **repairs** of walls and buildings happen only when ordered (a point a
+  day at the building's cost; right-click to repair everything); the computer
+  orders them when it can spend.
+- **Six new scenarios** in `scenario/*.json`, built by `tools/make_scenarios`:
+  The Silk Road (economy), The Siege of Carthage (conquer a walled city), The
+  Fryhtan Plague (survive and destroy the Fryhtans), Shadow War (steal a
+  technology with spies), Lord of the Lair (rule the villages as a Fryhtan
+  lord) and The Keeper of the Relic (keep a hero alive). Goals without a text
+  of their own are now described.
+
+New tests: `town_test`, `scenarios_test`.

@@ -12,6 +12,10 @@ var employed := 0
 var loyalty := 50.0
 var target_loyalty := 50.0
 var resistance := {}            # nation id -> resistance (independent towns)
+var received_hits := 0.0         # Town::received_hit_count
+var last_attack_nation := 0      # Town::last_attack_nation_recno (independent towns)
+var town_combat_level := 0       # Town::town_combat_level: its defenders' skill
+var repair_wall := false         # Town::repair_flag
 var join_min_rating := -1        # Town::independent_unit_join_nation_min_rating (-1: not drawn yet)
 var base_resistance := 70.0     # what kingdoms it has not met yet start from (Town::init_resistance)
 var target_resistance := {}     # nation id -> target, -1 if no influence
@@ -47,6 +51,10 @@ var builder_loyalty := 50.0
 
 
 func setup(name_: String, race_: String, nation: int, at: Vector2i, pop: int) -> void:
+	# Town::init_resistance: an independent town's defenders by the Resistance setting
+	if nation == 0 and Game.inst:
+		town_combat_level = {GameSetup.LOW: 10, GameSetup.MODERATE: 30, GameSetup.HIGH: 50}.get(
+			int(Game.inst.config.get("resistance", GameSetup.LOW)), 10)
 	town_name = name_
 	race = race_
 	nation_id = nation
@@ -104,61 +112,71 @@ func set_wall_level(level: int) -> void:
 
 # -------------------------------------------------------------- influence ---
 
-## Town::camp_influence: leadership, race of the general and reputation.
+## Town::camp_influence: half the commander's leadership (at most 100), a third
+## more for his own race or 20 less for another, plus half the kingdom's
+## reputation; only human commanders have influence; a fort adds 15.
 func camp_influence(f: Firm) -> int:
-	if f.overseer == null:
+	if f.overseer == null or not f.overseer.is_human():
 		return 0
-	var n := f.nation()
-	if f.is_fryhtan_lair():
-		# Fryhtans rule by fear: no race bonus or penalty, reputation does not help
-		return clampi(int(minf(100.0, f.overseer.lead_skill()) * 0.6) + 15, 0, 100)
-	var inf := int(minf(100.0, f.overseer.lead_skill()) / 2.0)
-	if f.overseer.race == race:
+	var inf := commander_influence(f.overseer, f.nation())
+	if f.code == "FORT":
+		inf += 15
+	return inf
+
+
+func commander_influence(u: Unit, n: Nation) -> int:
+	var inf := int(minf(100.0, u.lead_skill())) / 2
+	if u.race == race:
 		inf += inf / 3
 	else:
 		inf -= 20
 	if n:
 		inf += int(n.reputation / 2.0)
-	if f.overseer.rank == Defs.Rank.KING:
-		inf += 20
-	if f.code == "FORT":
-		inf += 15
 	return clampi(inf, 0, 100)
 
 
+## FirmCamp / FirmFort::loyalty_adjustment and resistance_adjustment: a fort
+## has its full influence on towns, a camp (or lair) 80%.
+static func influence_adjustment(f: Firm) -> int:
+	return 100 if f.code == "FORT" else 80
+
+
+## Town::update_target_loyalty: 10, the bonus, half the reputation, a quarter
+## of the quality of life, up to 30 for employment and 20 for the ruler's race;
+## then the influence of linked camps with a commander: our own raise it,
+## another kingdom's (only while we have none of our own linked) lower it for
+## the people of their commander's race, less a sound wall's protection.
 func update_target_loyalty() -> void:
 	var n := nation()
 	if n == null:
 		return
-	var t := 10.0 + bonus_loyalty + n.reputation / 2.0 + quality_of_life / 4.0
+	var t := 10 + int(bonus_loyalty) + int(n.reputation / 2.0) + quality_of_life / 4
 	if population > 0:
-		t += 30.0 - 30.0 * jobless() / population
+		t += 30 - 30 * jobless() / population
 	if race == n.race:
-		t += 20.0
-	if n.food < 0:
-		t -= 20.0
-	if n.cash < 0:
-		t -= 10.0      # unpaid debts make the people restless
-	t = clampf(t, 0, 100)
+		t += 20
+	t = clampi(t, 0, 100)
+	var own_camp := has_linked_camp(nation_id)
 	for f in linked_firms:
-		if not f.is_military() or f.code == "LAIR" or f.overseer == null or f.under_construction:
+		if not (Espionage.is_camp(f) or f.code == "LAIR") or f.overseer == null or f.nation_id <= 0 or f.under_construction:
 			continue
+		if f.nation_id != nation_id and own_camp:
+			continue          # the town shuts out a foreign camp while it has its own
 		var fnat := f.nation()
-		if fnat == null:
-			continue
-		var inf := int(f.overseer.lead_skill() / 3.0)
-		if f.overseer.rank == Defs.Rank.KING:
+		var o := f.overseer
+		var inf := int(o.lead_skill()) / 3
+		if o.rank == Defs.Rank.KING:
 			inf += 20
-		if f.overseer.race == race:
+		if o.race == race:
 			inf += 8
-		if fnat.race == race:
+		if fnat and fnat.race == race:
 			inf += 8
 		if f.nation_id == nation_id:
-			t += inf
-		elif f.overseer.race == race:
+			t += inf * influence_adjustment(f) / 100
+		elif o.race == race:
 			if wall_level > 0:
 				inf -= int(20 * wall_level * wall_hp / maxf(1.0, wall_max_hp()))
-			t -= maxi(0, inf)
+			t -= inf * influence_adjustment(f) / 100
 	target_loyalty = clampf(t, 0, 100)
 
 
@@ -166,36 +184,58 @@ func wall_max_hp() -> float:
 	return wall_level * 100.0
 
 
-## Town::process_wall: jobless villagers raise the wall, then repair it.
+## Town::process_wall: one villager (target_wall_man_power) raises the next
+## wall level, 10 of 1000 a day at the wall's cost, or repairs a damaged wall a
+## point a day when repairs are ordered; a Greek Greater Being raises (20 a
+## day) and repairs walls for free. A fallen wall is gone. Returns the
+## villagers at work, who do not farm that day.
+const WALL_MAN_POWER := 1
+const REPAIR_POINTS_PER_DAY := 1.0
+
+
 func _process_wall() -> void:
 	wall_busy = 0
-	if Game.inst.frame - last_attacked_frame < Defs.FRAMES_PER_DAY * 4:
+	if Game.inst.frame - last_attacked_frame <= Defs.FRAMES_PER_DAY * 4:
 		return
-	if nation_id > 0 and Game.inst.blessed(nation_id, "GREEK"):
+	var g := Game.inst
+	var gods := nation_id > 0 and g.god_worshipped(nation_id, "GREEK")
+	if gods and target_wall_level < 2:
 		target_wall_level = 2
-		if wall_level > 0 and wall_hp < wall_max_hp():
-			wall_hp = minf(wall_max_hp(), wall_hp + 1.0)
-		elif wall_level < target_wall_level:
-			wall_progress += 20.0
+	var man := mini(WALL_MAN_POWER, jobless())
 	var n := nation()
-	var man := mini(WALL_BUILDERS, jobless())
-	if wall_level > 0 and wall_hp < wall_max_hp():
-		if man > 0 and (n == null or n.cash > 0):
-			wall_busy = man
-			wall_hp = minf(wall_max_hp(), wall_hp + man)
+	if wall_level > 0 and wall_hp <= 0.0:
+		wall_level = 0
+		wall_hp = 0.0
+		target_wall_level = mini(target_wall_level, 1)
+	elif wall_hp < wall_max_hp():
+		if gods:
+			wall_hp += REPAIR_POINTS_PER_DAY
+		if wall_hp < wall_max_hp() and repair_wall and man > 0 and (n == null or n.cash > 0):
+			wall_hp += man * REPAIR_POINTS_PER_DAY
 			if n:
-				n.add_cash(-float(WALL_COST[wall_level]) * man / wall_max_hp(), "Walls")
-	elif wall_level < target_wall_level and man > 0 and (n == null or n.cash > 0):
-		wall_busy = man
-		wall_progress += man * 10.0
-		if n:
-			n.add_cash(-float(WALL_COST[wall_level + 1]) * man * 10.0 / MAX_WALL_PROGRESS, "Walls")
-		if wall_progress >= MAX_WALL_PROGRESS:
-			wall_progress = 0.0
-			wall_level += 1
+				n.add_cash(-float(WALL_COST[wall_level]) * man * REPAIR_POINTS_PER_DAY / wall_max_hp(), "Walls")
+			wall_busy = man
+		if wall_hp >= wall_max_hp():
 			wall_hp = wall_max_hp()
-			if nation_id == Game.inst.player_id:
-				Game.inst.notify("%s has completed its %s." % [town_name, "wall" if wall_level == 1 else "fortified wall"], center_loc())
+			repair_wall = false
+	elif wall_level < target_wall_level:
+		var p := 0.0
+		if gods:
+			p += 80.0 if g.fast_build and nation_id == g.player_id else 20.0
+			if man == 1:
+				man = 0
+		if man > 0 and (n == null or n.cash > 0):
+			p += man * (40.0 if g.fast_build and nation_id == g.player_id else 10.0)
+			if n:
+				n.add_cash(-float(WALL_COST[wall_level + 1]) * man * 10.0 / MAX_WALL_PROGRESS, "Walls")
+			wall_busy = man
+		wall_progress += p
+		if wall_progress >= MAX_WALL_PROGRESS:
+			wall_progress -= MAX_WALL_PROGRESS
+			wall_level += 1
+			wall_hp += 100.0
+			if nation_id == g.player_id:
+				g.notify("%s has completed its %s." % [town_name, "wall" if wall_level == 1 else "fortified wall"], center_loc())
 			queue_redraw()
 
 
@@ -239,20 +279,25 @@ func town_shoot() -> void:
 	archer_energy >>= 2
 
 
+## Town::update_target_resistance: each kingdom's camps with a commander set
+## what the resistance falls to, the strongest counting; a wall shields the
+## villagers, a camp has 80% of a fort's influence, and a Mongol Greater Being
+## takes 20 more off.
 func update_target_resistance() -> void:
 	target_resistance.clear()
 	for f in linked_firms:
-		if not f.is_military() or f.overseer == null or f.nation_id <= 0 or f.under_construction:
+		if not (Espionage.is_camp(f) or f.code == "LAIR") or f.overseer == null or f.nation_id <= 0 or f.under_construction:
 			continue
-		if f.code == "LAIR" and not f.is_fryhtan_lair():
+		if not Game.inst.link_on(f, self) and f.code != "LAIR" and not Espionage.is_camp(f):
 			continue
-		# a wall shields the villagers from outside influence (Town::update_target_resistance)
 		var inf_adj := 100
 		if wall_level > 0 and wall_hp > 0.0:
 			inf_adj -= int(wall_hp / 10.0)
-		var v := maxi(0, 100 - camp_influence(f) * inf_adj / 100)
-		if Game.inst.blessed(f.nation_id, "MONGOL"):
-			v = maxi(0, v - 20)
+		inf_adj = inf_adj * influence_adjustment(f) / 100
+		var v := 100 - camp_influence(f) * inf_adj / 100
+		if Game.inst.god_worshipped(f.nation_id, "MONGOL"):
+			v -= 20
+		v = maxi(v, 0)
 		if not target_resistance.has(f.nation_id) or v < target_resistance[f.nation_id]:
 			target_resistance[f.nation_id] = v
 
@@ -266,7 +311,12 @@ func update_loyalty() -> void:
 				enemy = true
 		if not own and enemy:
 			return
-		loyalty = minf(100.0, loyalty + maxf(0.5, (target_loyalty - loyalty) / 30.0))
+		var inc := maxf(0.5, (target_loyalty - loyalty) / 30.0)
+		# an Egyptian Greater Being's worshippers slow the rise of Egyptian loyalty
+		if race == "EGYPTIAN" and Game.inst.god_worshipped(nation_id, "EGYPTIAN"):
+			var pc := Game.inst.god_worshippers(nation_id, "EGYPTIAN")
+			inc = inc * (Defs.MAX_WORKER * 2) / (Defs.MAX_WORKER * 2 + pc)
+		loyalty = minf(100.0, loyalty + inc)
 	elif loyalty > target_loyalty:
 		loyalty = maxf(0.0, loyalty - maxf(0.5, (loyalty - target_loyalty) / 30.0))
 
@@ -286,46 +336,62 @@ func update_resistance() -> void:
 	think_surrender()
 
 
-## Independent towns surrender to the kingdom whose camp has worn their
-## resistance down; nation towns defect when disloyal and only enemy camps link.
+## Town::think_surrender: an independent town gives itself to the kingdom whose
+## camp has the most influence among those it resists least than 30; a
+## kingdom's town with no camp of its own, a foreign camp linked and loyalty
+## below SURRENDER_LOYALTY, to a foreign commander whose influence beats its
+## loyalty. Only to humans; never while paying a Fryhtan tribute.
 func think_surrender() -> bool:
-	var best := 0
+	if tribute_to() > 0:
+		return false
 	if nation_id > 0:
-		if has_linked_camp(nation_id) or loyalty >= Defs.SURRENDER_LOYALTY:
+		if has_linked_camp(nation_id) or not linked_firms.any(func(f): return Espionage.is_camp(f) and f.nation_id > 0 and f.nation_id != nation_id and f.overseer):
 			return false
-		var best_inf := int(loyalty)
-		for f in linked_firms:
-			if f.is_military() and f.code != "LAIR" and f.nation_id > 0 and f.nation_id != nation_id and f.overseer:
-				var inf := camp_influence(f)
-				if inf > best_inf:
-					best_inf = inf
-					best = f.nation_id
-	else:
-		if tribute_to() > 0:
-			return false        # enslaved: cannot join a human kingdom while the lair stands
-		var best_res := float(Defs.SURRENDER_RESISTANCE)
-		for nid in resistance:
-			if resistance[nid] < best_res and has_linked_camp(nid):
-				best_res = resistance[nid]
-				best = nid
+		if loyalty >= Defs.SURRENDER_LOYALTY:
+			return false
+	var best := 0
+	var best_r := int(loyalty) if nation_id > 0 else 0
+	for f in linked_firms:
+		if not Espionage.is_camp(f) or f.nation_id == nation_id or f.nation_id <= 0 or f.overseer == null or f.is_fryhtan_lair():
+			continue
+		var fn := f.nation()
+		if fn == null or fn.is_fryhtan:
+			continue
+		if nation_id == 0 and resistance_to(f.nation_id) >= Defs.SURRENDER_RESISTANCE:
+			continue
+		var r := camp_influence(f)
+		if r > best_r:
+			best_r = r
+			best = f.nation_id
 	if best > 0:
 		surrender(best)
 		return true
 	return false
 
 
+## Town::surrender / set_nation: loyalty 60 for the ruler's race, 50 for
+## another (80 for a town set up by rebels), no bonus, no defenders out; the
+## links to the new owner's buildings are switched on at both ends.
 func surrender(to_nation: int) -> void:
 	var old := nation_id
 	nation_id = to_nation
 	var n := nation()
-	loyalty = 40.0 if n and n.race == race else 30.0
-	bonus_loyalty = 20.0
+	if to_nation == 0:
+		loyalty = 80.0
+	else:
+		loyalty = 60.0 if n and n.race == race else 50.0
+	bonus_loyalty = 0.0
+	town_combat_level = 0
+	join_min_rating = 100 + Game.inst.rng.randi() % 150
 	resistance.clear()
 	aggressors.clear()
 	for d in defenders.duplicate():
 		if is_instance_valid(d) and not d.dead:
 			d.nation_id = to_nation
 			d.home_town = self
+	for f in linked_firms:
+		if f.nation_id == to_nation and to_nation > 0:
+			Game.inst.set_link(f, self, true, true)
 	Game.inst.on_town_changed(self, old)
 	queue_redraw()
 
@@ -408,25 +474,36 @@ func _update_quality_of_life() -> void:
 	quality_of_life = mini(100, 25 + 25 * kinds.size())
 
 
-## The Fryhtan kingdom this independent town pays tribute to (Town::pay_tribute_to_monster), or 0.
+## Town::is_pay_tribute_to_monster: an independent town pays a Fryhtan
+## kingdom whose lair is linked to it once its resistance to that kingdom has
+## fallen below 1 (MONSTER_COLLECT_TOWN_TRIBUTE_LOYALTY).
+const MONSTER_COLLECT_TOWN_TRIBUTE_LOYALTY := 1.0
+const MONSTER_TOWN_TRIBUTE_PER_UNIT := 5.0
+
+
 func tribute_to() -> int:
 	if nation_id != 0:
 		return 0
 	for f in linked_firms:
-		if f.is_fryhtan_lair() and f.overseer and resistance_to(f.nation_id) < Defs.SURRENDER_RESISTANCE:
+		if f.code == "LAIR" and f.nation_id > 0 and f.nation_id != GameObj.MONSTER_NATION and not f.under_construction \
+				and resistance_to(f.nation_id) < MONSTER_COLLECT_TOWN_TRIBUTE_LOYALTY:
 			return f.nation_id
 	return 0
 
 
+## Town::pay_tribute_to_monster (monthly): 5 a villager, shared among the
+## lairs it pays, by their commanders' leadership.
 func _pay_tribute() -> void:
-	var lairs := linked_firms.filter(func(f): return f.is_fryhtan_lair() and f.overseer and resistance_to(f.nation_id) < Defs.SURRENDER_RESISTANCE)
+	var lairs := linked_firms.filter(func(f): return f.code == "LAIR" and f.nation_id > 0 and f.nation_id != GameObj.MONSTER_NATION \
+		and not f.under_construction and resistance_to(f.nation_id) < MONSTER_COLLECT_TOWN_TRIBUTE_LOYALTY)
 	for f in lairs:
+		if f.overseer == null:
+			continue
 		var skill := minf(100.0, f.overseer.lead_skill())
-		var amount := population * 5.0 / lairs.size() * (100.0 + skill) / 200.0
+		var amount := population * MONSTER_TOWN_TRIBUTE_PER_UNIT / lairs.size() * (100.0 + skill) / 200.0
 		var n: Nation = f.nation()
 		if n:
 			n.add_cash(amount, "Tribute")
-			n.live_points += population * 0.5 / lairs.size()
 
 
 func _grow() -> void:
@@ -439,8 +516,8 @@ func _grow() -> void:
 		inc = population / 2.0
 	if tribute_to() > 0:
 		inc /= 2.0          # paying tribute halves growth
-	if Game.inst.blessed(nation_id, "EGYPTIAN"):
-		inc += inc * Game.inst.prayer_count(nation_id) / (Defs.MAX_WORKER * 3.0)
+	if nation_id > 0 and race == "EGYPTIAN":
+		inc += inc * Game.inst.god_worshippers(nation_id, "EGYPTIAN") / (Defs.MAX_WORKER * 3.0)
 	population_growth += inc / 2.0
 	while population_growth > 100.0 and population < Defs.MAX_TOWN_POPULATION:
 		population_growth -= 100.0
@@ -609,63 +686,68 @@ func on_attacked(attacker: GameObj) -> void:
 		return
 	if attacker.nation_id > 0 and attacker.nation_id != GameObj.MONSTER_NATION:
 		aggressors[attacker.nation_id] = Game.inst.frame
-	_spawn_defenders(attacker)
 	Game.inst.on_object_attacked(self, attacker)
 
 
-## Villagers take up arms when the town is attacked.
-func _spawn_defenders(attacker: GameObj) -> void:
+## Town::mobilize_defender: while the walls are down, villagers come out
+## against an attacker near by - not the last one, and not once loyalty (or
+## resistance to the attacker) is below 30 or below five per defender out.
+## Each takes away twice the loyalty over the population, given back if he
+## comes home; he fights at the town's combat level, give or take 10.
+const MIN_DEFEND_LOYALTY := 30.0
+const EFFECTIVE_DEFEND_DISTANCE := 10.0
+
+
+func mobilize_defender(attacker: GameObj) -> Unit:
+	if population <= 1:
+		return null
+	var anid := attacker.nation_id if attacker else 0
+	var cur := loyalty
+	if nation_id == 0:
+		if anid <= 0:
+			return null
+		cur = resistance_to(anid)
 	defenders = defenders.filter(func(d): return is_instance_valid(d) and not d.dead)
-	var want := mini(8, population / 8 + 1)
-	while defenders.size() < want and population > 1:
-		var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(attacker.center_loc()))
-		var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, 15.0)
-		if u == null:
-			break
-		u.home_town = self
-		population -= 1
-		defenders.append(u)
-		u.order_attack(attacker)
+	if cur < defenders.size() * 5 or cur < MIN_DEFEND_LOYALTY or jobless() <= 0:
+		return null
+	var dec := 2.0 * cur / population
+	if nation_id > 0:
+		loyalty = maxf(0.0, loyalty - dec)
+	else:
+		resistance[anid] = maxf(0.0, cur - dec)
+		last_attack_nation = anid
+	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(attacker.center_loc()))
+	var lvl := clampi(town_combat_level + Game.inst.rng.randi() % 20 - 10, 10, 100)
+	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, float(lvl))
+	if u == null:
+		return null
+	u.home_town = self
+	u.set_meta("defend_loyalty", dec)
+	population -= 1
+	defenders.append(u)
+	u.order_attack(attacker)
+	return u
 
 
+## Town::assign_unit: a defender coming home gives back the loyalty he took
+## (with resistance, 2 more for the victory - not toward a kingdom the town
+## already pays tribute to); a wagon brings all its settlers.
 func defender_returned(u: Unit) -> void:
 	defenders.erase(u)
 	if u.nation_id == nation_id:
-		# Town::assign_unit: a wagon brings all its settlers
+		if u.has_meta("defend_loyalty"):
+			var back := float(u.get_meta("defend_loyalty"))
+			if nation_id > 0:
+				loyalty = minf(100.0, loyalty + back)
+			elif last_attack_nation > 0 and tribute_to() != last_attack_nation:
+				resistance[last_attack_nation] = minf(100.0, resistance_to(last_attack_nation) + back + 2.0)
 		population = mini(Defs.MAX_TOWN_POPULATION, population + u.settlers())
 	Game.inst.remove_unit(u)
 	queue_redraw()
 
 
-## A village broken by a Fryhtan kingdom submits and pays tribute: the
-## attackers call off the assault instead of wiping it out.
-func _check_submission(nid: int) -> void:
-	var n := Game.inst.nation(nid)
-	if n == null or not n.is_fryhtan or resistance_to(nid) >= Defs.SURRENDER_RESISTANCE:
-		return
-	aggressors.erase(nid)
-	for u in Game.inst.units:
-		if u.nation_id == nid and u.target == self:
-			u.stop()
-	for d in defenders.duplicate():
-		if is_instance_valid(d) and not d.dead and d.target and d.target.nation_id == nid:
-			d.stop()
-			d.order = Unit.Order.RETURN
-
-
-func defender_killed(u: Unit, killer: GameObj) -> void:
+func defender_killed(u: Unit, _killer: GameObj) -> void:
 	defenders.erase(u)
-	if killer and killer.nation_id > 0 and killer.nation_id != GameObj.MONSTER_NATION:
-		if nation_id == 0:
-			# Fryhtan slaughter breaks a village's will far faster than human soldiers do
-			var kn := killer.nation()
-			var drop := 8.0 if kn and kn.is_fryhtan else 3.0
-			resistance[killer.nation_id] = maxf(0.0, resistance_to(killer.nation_id) - drop)
-		elif nation_id != killer.nation_id:
-			loyalty = maxf(0.0, loyalty - 2.0)
-		think_surrender()
-		if nation_id == 0:
-			_check_submission(killer.nation_id)
 
 
 ## Hits on the town itself kill villagers once no defenders are left.
@@ -673,37 +755,103 @@ func defense() -> Array:
 	return [80, 100]      # Town::init: defense_attribute.init(80, 100)
 
 
+## Town::being_attack_hit: a wall takes a fifth of the blow; with the wall
+## down the villagers defend an attacker close by, and every 200 points of
+## blows kill one (three times as many while defenders are out); with no
+## defenders out, loyalty (or resistance to the attacker) wears away, faster
+## in a small town; at zero the attackers call it off, and a Fryhtan kingdom
+## may win a villager over now and then. An empty town is razed after 800.
+const RECEIVED_HIT_PER_KILL := 200.0
+
+
 func take_damage(amount: float, attacker: GameObj) -> void:
 	if dead:
 		return
-	last_attacked_frame = Game.inst.frame
+	var g := Game.inst
+	var anid := 0
+	if attacker and is_instance_valid(attacker):
+		if attacker.nation_id == nation_id:
+			return
+		anid = attacker.nation_id if attacker.nation_id != GameObj.MONSTER_NATION else 0
+	last_attacked_frame = g.frame
 	on_attacked(attacker)
+	defenders = defenders.filter(func(d): return is_instance_valid(d) and not d.dead)
+	if attacker and is_instance_valid(attacker) and wall_hp <= 0.0 and attacker.center_loc().distance_to(center_loc()) <= EFFECTIVE_DEFEND_DISTANCE:
+		while mobilize_defender(attacker) != null:
+			pass
 	if wall_level > 0 and wall_hp > 0.0:
-		wall_hp -= amount
+		wall_hp = maxf(0.0, wall_hp - amount / Defs.ATTACK_SLOW_DOWN / 5.0)
 		if wall_hp <= 0.0:
-			wall_hp = 0.0
-			wall_level = 0
-			target_wall_level = mini(target_wall_level, 1)
-			if nation_id == Game.inst.player_id:
-				Game.inst.notify("The wall of %s has fallen!" % town_name, center_loc())
+			received_hits = 0.0
+			if nation_id == g.player_id:
+				g.notify("The wall of %s has fallen!" % town_name, center_loc())
 		queue_redraw()
 		return
-	_damage_acc += amount
-	while _damage_acc >= 25.0 and population > 0:
-		_damage_acc -= 25.0
-		population -= 1
-		if attacker and is_instance_valid(attacker):
-			var an := attacker.nation()
-			if an and an.is_fryhtan:
-				an.live_points += 15.0
-		if attacker and attacker.nation_id > 0 and nation_id == 0 and attacker.nation_id != GameObj.MONSTER_NATION:
-			var an2 := attacker.nation()
-			resistance[attacker.nation_id] = maxf(0.0, resistance_to(attacker.nation_id) - (3.0 if an2 and an2.is_fryhtan else 1.0))
-	if nation_id == 0 and attacker and attacker.nation_id > 0:
-		think_surrender()
-		_check_submission(attacker.nation_id)
+	if population > 0:
+		received_hits += amount if defenders.is_empty() else amount / 3.0
+		if received_hits >= RECEIVED_HIT_PER_KILL:
+			received_hits = 0.0
+			kill_town_people(anid)
+			if dead:
+				return
+		if defenders.is_empty() and population > 0:
+			var zero := false
+			if nation_id > 0:
+				var before := loyalty
+				var dec := minf((5.0 if has_linked_camp(nation_id) else 10.0) / population, 1.0)
+				loyalty = maxf(0.0, loyalty - dec * amount / (20.0 / Defs.ATTACK_SLOW_DOWN))
+				if loyalty < 1.0 and think_surrender():
+					return
+				if loyalty < 1.0 and before >= 1.0:
+					_stop_attacks(0)
+				zero = loyalty == 0.0
+			elif anid > 0:
+				var before2 := resistance_to(anid)
+				var dec2 := minf(10.0 / population, 1.0)
+				resistance[anid] = maxf(0.0, before2 - dec2 * amount / (20.0 / Defs.ATTACK_SLOW_DOWN))
+				if resistance_to(anid) < 1.0:
+					think_surrender()
+					if before2 >= 1.0:
+						_stop_attacks(anid)
+				zero = resistance_to(anid) == 0.0
+			var an := g.nation(anid)
+			if zero and an and an.is_fryhtan and g.rng.randi() % 50 == 0 and jobless() > 0:
+				var u := recruit()
+				if u:
+					g.defect_unit(u, anid)
+	else:
+		received_hits += amount if defenders.is_empty() else amount / 8.0
+		if received_hits >= 4.0 * RECEIVED_HIT_PER_KILL:
+			population = 0
+			defenders.clear()
+			_check_empty()
+			return
 	_check_empty()
 	queue_redraw()
+
+
+## UnitArray::stop_attack_obj: the attackers (of a kingdom, or all) stop.
+func _stop_attacks(nid: int) -> void:
+	for u in Game.inst.units:
+		if u.target == self and (nid == 0 or u.nation_id == nid):
+			u.stop()
+
+
+## Town::kill_town_people: the owner's people and the killer's lose heart
+## (NationBase::civilian_killed); a Fryhtan killer gains life points.
+func kill_town_people(attacker_nid: int) -> void:
+	if population <= 0:
+		return
+	var g := Game.inst
+	if attacker_nid > 0:
+		var an := g.nation(attacker_nid)
+		if an:
+			an.change_all_people_loyalty(-2.0, race)
+			an.change_reputation(-1.0)
+			if an.is_fryhtan:
+				an.live_points += Defs.CITIZEN_COMBAT_LEVEL * 2.0 * 2.0
+	population -= 1
+	_check_empty()
 
 
 func _check_empty() -> void:

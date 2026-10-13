@@ -129,6 +129,18 @@ func refund_expense(v: float, kind: String) -> void:
 	expense_by[kind] = expense_by.get(kind, 0.0) - v
 
 
+## NationBase::change_all_people_loyalty: the kingdom's men (of a race, or
+## all) and its towns of that race.
+func change_all_people_loyalty(change: float, of_race := "") -> void:
+	var g := Game.inst
+	for u in g.units:
+		if u.nation_id == id and not u.dead and u != king and u.is_human() and (of_race == "" or u.race == of_race):
+			u.loyalty = clampf(u.loyalty + change, 0.0, 100.0)
+	for t in g.towns:
+		if t.nation_id == id and not t.dead and (of_race == "" or t.race == of_race):
+			t.loyalty = clampf(t.loyalty + change, 0.0, 100.0)
+
+
 func new_year() -> void:
 	last_import_year = import_year
 	import_year = {}

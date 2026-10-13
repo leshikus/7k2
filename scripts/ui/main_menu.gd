@@ -503,7 +503,7 @@ func _on_loaded() -> void:
 	scenarios = ScenarioFile.list_premade()
 	scn_opt.clear()
 	for s in scenarios:
-		scn_opt.add_item("%s  (%s)" % [s["name"], ("difficulty %d" % s["difficulty"]) if s["source"] == "original" else "community"])
+		scn_opt.add_item("%s  (%s)" % [s["name"], ("difficulty %d" % s["difficulty"]) if s["source"] == "original" else s["source"]])
 	scn_opt.get_parent().visible = not scenarios.is_empty()
 	scn_text.text = ""
 

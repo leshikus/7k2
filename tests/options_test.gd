@@ -52,7 +52,8 @@ func _ready() -> void:
 	g.sim_frame()
 	check(g.unit_paths(1).is_empty(), "attackers' paths are hidden without the Japanese blessing")
 	var base := g.spawn_firm("BASE", p.id, "JAPANESE", g._place_near(home.footprint(), 4, 4, 12), true)
-	base.worker_from[home] = 5            # worshippers
+	for k in 5:
+		base.worker_towns.append(home)     # worshippers
 	var red := g.unit_paths(1).filter(func(x): return x[1])
 	check(red.size() == 1 and red[0][0].size() >= 2, "with worshippers at a Japanese Seat of Power, an attacker's path shows in red")
 	check(g.unit_paths(2).any(func(x): return x[1]), "on the world map too")

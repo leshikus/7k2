@@ -54,6 +54,7 @@ static func list_premade() -> Array:
 	if Assets.install_path != "":
 		out.append_array(_list_dir(Assets.install_path.path_join("Scenario").path_join("Premade"), "original"))
 	var extra := _list_dir(ProjectSettings.globalize_path("res://scenario"), "community")
+	extra.append_array(SaveGame.list_scenarios("res://scenario", "new"))
 	extra.sort_custom(func(a, b): return a["name"].to_lower() < b["name"].to_lower())
 	out.sort_custom(func(a, b): return a["name"] < b["name"])
 	out.append_array(extra)

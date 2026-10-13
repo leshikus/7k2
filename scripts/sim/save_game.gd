@@ -47,18 +47,19 @@ static func save_scenario(g: Game, name: String, text: String) -> String:
 	return path if save_path(g, path, {"scenario_name": name, "scenario_text": text}) else ""
 
 
-static func list_scenarios() -> Array:
+## Scenarios made in the editor (user://scenarios), or shipped with the game.
+static func list_scenarios(dir_path := SCENARIO_DIR, source := "yours") -> Array:
 	var out: Array = []
-	var dir := DirAccess.open(SCENARIO_DIR)
+	var dir := DirAccess.open(dir_path)
 	if dir == null:
 		return out
 	for f in dir.get_files():
 		if f.get_extension() != "json":
 			continue
-		var path := SCENARIO_DIR.path_join(f)
+		var path := dir_path.path_join(f)
 		var d := _read(path)
 		out.append({"path": ProjectSettings.globalize_path(path), "name": d.get("scenario_name", f.get_basename()),
-			"text": d.get("scenario_text", ""), "difficulty": 0, "source": "yours"})
+			"text": d.get("scenario_text", ""), "difficulty": 0, "source": source})
 	return out
 
 
@@ -154,7 +155,7 @@ static func _town(t: Town) -> Dictionary:
 	return {
 		"id": t.obj_id, "name": t.town_name, "race": t.race, "nation": t.nation_id, "x1": t.x1, "y1": t.y1,
 		"population": t.population, "loyalty": t.loyalty, "target_loyalty": t.target_loyalty,
-		"resistance": _int_keys_to_str(t.resistance), "base_resistance": t.base_resistance, "join_min": t.join_min_rating, "target_resistance": _int_keys_to_str(t.target_resistance),
+		"resistance": _int_keys_to_str(t.resistance), "base_resistance": t.base_resistance, "join_min": t.join_min_rating, "town_def": [t.received_hits, t.last_attack_nation, t.town_combat_level, t.repair_wall], "target_resistance": _int_keys_to_str(t.target_resistance),
 		"qol": t.quality_of_life, "bonus_loyalty": t.bonus_loyalty, "growth": t.population_growth,
 		"tax_penalty": t.tax_penalty, "auto_tax": t.auto_tax_loyalty, "auto_grant": t.auto_grant_loyalty, "recruit_penalty": t.recruit_penalty, "grant_penalty": t.grant_penalty,
 		"last_rebel_day": t.last_rebel_day,
@@ -172,7 +173,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
-		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress],
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "repair": f.repair, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress],
 	}
 
 
@@ -361,6 +362,11 @@ static func load_path(g: Game, path: String) -> String:
 		t.resistance = _str_keys_to_int(td["resistance"])
 		t.base_resistance = float(td.get("base_resistance", 70.0))
 		t.join_min_rating = int(td.get("join_min", -1))
+		var tdf: Array = td.get("town_def", [0.0, 0, 0, false])
+		t.received_hits = float(tdf[0])
+		t.last_attack_nation = int(tdf[1])
+		t.town_combat_level = int(tdf[2])
+		t.repair_wall = bool(tdf[3])
 		t.target_resistance = _str_keys_to_int(td["target_resistance"])
 		t.quality_of_life = int(td["qol"])
 		t.bonus_loyalty = float(td["bonus_loyalty"])
@@ -414,6 +420,7 @@ static func load_path(g: Game, path: String) -> String:
 		var ra: Array = fd.get("rally", [-1, -1])
 		f.rally = Vector2i(int(ra[0]), int(ra[1]))
 		f.needed_workers = int(fd.get("needed_workers", f.needed_workers))
+		f.repair = bool(fd.get("repair", false))
 		f.raws = fd.get("raws", {})
 		f.demand = fd.get("demand", {})
 		f.backup = fd.get("backup", {})

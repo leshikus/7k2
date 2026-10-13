@@ -255,7 +255,7 @@ static func load_from_assets() -> void:
 	for f in Assets.table("FIRM"):
 		firm_types[f["CODE"]] = {
 			"code": f["CODE"], "name": f["NAME"], "hp": maxi(100, f["HITPOINTS"].to_int()),
-			"cost": f["SETUP_COST"].to_int(), "year_cost": f["YEAR_COST"].to_int(),
+			"cost": f["SETUP_COST"].to_int(), "year_cost": f["YEAR_COST"].to_int(), "live_cost": f["SETUP_LIVE"].to_int(),
 			"overseer": f["OVERTITLE"], "worker": f["WORKTITLE"],
 		}
 	for m in Assets.table("MONSTER"):

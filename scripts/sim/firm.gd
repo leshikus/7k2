@@ -94,6 +94,7 @@ var archers := 0                    # fort: FirmFort::current_archer_count
 var target_archers := 0             # FirmFort::target_archer_count
 var archer_progress := 0            # FirmFort::train_archer_progress (days)
 var _archer_fired: Array = []       # FirmFort::last_archer_fire_frame
+var repair := false                 # Firm::repair_flag: repairs ordered
 var rally := Vector2i(-1, -1)       # where the units it makes go (Firm::rally_dest)
 
 var anim_index := 0
@@ -319,6 +320,29 @@ func release_unit(u: Unit, attack_target: GameObj = null) -> void:
 	if attack_target:
 		u.home_firm = self
 		u.order_attack(attack_target)
+
+
+## Firm::process_repair: when ordered, a point a day at the building's cost
+## (and life points for a Fryhtan one), not while under attack.
+func _process_repair() -> void:
+	if not repair or hp >= max_hp or Game.inst.frame - last_attacked_frame <= Defs.FRAMES_PER_DAY:
+		return
+	var n := nation()
+	if n:
+		var cost := float(ftype.get("cost", 0)) * 1.0 / maxf(1.0, max_hp)
+		var live := float(ftype.get("live_cost", 0)) * 1.0 / maxf(1.0, max_hp)
+		if n.cash < cost or n.live_points < live:
+			return
+		n.add_cash(-cost, "Construction")
+		n.live_points -= live
+	hp += 1.0
+	if hp >= max_hp:
+		hp = max_hp
+		repair = false
+
+
+func set_repair(on: bool) -> void:
+	repair = on
 
 
 ## The building changes hands (Firm::change_nation): its men serve the new
@@ -578,8 +602,8 @@ func next_day(day: int) -> void:
 			if hp <= 0.0:
 				die(null)
 				return
-	if not unpaid and hp < max_hp and Game.inst.frame - last_attacked_frame > 200:
-		hp = minf(max_hp, hp + max_hp * 0.002)
+	if not unpaid:
+		_process_repair()
 	match code:
 		"CAMP", "FORT":
 			_train()
