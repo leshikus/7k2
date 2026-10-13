@@ -53,6 +53,17 @@ func open() -> void:
 		refresh()
 
 
+## A report hotkey: open on that page, or close when it is already showing.
+func show_tab(name: String) -> void:
+	var i := TABS.find(name)
+	if visible and tabs.current_tab == i:
+		visible = false
+		return
+	visible = true
+	tabs.current_tab = i
+	refresh()
+
+
 func _process(delta: float) -> void:
 	if not visible or game == null:
 		return

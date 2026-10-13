@@ -26,7 +26,7 @@ const BUTTONS := {
 	"BUILD": ["Build..."], "PROMOTE": ["Promote to General"], "F_PATROL": ["Send out brood"],
 	"F_RETCMP": ["Return"], "F_PROMOT": ["Promote to General"], "F_GRANT": ["Take over"],
 	"HIRECARA": ["Hire caravan"], "S_TRAIN": ["Train "], "MAKEWEAP": ["Catapult", "Ballista", "Spitfire", "Cannon", "Porcupine", "Unicorn", "Mega"],
-	"GDINVOKE": ["Invoke Greater Being"], "TRAIN-C": ["Train spy"], "TRAIN-I": ["Train spy"], "TRAIN-S": ["Train spy"],
+	"GDINVOKE": ["Invoke Greater Being"], "BLESS": ["Special Blessing"], "CARACOPY": ["Clone caravan"], "GB-B1": ["Special Blessing"], "TRAIN-C": ["Train spy"], "TRAIN-I": ["Train spy"], "TRAIN-S": ["Train spy"],
 	"SPYNOTI0": ["Disguise"], "SPYNOTI1": ["Disguise", "Camouflage"], "SPYMENU": ["Mission", "Bribe", "Offer", "Assassinate", "Steal", "Incident", "Secret", "Recall"],
 	"CHG-MISS": ["Mission"],
 }
@@ -178,7 +178,7 @@ func _cond(n: int) -> Array:
 				1: return ["and", ["sel_firm", 2], ["continue"]]
 				2: return ["or", ["button", "TRAIN"], ["sel_full_fort"]]
 				3, 4, 7, 8, 11, 13, 16, 19, 22: return ["continue"]
-				5: return ["and", ["sel_firm", 2], ["continue"]]
+				5: return ["and", ["sel_firm", 2], ["and", ["firm_manned", 2], ["continue"]]]
 				6: return ["button", "PATROL"]
 				9: return ["and", ["continue"], ["sel_unit"]]
 				10: return ["or", ["button", "RETCAMP"], ["any_return"]]
@@ -230,11 +230,11 @@ func _cond(n: int) -> Array:
 				7: return ["sel_town_with_general"]
 				11: return ["sel_any_town"]
 				14: return ["diplomacy"]
-				15: return ["continue"]          # a trade proposal: this port's diplomacy has no trade treaties
+				15: return ["talk", "TRADE"]     # custom_detect_talk_message_id(TALK_PROPOSE_TRADE_TREATY)
 				17: return ["button", "HIRECARA"]
 				18, 21, 25: return ["sel_caravan"]
 				20: return ["foreign_caravan"]
-				26: return ["continue"]          # cloning a caravan
+				26: return ["button", "CARACOPY"]
 				_: return ["never"]
 		9:
 			match n:
@@ -252,7 +252,7 @@ func _cond(n: int) -> Array:
 				16, 20: return ["sel_type", "BASE"]
 				17: return ["button", "GDINVOKE"]
 				18: return ["sel_god"]
-				21: return ["continue"]          # the special blessing works by itself here
+				21: return ["button", "BLESS"]
 				23, 26: return ["sel_type", "INN"]
 				29: return ["sel_type", "SPY"]
 				30: return ["or", ["button", "TRAIN-C"], ["college_busy"]]
@@ -285,6 +285,12 @@ func _eval(c: Array) -> bool:
 			return false
 		"continue":
 			return continue_pressed
+		"firm_manned":
+			# the fort selected has soldiers in it (soldier_count > 0)
+			var f = _target(c[1])
+			return f is Firm and not f.soldiers.is_empty()
+		"talk":
+			return g.talk_log.any(func(m): return m["from"] == p.id and m["id"] == c[1])
 		"button":
 			for want in BUTTONS.get(c[1], [c[1]]):
 				for got in pressed:

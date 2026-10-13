@@ -523,8 +523,18 @@ func _fill_diplomacy() -> void:
 			ob.select(na.relation(nb.id))
 			ob.item_selected.connect(func(i):
 				na.relations[nb.id] = i
-				nb.relations[na.id] = i)
+				nb.relations[na.id] = i
+				if i == Defs.Relation.WAR or i == Defs.Relation.ALLIANCE:
+					Diplomacy.set_trade(game, na.id, nb.id, i == Defs.Relation.ALLIANCE)
+				_fill_diplomacy.call_deferred())
 			hb.add_child(ob)
+			var tt := CheckBox.new()
+			tt.text = "Trade"
+			tt.tooltip_text = "A trade treaty: their caravans may trade at each other's markets."
+			tt.button_pressed = Diplomacy.has_trade(na, nb.id)
+			tt.disabled = na.relation(nb.id) == Defs.Relation.WAR
+			tt.toggled.connect(func(on): Diplomacy.set_trade(game, na.id, nb.id, on))
+			hb.add_child(tt)
 
 
 # ------------------------------------------------------------------ goals ---

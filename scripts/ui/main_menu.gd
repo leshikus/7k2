@@ -22,6 +22,7 @@ var cash_opt: OptionButton
 var towns_opt: OptionButton
 var lairs_opt: OptionButton
 var fryhtan_opt: OptionButton
+var events_opt: OptionButton
 var seed_edit: LineEdit
 var name_edit: LineEdit
 var reveal_check: CheckBox
@@ -113,6 +114,7 @@ func _ready() -> void:
 	towns_opt = _options(grid, "Independent towns", ["Few", "Normal", "Many"], 1)
 	lairs_opt = _options(grid, "Fryhtan lairs", ["Few", "Normal", "Many"], 1)
 	fryhtan_opt = _options(grid, "Fryhtan kingdoms", ["None", "One", "Two"], 1)
+	events_opt = _options(grid, "Random events", RandomEvents.NAMES, 1)
 	seed_edit = _row(grid, "Map seed", LineEdit.new())
 	seed_edit.text = str(randi() % 100000)
 	reveal_check = CheckBox.new()
@@ -270,6 +272,10 @@ func _ready() -> void:
 			"cash": [1500, 3000, 6000][cash_opt.selected], "indep_towns": 0 if towns_opt.selected == 0 else maxi(3, int(sizes[size_opt.selected] * sizes[size_opt.selected] / 1000.0)),
 			"lairs": 0 if lairs_opt.selected == 0 else 2, "fryhtan_count": fryhtan_opt.selected, "reveal": true}))
 	vb.add_child(ed)
+	var cred := Button.new()
+	cred.text = "Credits"
+	cred.pressed.connect(_show_credits)
+	vb.add_child(cred)
 	var hall := Button.new()
 	hall.text = "Hall of Fame"
 	hall.pressed.connect(_show_hall)
@@ -285,6 +291,45 @@ func _ready() -> void:
 	note.add_theme_color_override("font_color", Color(0.65, 0.6, 0.5))
 	vb.add_child(note)
 	_load_data()
+
+
+## The original's credits (ogamcred.cpp): CREDIT.RES over Credits1.jpg.
+func _show_credits() -> void:
+	# The HD release's index offsets are stale (they cut names in half), so
+	# take the whole text from the first entry to the end of the file.
+	var d := FileAccess.get_file_as_bytes(SK2Files.find_file(Assets.install_path.path_join("Resource"), "CREDIT.RES"))
+	var txt := ""
+	if d.size() > 15:
+		for ch in d.slice(d.decode_u32(11)):
+			if ch != 13 and ch != 11:
+				txt += char(ch)
+	var layer := Control.new()
+	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(layer)
+	var bg := TextureRect.new()
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	bg.texture = Assets.image("Credits1.jpg")
+	layer.add_child(bg)
+	var panel := PanelContainer.new()
+	panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	panel.offset_left = -320
+	panel.offset_right = 320
+	panel.offset_top = -330
+	panel.offset_bottom = 330
+	layer.add_child(panel)
+	var vb := VBoxContainer.new()
+	panel.add_child(vb)
+	var r := RichTextLabel.new()
+	r.text = txt if txt.strip_edges() != "" else "Seven Kingdoms II: The Fryhtan Wars, by Enlight Software."
+	r.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	r.custom_minimum_size = Vector2(620, 600)
+	vb.add_child(r)
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(layer.queue_free)
+	vb.add_child(close)
 
 
 func _show_hall() -> void:
@@ -347,6 +392,7 @@ func _start_network() -> void:
 		"indep_towns": maxi(3, int(area / 1000.0 * [0.6, 1.0, 1.6][towns_opt.selected])),
 		"lairs": maxi(1, int(area / 2600.0 * [0.5, 1.0, 1.8][lairs_opt.selected])),
 		"reveal": reveal_check.button_pressed,
+		"random_events": events_opt.selected,
 		"fryhtan_count": fryhtan_opt.selected,
 	})
 
@@ -477,5 +523,6 @@ func _start() -> void:
 		"lairs": maxi(1, int(area / 2600.0 * lairs_mul)),
 		"reveal": reveal_check.button_pressed or spectate_check.button_pressed,
 		"fryhtan_count": fryhtan_opt.selected,
+		"random_events": events_opt.selected,
 		"autoplay": spectate_check.button_pressed,
 	})

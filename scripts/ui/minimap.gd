@@ -73,6 +73,9 @@ func _xf() -> Transform2D:
 	return Transform2D(Vector2(s, s * 0.5), Vector2(-s, s * 0.5), origin)
 
 
+var _phase := 0
+
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.05, 0.07))
 	if game == null:
@@ -89,6 +92,15 @@ func _draw() -> void:
 	for u in game.units:
 		if u.visible and not u.dead and u.inside_firm == null:
 			draw_rect(Rect2(u.loc, Vector2(1.5, 1.5)), u.nation_color().lightened(0.3))
+	# WarPointArray::draw_dot: a flashing cross over each zone under attack
+	_phase = (_phase + 1) % 16
+	if _phase % 2 == 0 and not game.war_points.is_empty():
+		var col: Color = [Color(1, 0.2, 0.1), Color(1, 0.5, 0.1), Color(1, 0.8, 0.2), Color(0, 0, 0, 0)][(_phase / 2) % 4]
+		for z in game.war_points:
+			var o := Vector2(z) * Game.WAR_ZONE
+			var e := float(Game.WAR_ZONE)
+			draw_line(o, o + Vector2(e, e), col, 1.5)
+			draw_line(o + Vector2(e, 0), o + Vector2(0, e), col, 1.5)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 	if camera:
 		var vp := get_viewport_rect().size / camera.zoom

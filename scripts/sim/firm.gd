@@ -745,7 +745,14 @@ func hire_hero(i: int) -> Unit:
 func _pray() -> void:
 	var n := nation()
 	if n:
-		n.prayer_points = minf(400.0, n.prayer_points + workers() * 0.03)
+		# fast build (the tutorials): FirmBase::next_day adds the full productivity a day
+		var rate := productivity() if Game.inst.fast_build and nation_id == Game.inst.player_id else workers() * 0.03
+		n.prayer_points = minf(Wishes.FULL, n.prayer_points + rate)
+
+
+## The Special Blessing (FirmBase::invoke_random_effect).
+func bless() -> void:
+	Wishes.invoke(self)
 
 
 func god_cost() -> float:

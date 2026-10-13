@@ -417,6 +417,8 @@ func _military(day: int) -> void:
 		for o in g.nations:
 			if o.id == n.id or not o.alive or n.relation(o.id) >= Defs.Relation.PEACE:
 				continue
+			if Diplomacy.has_trade(n, o.id) and Diplomacy.ai_rel(n, o.id) >= 60:
+				continue      # a valued trading partner (think_declare_war wants a poor relation)
 			var s := g.military_strength(o.id)
 			if s < weakest_s:
 				weakest_s = s
@@ -566,15 +568,11 @@ func _use_gods() -> void:
 				u.cast_power()
 
 
+## Nation::think_diplomacy about once a month: cease-fires, treaties, food
+## purchases and technology exchanges (Diplomacy.ai_think).
 func _diplomacy(day: int) -> void:
-	# make peace with stronger enemies after a long war
-	for o in g.nations:
-		if o.id == n.id or not o.alive or n.relation(o.id) != Defs.Relation.WAR or o.is_player:
-			continue
-		if day - war_start_day > 900 and g.rng.randf() < 0.05:
-			g.make_peace(n.id, o.id)
-			if war_target == o.id:
-				war_target = 0
+	if (day / 7 + n.id) % 4 == 0:
+		Diplomacy.ai_think(g, n)
 
 
 func accepts_peace(from: int) -> bool:

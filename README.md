@@ -108,8 +108,22 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   news so far.
 * **Hall of Fame**: a finished game's total score times the difficulty rating of
   its settings; the ten best human and Fryhtan rulers are listed on the start screen.
-* **Diplomacy:** declare war or propose peace. Attacking a kingdom you are not at
-  war with requires Ctrl+right-click and starts a war.
+* **Diplomacy:** the original's 19 messages: trade, friendly and alliance treaties
+  (and ending them), cease-fires, declarations of war, requests for military aid,
+  embargoes or war on a third kingdom, buying food, tribute and aid offered or
+  demanded, technology exchanges, buying a kingdom outright, and surrender. Computer
+  kingdoms answer by the original's rules and send their own proposals, which wait
+  in the Diplomacy window for your answer. Caravans trade only with kingdoms you
+  have a trade treaty with. Attacking a kingdom you are not at war with requires
+  Ctrl+right-click and starts a war.
+* **Special Blessing**: with full prayer points the Seat of Power grants one of 23
+  random wishes, as in the original.
+* **Random events** (start screen setting): plagues, accidents, breakthroughs, new
+  arrivals and finds every few hundred days.
+* **Rebellions**: the malcontents of a disloyal town walk out as a rebel band that
+  attacks your towns and buildings or settles elsewhere.
+* **Caravans**: choose a caravan's destination market and the goods it loads, or
+  clone it onto the same route.
 * **Network games** for up to seven players. One player hosts from the start screen:
   "Network game", Host, with the map settings above. The others enter the host's
   address and press Join. Each picks a nationality, Fryhtans included. The host
@@ -136,7 +150,8 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | Ctrl+1–9, 1–9 | Assign / recall unit groups |
 | H | Centre on your king |
 | N | Toggle sound effects |
-| F5 / F9 | Quicksave / quickload |
+| Ctrl+S / F9 | Quicksave / quickload |
+| F1–F8 | Reports: Kingdoms, Towns, Economy, Trade, Military, Technology, Espionage, Ranking |
 | M | Toggle music |
 | Enter | Message to the other players (network game) |
 | T | Show or hide the tutorial box |
@@ -170,15 +185,18 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 * Caravans trading goods between your markets and those of friendly kingdoms.
 * Town walls and village archers.
 * Seasonal rain and thunderstorms that slow units and strike with lightning.
-* Mountains, boulders and lakes from the original rock set; building
-  explosions, fires on damaged buildings and rubble; sound effects.
+* Mountains, boulders and lakes from the original rock set; trees that grow and
+  thin out; building explosions, fires on damaged buildings and rubble; ground
+  fires from fire bombs; blast damage around heavy shells; sound effects.
+* The original's help texts on action buttons, its credits, and battle markers on
+  the minimap.
 * Towns (population growth, loyalty, resistance, taxes, grants, recruiting,
   rebellion, surrender, militia defenders); camps and forts (garrisons, training,
   influence, sallying out); mine, factory and market production; Tower of Science,
   War Factory, Inn and Seat of Power.
 * Combat with melee and ranged attacks, projectiles, experience, death animations,
   armour and technology bonuses.
-* Save and load (F5/F9, pause menu, yearly autosave, "continue" on the start screen).
+* Save and load (Ctrl+S/F9, pause menu, yearly autosave, "continue" on the start screen).
 * The original game's 10 premade scenarios, read from your install, playable or
   watched as **AI vs AI** (also available for random maps), with their goals: kill
   or protect a named unit, conquer a town, reach a population, economy or military
@@ -189,8 +207,13 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 
 ## Differences from the original
 
-Every part of the original game is now in place. Balance values are adapted where
-this simplified simulation differs from the original; the code notes each one.
+Every module of the original game has a counterpart here. Some are simplified, and
+the code notes each one: wagons of settlers are plain villagers; hit points do not
+grow with combat level; kingdoms may talk from the start (the original needs
+contact); trade treaties in the premade scenario files are assumed between
+friendly kingdoms; the help file's screen-area entries (for the original's
+800x600 layout) are replaced by this interface's tooltips. Balance values are
+adapted where the simulation differs.
 Network play uses Godot's ENet (TCP/UDP over the internet or a LAN) instead of the
 original's DirectPlay; the original's IPX and modem connections are gone.
 

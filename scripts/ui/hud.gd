@@ -7,6 +7,7 @@ signal build_requested(code: String)
 signal item_target_requested(u: Unit)
 signal spell_target_requested(f: Firm, spell: String)
 signal rally_requested(f: Firm)
+signal caravan_route_requested(u: Unit)
 
 var inspected_treasure: Treasure = null   # a scroll or item clicked on the map
 signal center_on(loc: Vector2)
@@ -138,6 +139,7 @@ func _build_ui() -> void:
 	hb.add_child(spy_btn)
 	var rep_btn := Button.new()
 	rep_btn.text = "Reports"
+	rep_btn.tooltip_text = "Kingdoms F1, Towns F2, Economy F3, Trade F4, Military F5, Technology F6, Espionage F7, Ranking F8"
 	rep_btn.pressed.connect(func(): reports.open())
 	hb.add_child(rep_btn)
 	var menu := Button.new()
@@ -434,6 +436,25 @@ func _fill_diplomacy() -> void:
 	for c in diplo_list.get_children():
 		c.queue_free()
 	var p := game.player()
+	# messages waiting for our answer (TalkRes: the reply choices)
+	for m in game.talks.filter(func(x): return x["to"] == p.id):
+		var row0 := HBoxContainer.new()
+		diplo_list.add_child(row0)
+		var ml := Label.new()
+		ml.text = Diplomacy.describe(game, m)
+		ml.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ml.custom_minimum_size = Vector2(380, 0)
+		ml.add_theme_color_override("font_color", Color(1, 0.85, 0.45))
+		row0.add_child(ml)
+		for yes in [true, false]:
+			var rb := Button.new()
+			rb.text = "Accept" if yes else "Reject"
+			var mm: Dictionary = m
+			var y: bool = yes
+			rb.pressed.connect(func():
+				_do(game, "talk_reply", [mm["from"], mm["to"], mm["id"], y])
+				_fill_diplomacy.call_deferred())
+			row0.add_child(rb)
 	for n in game.nations:
 		if n.id == p.id:
 			continue
@@ -445,14 +466,17 @@ func _fill_diplomacy() -> void:
 		l.scroll_active = false
 		l.custom_minimum_size = Vector2(380, 0)
 		var status: Variant = "[color=#888]destroyed[/color]" if not n.alive else Defs.RELATION_NAMES[p.relation(n.id)]
+		if n.alive and Diplomacy.has_trade(p, n.id):
+			status = str(status) + ", trade treaty"
 		var ratio := game.military_strength(n.id) / maxf(1.0, game.military_strength(p.id))
 		var strength := "weaker" if ratio < 0.8 else ("stronger" if ratio > 1.25 else "similar")
-		l.text = "[color=#%s]■[/color] [b]%s[/b] — %s\n   Reputation %d, army %s than yours" % [n.color.to_html(false), n.name, status, int(n.reputation), strength]
+		l.text = "[color=#%s]■[/color] [b]%s[/b] — %s
+   Reputation %d, army %s than yours, cash $%d, food %d" % [n.color.to_html(false), n.name, status, int(n.reputation), strength, int(n.cash), int(n.food)]
 		row.add_child(l)
 		if not n.alive:
 			continue
 		var rel := p.relation(n.id)
-		if game.peace_offers.get(p.id, {}).has(n.id) and rel == Defs.Relation.WAR or game.peace_offers.get(p.id, {}).has(n.id) and rel == Defs.Relation.NEUTRAL:
+		if game.peace_offers.get(p.id, {}).has(n.id) and rel <= Defs.Relation.NEUTRAL:
 			var acc := Button.new()
 			acc.text = "Accept peace"
 			var nid3 := n.id
@@ -460,22 +484,75 @@ func _fill_diplomacy() -> void:
 				_do(game, "make_peace", [nid3, p.id])
 				_fill_diplomacy.call_deferred())
 			row.add_child(acc)
-		if rel == Defs.Relation.WAR or rel == Defs.Relation.NEUTRAL:
-			var b := Button.new()
-			b.text = "Propose peace"
-			var nid := n.id
-			b.pressed.connect(func():
-				_do(game, "offer_peace", [p.id, nid])
-				_fill_diplomacy.call_deferred())
-			row.add_child(b)
-		if rel != Defs.Relation.WAR:
+		var talk := MenuButton.new()
+		talk.text = "Send message ▾"
+		talk.flat = false
+		var pm := talk.get_popup()
+		var opts := _talk_options(p, n)
+		for i in opts.size():
+			pm.add_item(opts[i][0], i)
+		talk.disabled = opts.is_empty()
+		var to_id := n.id
+		pm.id_pressed.connect(func(i):
+			var o: Array = opts[i]
+			_do(game, "talk", [p.id, to_id, o[1], o[2], o[3]])
+			_fill_diplomacy.call_deferred())
+		row.add_child(talk)
+		if rel != Defs.Relation.WAR and rel >= Defs.Relation.PEACE:
 			var w := Button.new()
 			w.text = "Declare war"
+			w.tooltip_text = "Breaking a treaty costs reputation."
 			var nid2 := n.id
 			w.pressed.connect(func():
 				_do(game, "declare_war", [p.id, nid2])
 				_fill_diplomacy.call_deferred())
 			row.add_child(w)
+	if not game.talk_log.is_empty():
+		var hist := Label.new()
+		var lines: Array = []
+		for e in game.talk_log.slice(-6):
+			if e["from"] == p.id or e["to"] == p.id:
+				lines.append(Diplomacy.describe(game, e) + ((" — " + e["result"]) if e["result"] != "" else ""))
+		hist.text = "Recent messages:
+" + "
+".join(lines) if not lines.is_empty() else ""
+		hist.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hist.add_theme_color_override("font_color", Color(0.7, 0.7, 0.65))
+		diplo_list.add_child(hist)
+
+
+## The messages the player may send `n` now, as [label, talk id, para1, para2]
+## (TalkRes::add_talk_choice and its sub-menus of amounts, technologies, kingdoms).
+func _talk_options(p: Nation, n: Nation) -> Array:
+	var out: Array = []
+	for id in Diplomacy.TALKS:
+		if not Diplomacy.can_send(game, p.id, n.id, id):
+			continue
+		var label: String = Diplomacy.TALKS[id][0]
+		match id:
+			"GIVE_TRIBUTE", "GIVE_AID", "DEMAND_TRIBUTE", "DEMAND_AID":
+				for amt in Diplomacy.AMOUNTS:
+					if id.begins_with("GIVE") and p.cash < amt:
+						continue
+					out.append(["%s: $%d" % [label, amt], id, amt, 0])
+			"BUY_FOOD":
+				for q in Diplomacy.FOOD_QTY:
+					for pr in Diplomacy.FOOD_PRICES:
+						if p.cash >= q * pr / 10.0:
+							out.append(["%s: %d at $%d per 10" % [label, q, pr], id, q, pr])
+			"EMBARGO", "REQUEST_WAR":
+				for t in Diplomacy.third_parties(game, p.id, n.id, id):
+					out.append(["%s against the %s" % [label, game.nation(t).name], id, t, 0])
+			"EXCHANGE_TECH":
+				for pr in Diplomacy.tech_pairs(p, n):
+					out.append(["%s: our %s for their %s" % [label, Defs.tech_def(pr[0])["name"], Defs.tech_def(pr[1])["name"]], id, pr[0], pr[1]])
+			"REQUEST_SURRENDER":
+				var offer := int(n.cash * 1.25 / 500.0 + 1) * 500
+				if p.cash >= offer:
+					out.append(["%s for $%d" % [label, offer], id, offer, 0])
+			_:
+				out.append([label, id, 0, 0])
+	return out
 
 
 func _on_message(text: String, _loc: Vector2) -> void:
@@ -722,6 +799,11 @@ func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_c
 			tutorial_panel.tutorial.press(text)
 		cb.call()
 		refresh_selection(true))
+	var original := HelpText.for_label(text)
+	if original != "":
+		tip = original + ("
+
+" + tip if tip != "" else "")
 	if tip != "":
 		b.mouse_entered.connect(func(): tooltip_label.text = tip)
 	if right_cb.is_valid():
@@ -829,6 +911,25 @@ func _unit_actions(sel: Array) -> void:
 			_item_actions(u)
 		if u.is_spy:
 			_spy_unit_actions(u)
+		if u.is_caravan:
+			_add_action("Set destination", func(): caravan_route_requested.emit(u), true,
+				"Click a market of yours, or of a kingdom with a trade treaty, for this caravan to trade with.")
+			var dm := u.duplicate_market()
+			_add_action("Clone caravan (%d)" % int(Firm.CARAVAN_COST), func(): _do(u, "duplicate_caravan"), dm != null,
+				"Hire another caravan at its market with the same route and goods.")
+			var kinds: Array = []
+			for m in [u.caravan_home, u.caravan_dest]:
+				if m and is_instance_valid(m):
+					for k in m.goods:
+						if not k in kinds:
+							kinds.append(k)
+			for k in u.pick_up + u.cargo.keys():
+				if not k in kinds:
+					kinds.append(k)
+			for k in kinds:
+				var gk: String = k
+				_add_action(("☑ " if gk in u.pick_up else "☐ ") + gk, func(): _do(u, "toggle_pick_up", [gk]), true,
+					"Goods this caravan loads. With none ticked it carries whatever the other market lacks.")
 		if u.sprite_code == "EXPCART":
 			_add_action("Detonate", func(): _do(u, "explode"), true, "Blow the Porcupine up where it stands, hurting everything next to it.")
 		if u.is_god:
@@ -1208,7 +1309,9 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					s += "  nobody at the moment\n"
 			"BASE":
 				var g: Dictionary = Defs.gods.get(game.player().race, {})
-				s += "Worshippers %d / %d\nPrayer points %d / %d\n" % [f.workers(), Defs.MAX_WORKER, int(game.player().prayer_points), int(f.god_cost())]
+				s += "Worshippers %d / %d\nPrayer points %d (Greater Being %d, Special Blessing %d)\n" % [f.workers(), Defs.MAX_WORKER, int(game.player().prayer_points), int(f.god_cost()), int(Wishes.FULL)]
+				if f.has_meta("wish_text"):
+					s += "Blessing: %s\n" % f.get_meta("wish_text")
 				if not g.is_empty():
 					s += "Greater Being: %s\n" % Defs.unit_types.get(g["unit"], {}).get("name", "?")
 					if Defs.GOD_POWERS.has(game.player().race):
@@ -1331,6 +1434,9 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		"BASE":
 			var invoke := func(): _do(f, "invoke_god")
 			_add_action("Invoke Greater Being", invoke, p.prayer_points >= f.god_cost())
+			if Wishes.can_wish(f):
+				_add_action("Special Blessing", func(): _do(f, "bless"), true,
+					"Prayer points are full: receive a random blessing from your Greater Being. Uses up all prayer points.")
 	if f.code in Firm.RALLY_FIRMS:
 		_add_action("Rally point" + (" ✓" if f.rally.x >= 0 else ""), func(): rally_requested.emit(f), true,
 			"Click: choose where the units made here gather. Right-click: clear it.", func(): _do(f, "clear_rally"))

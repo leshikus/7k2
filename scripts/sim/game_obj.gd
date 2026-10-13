@@ -91,6 +91,8 @@ func take_damage(amount: float, attacker: GameObj) -> void:
 				an.kill_monster_score += 0.1
 	last_attacker = attacker
 	last_attacked_frame = Game.inst.frame
+	if nation_id == Game.inst.player_id:
+		Game.inst.add_war_point(center_loc())
 	on_attacked(attacker)
 	if hp <= 0.0:
 		hp = 0.0

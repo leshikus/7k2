@@ -170,6 +170,7 @@ func set_allied(a: int, b: int) -> void:
 	if na and nb:
 		na.relations[b] = Defs.Relation.ALLIANCE
 		nb.relations[a] = Defs.Relation.ALLIANCE
+		Diplomacy.set_trade(g, a, b, true)      # allies are obliged to trade
 
 
 ## Campaign::init_player_resource: the easier the campaign, the richer you are.
@@ -1583,8 +1584,10 @@ func _hero() -> void:
 	u.unit_name = Defs.random_person_name(p.race, g.rng)
 	u.is_hero = true
 	u.rank = Defs.Rank.GENERAL
+	# stage_6_create_hero: combat and leadership 200 to 300 (max 300)
+	u.combat = 200.0 + rnd(100)
 	u.leadership = 100.0
-	u.max_hp *= 3.0
+	u.max_hp *= u.combat / 100.0
 	u.hp = u.max_hp
 	if Items.TABLE.has(Items.LEADER_ITEM):
 		u.item_id = Items.LEADER_ITEM

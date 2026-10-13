@@ -16,6 +16,7 @@ static func difficulty_rating(cfg: Dictionary) -> int:
 	r += int(cfg.get("lairs", 4)) / 2
 	if cfg.get("reveal", false):
 		r -= 15
+	r += int(cfg.get("random_events", 0)) * 2      # Config: score += random_event_frequency * 2
 	return clampi(r, 10, 200)
 
 

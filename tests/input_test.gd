@@ -223,15 +223,27 @@ func _run() -> void:
 	await _frames(2)
 	_check(game.paused, "Space pauses the game")
 
-	# 8. F5 quicksave, F9 quickload
+	# 7b. F3 opens the Economy report, pressing it again closes it
+	var f3 := InputEventKey.new()
+	f3.keycode = KEY_F3
+	f3.pressed = true
+	Input.parse_input_event(f3)
+	await _frames(2)
+	_check(main.hud.reports.visible and main.hud.reports.tabs.current_tab == ReportsWindow.TABS.find("Economy"), "F3 opens the Economy report")
+	Input.parse_input_event(f3)
+	await _frames(2)
+	_check(not main.hud.reports.visible, "F3 again closes it")
+
+	# 8. Ctrl+S quicksave, F9 quickload
 	var units_now: int = main.game.units.size()
 	var day_now: int = main.game.day
 	var f5 := InputEventKey.new()
-	f5.keycode = KEY_F5
+	f5.keycode = KEY_S
+	f5.ctrl_pressed = true
 	f5.pressed = true
 	Input.parse_input_event(f5)
 	await _frames(2)
-	_check(SaveGame.exists("quick"), "F5 writes a quicksave")
+	_check(SaveGame.exists("quick"), "Ctrl+S writes a quicksave")
 	var old_game: Game = main.game
 	var f9 := InputEventKey.new()
 	f9.keycode = KEY_F9

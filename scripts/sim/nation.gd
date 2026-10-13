@@ -38,6 +38,15 @@ var last_income_year := 0.0
 var last_expense_year := 0.0
 var known_gods := {}             # race -> true: Scrolls of Power held (GodInfo::nation_know_array)
 var items_acquired := {}         # item id -> true, for scenario goals
+var trade_treaty := {}            # nation id -> true: caravans may trade there (NationRelation::trade_treaty)
+var ai_rel := {}                  # nation id -> 0..100: how the computer feels about it (ai_relation_level)
+var status_day := {}              # nation id -> day the relation last changed
+var war_count := {}               # nation id -> wars it started on us (started_war_on_us_count)
+var never_until := {}             # "TALK:nation" -> day before which such a message is refused
+var reject_day := {}              # "TALK:nation" -> day our message was last rejected
+var sent_day := {}                # "TALK:nation" -> day we last sent it
+var prefs := {}                   # the computer's personality, 0..100 (pref_*)
+var last_aid_day := -1000         # last military aid received
 var kill_monster_score := 0.0   # Fryhtans slain: 1 a soldier, 5 a general, 20 a king (Unit::die)
 
 var ai: NationAI = null

@@ -51,6 +51,8 @@ var caravan_home: Firm = null     # market the caravan was hired at
 var caravan_dest: Firm = null     # the other market on its route
 var caravan_leg := 0              # 0 heading to dest, 1 heading home
 var cargo := {}                   # goods type -> quantity
+var rebel_id := 0                # member of a rebel band (Unit::unit_mode REBEL)
+var pick_up: Array = []           # goods it loads; empty = what the next stop lacks (CaravanStop::pick_up_type)
 var _caravan_wait := 0
 var frozen_until := -1           # Amaterasu's freeze (frame)
 var waypoints: Array = []       # further places to go after this move (Shift+right-click)
@@ -529,8 +531,7 @@ func _caravan_think() -> void:
 func _can_trade_with(f: Firm) -> bool:
 	if f.nation_id == nation_id:
 		return true
-	var n := nation()
-	return n != null and n.relation(f.nation_id) >= Defs.Relation.PEACE
+	return Diplomacy.has_trade(nation(), f.nation_id)
 
 
 ## Unload everything into `m`, then load what the next stop lacks.
@@ -556,13 +557,59 @@ func _trade_at(m: Firm, next_stop: Firm) -> void:
 	for gtype in m.goods:
 		if room <= 0:
 			break
+		if not pick_up.is_empty() and not gtype in pick_up:
+			continue
 		var have: float = m.goods[gtype]
 		var there: float = next_stop.goods.get(gtype, 0.0)
-		if have > 60.0 and there < 150.0:
+		if have > 60.0 and (there < 150.0 or not pick_up.is_empty()):
 			var take := minf(room, have - 30.0)
 			m.goods[gtype] = have - take
 			cargo[gtype] = float(cargo.get(gtype, 0.0)) + take
 			room -= take
+
+
+## The player's choice of the caravan's other stop (UnitCaravan::set_stop): a
+## market of its own kingdom or of one with a trade treaty.
+func set_caravan_dest(m: Firm) -> bool:
+	if not is_caravan or m == null or m.dead or m.code != "MARKET" or m.under_construction or m == caravan_home:
+		return false
+	if not _can_trade_with(m):
+		return false
+	caravan_dest = m
+	caravan_leg = 0
+	_caravan_wait = 0
+	return true
+
+
+## Pick-up selection: toggles one kind of goods; none chosen = automatic.
+func toggle_pick_up(gtype: String) -> void:
+	if gtype in pick_up:
+		pick_up.erase(gtype)
+	else:
+		pick_up.append(gtype)
+
+
+## UnitCaravan::can_duplicate_caravan: its market (or a stop's) can hire one more.
+func duplicate_market() -> Firm:
+	for m in [caravan_home, caravan_dest]:
+		if m and is_instance_valid(m) and not m.dead and m.nation_id == nation_id and m.code == "MARKET" 				and Game.inst.caravans_of(m) < Firm.MAX_CARAVANS and nation() and nation().can_afford(Firm.CARAVAN_COST):
+			return m
+	return null
+
+
+## UnitCaravan::duplicate_caravan: a new caravan on the same route with the
+## same goods.
+func duplicate_caravan() -> Unit:
+	var m := duplicate_market()
+	if m == null:
+		return null
+	var c := m.hire_caravan()
+	if c:
+		var other: Firm = caravan_dest if m == caravan_home else caravan_home
+		if other and is_instance_valid(other):
+			c.set_caravan_dest(other)
+		c.pick_up = pick_up.duplicate()
+	return c
 
 
 static func _nonzero(d: Dictionary) -> Dictionary:
@@ -713,7 +760,8 @@ func _attack_anim() -> void:
 func roll_damage(att: Dictionary) -> float:
 	var rng := Game.inst.rng
 	var dmg := float(att["damage"]) + rng.randi_range(0, 2)
-	dmg += float(att["pierce"]) * rng.randi_range(0, int(minf(combat_level(), Defs.MAX_COMBAT_TRAIN))) / 100.0
+	# heroes may exceed the trained maximum (Skill::set_max_combat_level 300)
+	dmg += float(att["pierce"]) * rng.randi_range(0, int(minf(combat_level(), 300.0 if is_hero else Defs.MAX_COMBAT_TRAIN))) / 100.0
 	var extra := item_ability(Items.Ability.ARROW_DAMAGE if att["range"] > 1 else Items.Ability.MELEE_DAMAGE)
 	if extra > 0:
 		dmg += extra
@@ -737,9 +785,13 @@ func _deliver_hit() -> void:
 	if visible:
 		Game.inst.play_sound("S", sprite_code, att["action"], center_loc())
 	if att["range"] > 1 and att["bullet"] != "" and Assets.has_sprite(att["bullet"]):
-		Game.inst.spawn_bullet(self, target, att["bullet"], att["bullet_speed"], dmg)
+		var b := Game.inst.spawn_bullet(self, target, att["bullet"], att["bullet_speed"], dmg)
+		b.radius = att.get("radius", 0)
+		b.fire = att.get("fire", 0)
 	else:
 		target.take_damage(dmg, self)
+		if att.get("fire", 0) > 0:
+			Game.inst.set_fire(target.cell() if target is Unit else Vector2i(target.center_loc()), att["fire"])
 	gain_experience()
 	attack_cooldown = int(att["delay"]) * 2
 	# Unit::set_remain_attack_delay: Raptorsclaw strikes sooner
@@ -767,7 +819,7 @@ func _item_strike(dmg: float) -> void:
 
 func gain_experience() -> void:
 	if is_human() and combat < Defs.MAX_COMBAT_TRAIN:
-		combat = minf(Defs.MAX_COMBAT_TRAIN, combat + 0.06)
+		combat = maxf(combat, minf(Defs.MAX_COMBAT_TRAIN, combat + 0.06))
 
 
 func _do_enter() -> bool:

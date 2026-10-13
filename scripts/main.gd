@@ -23,6 +23,7 @@ var build_code := ""
 var build_race := ""
 var _editor_tool := {}         # scenario editor: what a left click places
 var _rally_firm: Firm = null   # building waiting for its rally point click
+var _route_caravan: Unit = null  # caravan waiting for the click on its destination market
 var _spell_firm: Firm = null   # spell building waiting for its target click
 var _spell_code := ""
 var _spell_unit: Unit = null    # teleport: the unit picked by the first click
@@ -76,6 +77,8 @@ func _ready() -> void:
 			_start_campaign_battle()
 		else:
 			_show_campaign()
+	if "--credits" in args and menu:
+		menu._show_credits.call_deferred()
 	# --editor: the scenario editor on a new map
 	if "--editor" in args and Assets.ready_ok:
 		Defs.load_from_assets()
@@ -621,6 +624,9 @@ func _attach_game() -> void:
 	hud.item_target_requested.connect(func(u):
 		_item_user = u
 		game.notify("Click the target for the %s; right-click to cancel." % Items.item_name(u.item_id), Vector2(-1, -1)))
+	hud.caravan_route_requested.connect(func(u):
+		_route_caravan = u
+		game.notify("Click the market this caravan should trade with; right-click to cancel.", Vector2(-1, -1)))
 	hud.rally_requested.connect(func(f):
 		_rally_firm = f
 		game.notify("Click where the units made here should gather; right-click to cancel.", Vector2(-1, -1)))
@@ -937,6 +943,13 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _spell_firm != null:
 						_cast_on_click()
 						return
+					if _route_caravan != null:
+						var mk = game.object_at_screen(_world_mouse())
+						if mk is Firm and is_instance_valid(_route_caravan) and not _route_caravan.dead:
+							Net.cmd(_route_caravan, "set_caravan_dest", [mk])
+							game.notify("Caravan route set to %s." % mk.display_name() if mk.code == "MARKET" else "A caravan trades only at markets.", Vector2(-1, -1))
+						_route_caravan = null
+						return
 					if _rally_firm != null:
 						if is_instance_valid(_rally_firm) and not _rally_firm.dead:
 							Net.cmd(_rally_firm, "set_rally", [Vector2i(_mouse_loc().floor())])
@@ -974,6 +987,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_spell_firm = null
 					elif _rally_firm != null:
 						_rally_firm = null
+					elif _route_caravan != null:
+						_route_caravan = null
 					elif not _editor_tool.is_empty():
 						_editor_tool = {}
 					else:
@@ -997,8 +1012,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				hud._set_speed(0.0)
 			KEY_K:
 				_center_home()
-			KEY_F5:
-				save_game("quick")
+			KEY_S:
+				if k.ctrl_pressed:
+					save_game("quick")
+			KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F8:
+				# the original's report hotkeys (HELP.RES): Kingdoms F1, Towns F2,
+				# Economy F3, Trade F4, Military F5, Technology F6, Ranking F8
+				hud.reports.show_tab({KEY_F1: "Kingdoms", KEY_F2: "Towns", KEY_F3: "Economy", KEY_F4: "Trade",
+					KEY_F5: "Military", KEY_F6: "Technology", KEY_F8: "Kingdoms"}[k.keycode])
+			KEY_F7:
+				hud.toggle_spies()
 			KEY_F9:
 				load_game.call_deferred("quick")
 			KEY_ESCAPE:

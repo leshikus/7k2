@@ -312,18 +312,14 @@ func surrender(to_nation: int) -> void:
 func think_rebel(day: int) -> void:
 	if nation_id <= 0 or loyalty > Defs.REBEL_LOYALTY or day < last_rebel_day + 90:
 		return
-	if Game.inst.frame - last_attacked_frame < 300:
+	# no rebellion within 30 days of an attack or while villagers are out defending
+	if Game.inst.frame - last_attacked_frame < Defs.FRAMES_PER_DAY * 30:
 		return
-	if Game.inst.rng.randf() > 0.3:
+	if defenders.any(func(d): return is_instance_valid(d) and not d.dead):
 		return
-	last_rebel_day = day
-	var old := nation_id
-	nation_id = 0
-	for nid in Game.inst.nation_ids():
-		resistance[nid] = 60.0 if nid == old else 50.0
-	Game.inst.on_town_changed(self, old)
-	Game.inst.notify_nation(old, "%s has rebelled and declared independence!" % town_name, center_loc())
-	queue_redraw()
+	if Rebels.town_rebels(Game.inst, self) > 0:
+		last_rebel_day = day
+		queue_redraw()
 
 
 # ------------------------------------------------------------------- daily ---

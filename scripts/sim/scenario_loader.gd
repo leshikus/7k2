@@ -138,6 +138,10 @@ func _nations() -> void:
 			if other == nd["recno"] or not nation_map.has(other):
 				continue
 			a.relations[nation_map[other]] = RELATION_MAP[clampi(nd["relations"][k], 0, 4)]
+			# the files' NationRelation::trade_treaty is not read: kingdoms on
+			# friendly or allied terms start with a trade treaty
+			if a.relations[nation_map[other]] >= Defs.Relation.PEACE:
+				a.trade_treaty[nation_map[other]] = true
 	for n in g.nations:
 		if n.is_ai:
 			n.ai = FryhtanAI.new(n, g) if n.is_fryhtan else NationAI.new(n, g)

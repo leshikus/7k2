@@ -544,3 +544,69 @@ day 0 with fresh fog. `--editor` opens it. New test `editor_test`.
   layout; this interface has its own tooltips.
 - New test `waypoint_test`.
 
+
+## Completeness pass against the original modules (13 Oct 2026)
+
+A module-by-module check of `src/*.cpp` against the port found these missing or
+simplified, now ported:
+- **Credits** (`ogamcred.cpp`): a Credits button on the start screen shows the
+  install's CREDIT.RES over Credits1.jpg (the HD release's index offsets cut
+  names in half, so the text is read whole). `--credits` opens it.
+- **Report hotkeys** from HELP.RES: F1 Kingdoms, F2 Towns, F3 Economy, F4 Trade,
+  F5 Military, F6 Technology, F7 Espionage, F8 Ranking. Quick save moved from F5
+  to Ctrl+S (F9 still loads).
+- **Help texts** (`ohelp.cpp`): HELP.RES also holds 160 texts keyed by button
+  help code. Action buttons now show the original text for the button they
+  stand for (`ui/help_text.gd`), followed by our own note.
+- **Special Blessing** (`of_basew.cpp`): with full prayer points (400) the Seat
+  of Power's Bless button draws one of the original's 23 wishes by rarity:
+  research breakthroughs, veteran soldiers, spies, Fryhtans and heroes, items,
+  gold, food, a new deposit with a mine, defections of units, forts and towns,
+  spies exposed, healing, loyalty and combat. A wish with no effect halves the
+  points; otherwise they are used up. Tutorial lesson 9 step 21 waits for it.
+  Under fast build the Seat gains its full productivity a day, as the original.
+- **Diplomacy** (`otalkres.cpp`, `otalkmsg.cpp`, `oai_talk.cpp`, `oai_dipl.cpp`):
+  all 19 messages (trade, friendly and alliance treaties and their ending,
+  military aid, embargo, cease-fire, request for war, buying food, declaring
+  war, tribute and aid offered or demanded, technology exchange, purchase of a
+  kingdom, surrender). The computer answers by the original's rules on its
+  feelings for the sender (ai_relation_level), trade worth, military and
+  overall ranks and its personality; it also starts talks itself (cease-fires,
+  trade treaties, alliances, friendly treaties, ending treaties with kingdoms
+  it dislikes, food purchases, technology exchanges). Messages to a human ruler
+  wait in the Diplomacy window for Accept or Reject. A **trade treaty** now
+  gates caravan trade with foreign markets (UnitCaravan::can_set_stop);
+  alliances bring one. Tutorial lesson 5 step 15 waits for a trade proposal.
+- **Caravans**: Set destination (a market of yours or of a treaty partner),
+  goods to load (the pick-up selection; none ticked = automatic), and Clone
+  caravan (`duplicate_caravan`, lesson 5 step 26).
+- **Random events** (`oevent.cpp`): the 13 events (breakthrough, lost scroll,
+  rats, plague deaths of a general or soldier, sickness in a fort, a stranger
+  or a wagon of settlers joining, a cache of artifacts, plague in a town,
+  accidents wrecking a factory, mine or inn), every 200 to 1000 days by the
+  new "Random events" setting (default Low, as the original).
+- **Ground fire and splash damage** (`obullet.cpp`, `ow_fire.cpp`): attacks
+  carry the table's BUL_RADIUS and FL_RADIUS. Heavy shells hurt everyone within
+  their radius (full damage falling to half at the edge), sparing the
+  shooter's men; fire bombs set cells alight, which burn trees and hurt whoever
+  stands there until they die down (rain shortens them). As in the shipped
+  game's settings, fire does not spread.
+- **Plant growth** (`ow_plant.cpp`): the shipped game never sets plant_limit,
+  so trees neither seed nor spread; daily, a sample grows a stage and crowded
+  trees die. New maps are thinned once as World::plant_init does.
+- **Rebellions** (`orebel.cpp`, Town::think_rebel): a disloyal town no longer
+  turns independent as a whole; 30-60% of its people walk out as a rebel band
+  under a general, hostile to their old kingdom, which attacks a town or
+  building of it or settles in a town of its race. A leaderless band surrenders
+  to the most reputable kingdom. Bands are saved.
+- **War points** (`owarpt.cpp`): flashing crosses on the minimap where your
+  units or buildings are under attack.
+- Stage 6's hero now has the original's combat of 200 to 300.
+
+New tests: `wish_test`, `diplomacy_test`, `events_test`, `fire_test`,
+`rebel_test`; `caravan_test` and `input_test` extended.
+
+Still simplified (noted in the code): wagons of settlers are villagers;
+hit points do not scale with combat level; kingdoms can talk from the start
+(the original requires contact); trade treaties in premade scenario files are
+assumed for friendly kingdoms, as the files' relation records are not read.

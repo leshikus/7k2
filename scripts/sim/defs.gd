@@ -220,6 +220,7 @@ static func load_from_assets() -> void:
 				"range": maxi(1, ar["ATTK_RANGE"].to_int()), "damage": ar["BASIC_DMG"].to_int(),
 				"pierce": ar["PIERCE_DMG"].to_int(), "bullet": ar["BUL_SPRITE"], "consume": ar["CONSUME_P"].to_int(),
 				"bullet_speed": maxi(4, ar["BUL_SPEED"].to_int()), "action": "A%d" % ar["ATTK_ID"].to_int(),
+				"radius": ar.get("BUL_RADIUS", "0").to_int(), "fire": ar.get("FL_RADIUS", "0").to_int(),
 			})
 		unit_types[u["SPRITE"]] = t
 	for f in Assets.table("FIRM"):

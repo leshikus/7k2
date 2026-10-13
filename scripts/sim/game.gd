@@ -54,6 +54,15 @@ var campaign_battle = null           # CampaignBattle building and running this 
 ## never change the game shared in lockstep (Net).
 var fx_rng := RandomNumberGenerator.new()
 var peace_offers := {}               # nation -> {nation that offered peace: true}
+var talks: Array = []                # diplomatic messages awaiting a human kingdom's reply
+var rebels: Array = []               # rebel bands (RebelArray)
+var next_rebel_id := 1
+var event_days := -1                 # days to the next random event (RandomEvent::day_to_event)
+## WarPointArray: 8x8 zones where the player's men or buildings are under
+## attack, flashing on the minimap; strength halves every frame. Display only.
+var war_points := {}                 # zone -> strength
+const WAR_ZONE := 8
+var talk_log: Array = []             # the latest messages and their answers
 var fast_build := false              # tutorial lessons: building and training ten times faster (config.fast_build)
 
 
@@ -376,7 +385,7 @@ func _generate_sites(size: int) -> void:
 		_add_site(raw_rows[rng.randi() % raw_rows.size()], Vector2(-1, -1), 0, 0)
 
 
-func _add_site(row: Dictionary, near: Vector2, min_r: float, max_r: float) -> void:
+func _add_site(row: Dictionary, near: Vector2, min_r: float, max_r: float) -> Site:
 	var sw: int = row["LOC_WIDTH"].to_int()
 	var sh: int = row["LOC_HEIGHT"].to_int()
 	for t in 400:
@@ -401,7 +410,8 @@ func _add_site(row: Dictionary, near: Vector2, min_r: float, max_r: float) -> vo
 		s.h = sh
 		s.reserve = Defs.MAX_RAW_RESERVE_QTY * rng.randf_range(0.6, 1.0)
 		sites.append(s)
-		return
+		return s
+	return null
 
 
 func _generate_independents(size: int, cfg: Dictionary) -> void:
@@ -475,6 +485,20 @@ func _generate_trees(size: int) -> void:
 			var v := noise.get_noise_2d(x, y)
 			if v > 0.25 and rng.randf() < 0.45 or rng.randf() < 0.01:
 				_add_tree(c)
+	# World::plant_init ends with plant_death(1, 2): every tree crowded by
+	# more than two plants within two cells dies, leaving groves and copses
+	for y in world.h:
+		for x in world.w:
+			var c := Vector2i(x, y)
+			if not _plants.has(c):
+				continue
+			var near := 0
+			for sy in range(y - 2, y + 3):
+				for sx in range(x - 2, x + 3):
+					if _plants.has(Vector2i(sx, sy)):
+						near += 1
+			if near > 2:
+				_clear_trees(Rect2i(c, Vector2i.ONE))
 
 
 func _near_building(c: Vector2i) -> bool:
@@ -620,6 +644,40 @@ func add_rock(type_index: int, at: Vector2i) -> void:
 	rocks.append(rk)
 
 
+## World::plant_ops as the shipped game runs it: its plant_limit is never set,
+## so trees neither seed nor spread; a sample of them grows a stage, and trees
+## crowded by more than two plants within three cells die off.
+func _plant_ops() -> void:
+	if _plants.is_empty():
+		return
+	const DENSITY := 16
+	var yb := rng.randi() % DENSITY
+	var xb := rng.randi() % DENSITY
+	for y in range(yb, world.h, DENSITY):
+		for x in range(xb, world.w, DENSITY):
+			var c := Vector2i(x, y)
+			if _plants.has(c) and rng.randi() % 100 < 40:
+				var v: int = _plants[c].variant % Assets.plant_bitmaps.size()
+				if v + 1 < Assets.plant_bitmaps.size() and Assets.plant_bitmaps[v + 1]["plant"] == Assets.plant_bitmaps[v]["plant"]:
+					_plants[c].queue_free()
+					_plants.erase(c)
+					place_tree(c, v + 1)
+	yb = rng.randi() % DENSITY
+	xb = rng.randi() % DENSITY
+	for y in range(yb, world.h, DENSITY):
+		for x in range(xb, world.w, DENSITY):
+			var c := Vector2i(x, y)
+			if not _plants.has(c):
+				continue
+			var near := 0
+			for sy in range(y - 3, y + 4):
+				for sx in range(x - 3, x + 4):
+					if _plants.has(Vector2i(sx, sy)):
+						near += 1
+			if near > 2:
+				_clear_trees(Rect2i(c, Vector2i.ONE))
+
+
 func _clear_trees(r: Rect2i) -> void:
 	for y in range(r.position.y, r.end.y):
 		for x in range(r.position.x, r.end.x):
@@ -742,7 +800,7 @@ func find_trade_partner(home: Firm, nid: int) -> Firm:
 			continue
 		if f in home.linked_firms:
 			continue
-		if f.nation_id != nid and (n == null or n.relation(f.nation_id) < Defs.Relation.PEACE):
+		if f.nation_id != nid and not Diplomacy.has_trade(n, f.nation_id):
 			continue
 		var d := f.center_loc().distance_to(home.center_loc())
 		if d > 8.0 and d < best_d:
@@ -969,11 +1027,87 @@ func spawn_effect(part: int, at: Vector2, loops := 0) -> FirmEffect:
 	return e
 
 
-func spawn_bullet(from: Unit, to: GameObj, sprite: String, spd: float, dmg: float) -> void:
+func spawn_bullet(from: Unit, to: GameObj, sprite: String, spd: float, dmg: float) -> Bullet:
 	var b := Bullet.new()
 	b.setup(from, to, sprite, spd, dmg)
 	effects.add_child(b)
 	bullets.append(b)
+	return b
+
+
+# ------------------------------------------------------------ ground fire ---
+# World::spread_fire with the original's default settings (fire_spread_rate 0:
+# fires do not spread): a burning cell hurts whoever stands on it and the
+# building over it, burns its tree, and dies down in a few days; rain and snow
+# put it out sooner (Location::fire_str / fire_src).
+
+const FIRE_SCAN := 16               # each cell is looked at every SCAN_FIRE_DIST^2 frames
+const FIRE_DAMAGE := 2.0 / 3.0      # config.fire_damage / ATTACK_SLOW_DOWN
+
+var fires := {}                     # cell -> [fire strength, flammability]
+
+
+## WarPoint::inc
+func add_war_point(at: Vector2) -> void:
+	var z := Vector2i(int(at.x) / WAR_ZONE, int(at.y) / WAR_ZONE)
+	war_points[z] = mini(0x1000000, int(war_points.get(z, 0)) + 0x100000)
+
+
+## Bullet::process_die: a fire bomb sets the cells within `radius` alight.
+func set_fire(c: Vector2i, radius: int) -> void:
+	for y in range(c.y - radius + 1, c.y + radius):
+		for x in range(c.x - radius + 1, c.x + radius):
+			var p := Vector2i(x, y)
+			var dist := absi(x - c.x) + absi(y - c.y)
+			if dist > radius or not world.inside(p) or world.is_hill(p) or world.object_at(p) is Rock:
+				continue
+			var strength := 30 if radius == 1 else maxi(10, 30 - dist * 7)
+			var f: Array = fires.get(p, [-100, 1])
+			f[0] = maxi(f[0], strength)
+			f[1] = 1           # such that the fire will be put out quickly
+			fires[p] = f
+
+
+func _process_fires() -> void:
+	var rain := 0
+	if weather.rain_scale() > 0:
+		rain = 5 + weather.rain_scale() / 4      # RAIN_SNOW_REDUCTION (the shipped game has no snow)
+	for p in fires.keys():
+		var f: Array = fires[p]
+		var old: int = f[0]
+		var strength: int = maxi(-100, f[0] - rain)
+		var flam: int = f[1]
+		if strength > 0:
+			var hit := false
+			for u in unit_grid.get(Vector2i(p.x >> GRID_SHIFT, p.y >> GRID_SHIFT), []):
+				if not u.dead and u.cell() == p:
+					u.take_damage(2.0 * FIRE_DAMAGE, null)
+					hit = true
+					break
+			if not hit:
+				var o = world.object_at(p)
+				if o is Firm and not o.dead:
+					o.take_damage(FIRE_DAMAGE, null)
+			if flam > 0:
+				strength = mini(100, strength + 1)
+				flam -= 2
+			elif flam >= -50:
+				strength -= 2
+				flam = maxi(-50, flam - 2)
+			else:
+				strength = -100
+			if flam <= 0 and _plants.has(p):
+				_clear_trees(Rect2i(p, Vector2i.ONE))
+			if visible and is_loc_visible(p) and fx_rng.randf() < 0.5:
+				spawn_effect(3, Vector2(p))
+		else:
+			strength = maxi(-100, strength - 1)
+		if strength <= 0 and old > 0:
+			strength -= 50
+		if strength <= 0:
+			fires.erase(p)
+		else:
+			fires[p] = [strength, flam]
 
 
 # ------------------------------------------------------------- treasures ---
@@ -1176,6 +1310,10 @@ func is_hostile(a: GameObj, b: GameObj) -> bool:
 	if sa == 0 or sb == 0:
 		var indep := a if sa == 0 else b
 		var other := b if indep == a else a
+		if indep is Unit and (indep as Unit).rebel_id > 0:
+			return Rebels.is_hostile_to(self, indep, other.seen_nation())
+		if other is Unit and (other as Unit).rebel_id > 0:
+			return false
 		var town: Town = null
 		if indep is Town:
 			town = indep
@@ -1323,6 +1461,12 @@ func sim_frame() -> void:
 		f.sim_frame()
 	for t in towns:
 		t.town_shoot()
+	for z in war_points.keys():
+		war_points[z] >>= 1
+		if war_points[z] == 0:
+			war_points.erase(z)
+	if frame % FIRE_SCAN == 0 and not fires.is_empty():
+		_process_fires()
 	for b in bullets.duplicate():
 		b.sim_frame()
 		if b.done:
@@ -1361,6 +1505,7 @@ func sim_frame() -> void:
 
 func next_day() -> void:
 	day += 1
+	_plant_ops()
 	weather.next_day(rng)
 	if weather.is_lightning() and rng.randf() < 0.35:
 		_lightning_strike()
@@ -1380,6 +1525,8 @@ func next_day() -> void:
 			n.new_year()
 	if campaign_battle != null:
 		campaign_battle.next_day()
+	RandomEvents.next_day(self)
+	Rebels.next_day(self)
 	_check_homeless()
 	_items_next_day()
 	if day % 5 == 0:
@@ -1757,14 +1904,27 @@ func declare_war(a: int, b: int) -> void:
 		return
 	if na.relation(b) >= Defs.Relation.PEACE:
 		na.change_reputation(-15.0)     # breaking a treaty hurts reputation
-	na.relations[b] = Defs.Relation.WAR
-	nb.relations[a] = Defs.Relation.WAR
+	nb.war_count[a] = int(nb.war_count.get(a, 0)) + 1
+	Diplomacy.set_status(self, a, b, Defs.Relation.WAR)
 	if observer():
 		notify("The %s has declared war on the %s." % [na.name, nb.name], Vector2(-1, -1))
 	elif a == player_id:
 		notify("You have declared war on the %s." % nb.name, Vector2(-1, -1))
 	elif b == player_id:
 		notify("The %s has declared war on you!" % na.name, Vector2(-1, -1))
+
+
+## A diplomatic message (sim command): see Diplomacy.send.
+func talk(from: int, to: int, id: String, p1 = 0, p2 = 0) -> void:
+	Diplomacy.send(self, from, to, id, p1, p2)
+
+
+## A human kingdom's answer to a message waiting for it (sim command).
+func talk_reply(from: int, to: int, id: String, accept: bool) -> void:
+	for m in talks:
+		if m["from"] == from and m["to"] == to and m["id"] == id:
+			Diplomacy.reply(self, m, accept)
+			return
 
 
 func make_peace(a: int, b: int) -> void:
@@ -1776,8 +1936,7 @@ func make_peace(a: int, b: int) -> void:
 		peace_offers[a].erase(b)
 	if peace_offers.has(b):
 		peace_offers[b].erase(a)
-	na.relations[b] = Defs.Relation.PEACE
-	nb.relations[a] = Defs.Relation.PEACE
+	Diplomacy.set_status(self, a, b, Defs.Relation.PEACE)
 	for u in units:
 		if (u.nation_id == a or u.nation_id == b) and u.order == Unit.Order.ATTACK and u.target and (u.target.nation_id == a or u.target.nation_id == b):
 			u.stop()

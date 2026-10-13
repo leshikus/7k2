@@ -70,6 +70,10 @@ static func save_path(g: Game, path: String, extra := {}) -> bool:
 		"rng_state": str(g.rng.state),
 		"frame": g.frame,
 		"day": g.day,
+		"talks": g.talks,
+		"rebels": Rebels.to_save(g),
+		"event_days": g.event_days,
+		"fires": g.fires.keys().map(func(p): return [p.x, p.y, g.fires[p][0], g.fires[p][1]]),
 		"player_id": g.player_id,
 		"reveal_all": g.reveal_all,
 		"next_id": GameObj._next_id,
@@ -131,6 +135,10 @@ static func _nation(n: Nation) -> Dictionary:
 		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 		"known_gods": n.known_gods.keys(), "items_acquired": n.items_acquired.keys(),
+		"trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
+		"status_day": _int_keys_to_str(n.status_day), "war_count": _int_keys_to_str(n.war_count),
+		"never_until": n.never_until, "reject_day": n.reject_day, "sent_day": n.sent_day,
+		"prefs": n.prefs, "last_aid_day": n.last_aid_day,
 	}
 	if n.ai:
 		d["ai"] = {"war_target": n.ai.war_target, "war_start_day": n.ai.war_start_day, "aggression": n.ai.aggression}
@@ -172,7 +180,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
 		"cloak": u.cloak_id, "camo": [u.camouflage_days, u.camouflage_power], "sleeper": u.sleeper_for, "loyalty": u.loyalty,
 		"item": [u.item_id, u.item_para],
-		"caravan_home": _id(u.caravan_home), "caravan_dest": _id(u.caravan_dest), "caravan_leg": u.caravan_leg, "cargo": u.cargo,
+		"caravan_home": _id(u.caravan_home), "caravan_dest": _id(u.caravan_dest), "caravan_leg": u.caravan_leg, "cargo": u.cargo, "pick_up": u.pick_up,
 	}
 
 
@@ -220,6 +228,20 @@ static func load_path(g: Game, path: String) -> String:
 	g.setup_layers()
 	g.frame = int(d["frame"])
 	g.day = int(d["day"])
+	g.event_days = int(d.get("event_days", -1))
+	g.fires.clear()
+	for f in d.get("fires", []):
+		g.fires[Vector2i(int(f[0]), int(f[1]))] = [int(f[2]), int(f[3])]
+	g.talks = d.get("talks", []).map(func(m):
+		var x: Dictionary = m.duplicate()
+		x["from"] = int(m["from"])
+		x["to"] = int(m["to"])
+		x["day"] = int(m["day"])
+		if typeof(m["p1"]) == TYPE_FLOAT:
+			x["p1"] = int(m["p1"])
+		if typeof(m["p2"]) == TYPE_FLOAT:
+			x["p2"] = int(m["p2"])
+		return x)
 	g.player_id = int(d["player_id"])
 	g.reveal_all = d.get("reveal_all", false)
 	g.start_points = d.get("start_points", []).map(func(p): return Vector2(p[0], p[1]))
@@ -250,6 +272,17 @@ static func load_path(g: Game, path: String) -> String:
 		n.last_expense_by = nd.get("last_expense_by", {})
 		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
 		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
+		for k in nd.get("trade_treaty", {}):
+			n.trade_treaty[int(k)] = bool(nd["trade_treaty"][k])
+		for key in ["ai_rel", "status_day", "war_count"]:
+			var dst: Dictionary = n.get(key)
+			for k in nd.get(key, {}):
+				dst[int(k)] = int(nd[key][k])
+		for key in ["never_until", "reject_day", "sent_day", "prefs"]:
+			var dst2: Dictionary = n.get(key)
+			for k in nd.get(key, {}):
+				dst2[k] = int(nd[key][k])
+		n.last_aid_day = int(nd.get("last_aid_day", -1000))
 		if nd.has("known_gods"):
 			n.known_gods.clear()
 			for r in nd["known_gods"]:
@@ -393,6 +426,7 @@ static func load_path(g: Game, path: String) -> String:
 			u.caravan_dest = cd
 		u.caravan_leg = int(ud.get("caravan_leg", 0))
 		u.cargo = ud.get("cargo", {})
+		u.pick_up = ud.get("pick_up", [])
 		var hf = by_id.get(int(ud.get("home_firm", 0)))
 		if hf is Firm:
 			u.home_firm = hf
@@ -400,6 +434,7 @@ static func load_path(g: Game, path: String) -> String:
 		if ht is Town:
 			u.home_town = ht
 			ht.defenders.append(u)
+	Rebels.from_save(g, d.get("rebels", []), by_id)
 	for f in g.firms:
 		if not f.has_meta("save"):
 			continue
