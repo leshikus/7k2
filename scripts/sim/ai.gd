@@ -4,7 +4,8 @@ extends RefCounted
 ## secure towns with camps, build the mine-factory-market chain, research,
 ## win independent towns over with camps and grants, and attack weaker rivals.
 
-const RESEARCH_ORDER := ["MINING", "MANUFACT", "INFCLOSE", "FARMING", "INFDEFEN", "CATAPULT", "INFRANGE", "BALLISTA", "WAR_PROD", "AGITATE", "FLAMETHR", "STEALINF", "BRIBE", "COUNTERS", "CANNON", "ASSASSIN", "STEALTEC"]
+## "SPUS"/"SPUB" stand for the special-unit techs of the kingdom's own race.
+const RESEARCH_ORDER := ["MINING", "MANUFACT", "INFCLOSE", "FARMING", "SPUS", "INFDEFEN", "CATAPULT", "INFRANGE", "BALLISTA", "WAR_PROD", "AGITATE", "SPUB", "FLAMETHR", "STEALINF", "BRIBE", "COUNTERS", "CANNON", "OFF_BLD3", "EXPCART", "ASSASSIN", "STEALTEC", "F_BALLIS", "OFF_BLD1", "OFF_BLD4", "OFF_BLD2"]
 
 var n: Nation
 var g: Game
@@ -258,6 +259,19 @@ func _economy(day: int) -> void:
 	for t in towns:
 		if t.loyalty < 40 and n.cash > t.grant_cost() * 4:
 			t.grant(n.id)
+	# keep every Tower of Science busy
+	for r in my_firms("RESEARCH"):
+		if r.research_tech == "" and not r.under_construction:
+			for c in RESEARCH_ORDER:
+				var code: String = c
+				if code == "SPUS":
+					code = Defs.spu_structure_tech(n.race)
+				elif code == "SPUB":
+					code = Defs.spu_berserk_tech(n.race)
+				var t := Defs.tech_def(code)
+				if Defs.can_research(n, t):
+					r.start_research(code)
+					break
 	if _under_construction():
 		return
 	# every town needs a camp
@@ -308,13 +322,6 @@ func _economy(day: int) -> void:
 	if day > 200 and my_firms("RESEARCH").is_empty() and n.cash > 1200:
 		if _try_build("RESEARCH", towns[0].footprint()):
 			return
-	for r in my_firms("RESEARCH"):
-		if r.research_tech == "" and not r.under_construction:
-			for code in RESEARCH_ORDER:
-				var t := Defs.tech_def(code)
-				if Defs.can_research(n, t):
-					r.start_research(code)
-					break
 	if day > 400 and my_firms("INN").is_empty() and n.cash > 1500:
 		if _try_build("INN", towns[0].footprint()):
 			return
@@ -334,7 +341,7 @@ func _economy(day: int) -> void:
 			if not mk.under_construction and g.caravans_of(mk) < 1 and g.find_trade_partner(mk, n.id) != null:
 				mk.hire_caravan()
 				break
-	if day > 500 and my_firms("STABLE").is_empty() and n.cash > 1200:
+	if day > 500 and my_firms("STABLE").is_empty() and n.cash > 1200 and n.tech_level(Defs.spu_structure_tech(n.race)) > 0:
 		if _try_build("STABLE", towns[0].footprint(), [towns[0].center_loc()]):
 			return
 	for st in my_firms("STABLE"):
@@ -345,9 +352,20 @@ func _economy(day: int) -> void:
 			return
 	for wf in my_firms("WAR"):
 		if wf.weapon == "" and n.cash > 1500:
-			for wcode in ["CANNON", "FLAMETHR", "BALLISTA", "CATAPULT"]:
+			for wcode in ["CANNON", "F_BALLIS", "FLAMETHR", "BALLISTA", "EXPCART", "CATAPULT"]:
 				if n.tech_level(wcode) > 0:
 					wf.queue_weapon(wcode)
+					break
+	# an offensive building beside a fort, once researched (FirmMagic::process_ai casts by itself)
+	if day > 900 and n.cash > 3500:
+		var have := my_firms().filter(func(f): return f.code in Defs.OFFENSIVE_FIRMS).size()
+		var forts := my_firms("FORT") + my_firms("CAMP")
+		if have < 2 and not forts.is_empty():
+			for code in Defs.OFFENSIVE_FIRMS:
+				if Defs.knows_firm(n, code) and my_firms(code).is_empty():
+					var anchor: Firm = forts[(day / 7) % forts.size()]
+					if _try_build(code, anchor.footprint()):
+						return
 					break
 	if day > 900 and my_firms("BASE").is_empty() and n.cash > 3500:
 		var same_race := towns.filter(func(t): return t.race == n.race)

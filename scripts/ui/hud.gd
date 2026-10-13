@@ -5,6 +5,7 @@ extends CanvasLayer
 
 signal build_requested(code: String)
 signal item_target_requested(u: Unit)
+signal spell_target_requested(f: Firm, spell: String)
 
 var inspected_treasure: Treasure = null   # a scroll or item clicked on the map
 signal center_on(loc: Vector2)
@@ -704,6 +705,13 @@ func _unit_actions(sel: Array) -> void:
 			u.stop())
 	if own.any(func(u): return u.is_human()) or game.player().is_fryhtan:
 		_add_action("Build...", func(): build_menu_open = true, true, "Choose a building to construct. The nearest selected unit will build it.")
+	if own.any(func(u): return u.sprite_code == Defs.FORTRESS_BUILDER) and game.player().tech_level("FORTRESS") > 0:
+		var cost := int(Defs.firm_types.get("FORTRESS", {}).get("cost", 50))
+		_add_action("Fortress (%d)" % cost, func():
+			if SpecialFirms.transform_to_fortress(own) == null:
+				game.notify("Four Grokkens standing together on open ground are needed.", Vector2(-1, -1)),
+			SpecialFirms.fortress_spot(own).x >= 0 and game.player().cash >= cost,
+			"Four selected Grokkens standing side by side turn into a Fortress, from which Fryhtans posted inside shoot at enemies within %d." % int(SpecialFirms.FORTRESS_RANGE))
 	if own.size() == 1:
 		var u: Unit = own[0]
 		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian():
@@ -719,6 +727,8 @@ func _unit_actions(sel: Array) -> void:
 			_item_actions(u)
 		if u.is_spy:
 			_spy_unit_actions(u)
+		if u.sprite_code == "EXPCART":
+			_add_action("Detonate", func(): u.explode(), true, "Blow the Porcupine up where it stands, hurting everything next to it.")
 		if u.is_god:
 			var gi := u.god_info()
 			if not gi.is_empty() and Defs.GOD_POWERS.has(gi["race"]):
@@ -854,6 +864,15 @@ func _build_menu() -> void:
 			build_menu_open = false
 			build_requested.emit("LAIR"), p.cash >= FryhtanAI.LAIR_COST and p.live_points >= FryhtanAI.LAIR_LIVE,
 			"A new lair breeds more of your brood and spreads your terror to nearby villages.")
+		for code in Defs.FRYHTAN_FIRMS:
+			if not Defs.knows_firm(p, code):
+				continue
+			var c: String = code
+			var fcost := float(Defs.firm_types.get(code, {}).get("cost", 0))
+			var flive := SpecialFirms.setup_live(code)
+			_add_action("%s (%d gold, %d life)" % [Defs.firm_types.get(code, {}).get("name", code), int(fcost), int(flive)], func():
+				build_menu_open = false
+				build_requested.emit(c), p.cash >= fcost and p.live_points >= flive, Defs.FIRM_HELP.get(code, ""))
 		_add_action("Cancel", func(): build_menu_open = false)
 		return
 	for code in Defs.HUMAN_FIRMS:
@@ -869,7 +888,17 @@ func _build_menu() -> void:
 			var label: String = ft.get("name", code)
 			if c.contains("|") and p.known_gods.size() > 1:
 				label += " (%s)" % Defs.race_name(c.get_slice("|", 1))
-			_add_action("%s (%d)" % [label, cost], pick, p.cash >= cost, Defs.FIRM_HELP.get(code, ""))
+			var known: bool = code != "STABLE" or p.tech_level(Defs.spu_structure_tech(p.race)) > 0
+			_add_action("%s (%d)" % [label, cost], pick, p.cash >= cost and known,
+				Defs.FIRM_HELP.get(code, "") if known else "Research %s at a Tower of Science first." % Defs.tech_def(Defs.spu_structure_tech(p.race)).get("name", "the training centre"))
+	for code in Defs.OFFENSIVE_FIRMS:
+		if not Defs.knows_firm(p, code):
+			continue
+		var c2: String = code
+		var ocost: int = Defs.firm_types.get(code, {}).get("cost", 0)
+		_add_action("%s (%d)" % [Defs.firm_types.get(code, {}).get("name", code), ocost], func():
+			build_menu_open = false
+			build_requested.emit(c2), p.cash >= ocost, Defs.FIRM_HELP.get(code, ""))
 	_add_action("Cancel", func(): build_menu_open = false)
 
 
@@ -1027,6 +1056,38 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					s += "Researching %s %d: %d%%\n" % [t["name"], lvl + 1, int(100.0 * f.research_points / Firm.research_cost(t, lvl))]
 				else:
 					s += "Choose a technology to research.\n"
+			"BEE", "TERMITE", "INCUBAT":
+				if f.weapon != "":
+					s += "%s %s: %d%% (%d queued)\n" % ["Growing" if f.code == "INCUBAT" else "Breeding", Defs.unit_types[f.weapon]["name"], int(f.weapon_progress), f.weapon_queue]
+				elif SpecialFirms.buildable_units(f).is_empty():
+					s += "[color=#ff9060]Buy its technology at a lair first.[/color]\n"
+			"ANIMAL":
+				s += "Beasts for hire:\n"
+				for a in f.animals:
+					s += "  %s combat %d — %d gold, %d life\n" % [Defs.unit_types.get(a["unit"], {}).get("name", a["unit"]), int(a["combat"]), int(a["cost"]), int(a["live"])]
+				if f.animals.is_empty():
+					s += "  none yet (they come every two weeks)\n"
+			"ALCHEMY":
+				s += "Conversion: %s\n" % (Defs.tech_def(f.alchemy_mode).get("name", "") if f.alchemy_mode != "" else "none")
+				if f.site:
+					s += "%s deposit: %d left\n" % [f.raw, int(f.reserve)]
+				s += "Produced: %d\n" % int(f.stock)
+			"FORTRESS":
+				s += "Defenders %d / %d (shoot within %d)\n" % [f.soldiers.size(), f.capacity(), int(SpecialFirms.FORTRESS_RANGE)]
+				for u in f.soldiers:
+					s += "  %s — combat %d, HP %d\n" % [u.type_name(), int(u.combat), int(u.hp)]
+				if f.soldiers.is_empty():
+					s += "[color=#ff9060]Right-click it with Fryhtans to post them inside.[/color]\n"
+				if SpecialFirms.hidden_from(f, -1):
+					s += "Camouflaged: other kingdoms see only a rock.\n"
+			"LISHORR":
+				s += "Shoots for %d damage%s\n" % [int(SpecialFirms.lishorr_damage(f)), " (double under a clear sky)"]
+				if SpecialFirms.hidden_from(f, -1):
+					s += "Camouflaged: other kingdoms see only a plant.\n"
+			"MAGIC", "OFF_BLD1", "OFF_BLD2", "OFF_BLD4":
+				s += "Charge %d / %d  %s\n" % [f.cast_charge, Defs.MAX_CAST_DELAY, _bar(f.cast_charge, Defs.MAX_CAST_DELAY, "#a080ff")]
+				if f.hp < f.max_hp:
+					s += "[color=#ff9060]Recharges only when undamaged.[/color]\n"
 			"STABLE":
 				if f.weapon != "":
 					s += "Training %s: %d%% (%d queued)\n" % [Defs.unit_types[f.weapon]["name"], int(f.weapon_progress), f.weapon_queue]
@@ -1061,6 +1122,9 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		return
 	_clear_actions()
 	if not own:
+		if f.code == "LAIR" and game.player().is_fryhtan and f.is_monster():
+			_add_action("Take over (%d)" % int(SpecialFirms.take_lair_cost(f)), func(): SpecialFirms.take_lair(f, game.player_id),
+				SpecialFirms.can_take_lair(f, game.player_id), "Buy this lair's allegiance. Needs a lair of yours with a commander nearby.")
 		_spy_actions(f)
 		return
 	var p := game.player()
@@ -1075,6 +1139,13 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			_occupant_buttons(f)
 		"LAIR":
 			if f.is_fryhtan_lair():
+				for t in Defs.fryhtan_techs(SpecialFirms.lair_species(f)):
+					var tc: String = t["code"]
+					var lvl := p.tech_level(tc)
+					if lvl >= t["max"]:
+						continue
+					_add_action("Learn %s %d (%d life)" % [t["name"], lvl + 1, int(Defs.fryhtan_tech_live_cost(t))], func(): SpecialFirms.buy_tech(f, tc),
+						SpecialFirms.can_buy_tech(f, t), _fryhtan_tech_tip(t))
 				var ut: Dictionary = Defs.unit_types.get(f.monster_code, {})
 				_add_action("Breed %s (%d gold, %d life)" % [ut.get("name", f.monster_code), int(ut.get("cost", 100)), int(ut.get("live_cost", 50))], func(): f.breed(),
 					f.soldiers.size() < f.capacity() and p.cash >= ut.get("cost", 100) and p.live_points >= ut.get("live_cost", 50),
@@ -1089,7 +1160,9 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			var tip := "A caravan carries goods to %s." % (partner.display_name() + " of the " + (partner.nation().name if partner.nation() else "") if partner else "another market (none in reach yet: build one further away, or make peace with a neighbour)")
 			_add_action("Hire caravan (%d)" % int(Firm.CARAVAN_COST), func(): f.hire_caravan(), p.cash >= Firm.CARAVAN_COST and game.caravans_of(f) < Firm.MAX_CARAVANS, tip)
 		"RESEARCH":
-			for t in Defs.TECHS:
+			for t in Defs.research_techs():
+				if t.has("race") and not game.nation_has_race_town(p.id, t["race"]):
+					continue
 				var lvl := p.tech_level(t["code"])
 				var ok := Defs.can_research(p, t)
 				var tc: String = t["code"]
@@ -1107,6 +1180,46 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			var can_spy := f.linked_towns.any(func(t): return t.nation_id == f.nation_id and t.can_recruit())
 			_add_action("Train spy (%d)" % Defs.SPY_COST, func(): f.weapon_queue += 1, can_spy and p.cash >= Defs.SPY_COST,
 				"Needs a linked town of yours with loyalty %d+. Right-click a spy on an enemy or independent town or building to infiltrate it." % Defs.MIN_RECRUIT_LOYALTY)
+		"BEE", "TERMITE", "INCUBAT":
+			for sprite in SpecialFirms.buildable_units(f):
+				var sc: String = sprite
+				var price := SpecialFirms.unit_price(sc)
+				_add_action("%s %s (%d gold, %d life)" % ["Grow" if f.code == "INCUBAT" else "Breed", Defs.unit_types[sc]["name"], int(price[0]), int(price[1])],
+					func(): f.queue_weapon(sc), p.cash >= price[0] and p.live_points >= price[1],
+					"Version %d (from the tech level)." % maxi(1, p.tech_level(Defs.unit_tech(sc))))
+		"ANIMAL":
+			for i in f.animals.size():
+				var idx := i
+				var a: Dictionary = f.animals[i]
+				_add_action("Hire %s (%d)" % [Defs.unit_types.get(a["unit"], {}).get("name", a["unit"]), int(a["cost"])], func(): SpecialFirms.hire_animal(f, idx),
+					SpecialFirms.can_hire_animal(f, idx), "Also costs %d life points." % int(a["live"]))
+		"ALCHEMY":
+			_add_action(("▶ " if f.alchemy_mode == "" else "") + "Stop converting", func(): f.alchemy_mode = "")
+			for mode in SpecialFirms.ALCHEMY_MODES:
+				var m: String = mode
+				if p.tech_level(m) <= 0:
+					continue
+				_add_action(("▶ " if f.alchemy_mode == m else "") + Defs.tech_def(m)["name"], func(): f.alchemy_mode = m, SpecialFirms.can_convert(f, m),
+					"Needs the tor to stand on a mineral deposit." if m.begins_with("MINE") and f.site == null else "")
+		"FORTRESS":
+			if not f.soldiers.is_empty():
+				_add_action("Send out defenders", func():
+					for su in f.soldiers.duplicate():
+						f.release_unit(su))
+			_occupant_buttons(f)
+		"MAGIC", "OFF_BLD1", "OFF_BLD2", "OFF_BLD4":
+			for sp in Defs.FIRM_SPELLS[f.code]:
+				var spc: String = sp
+				var d: Dictionary = Defs.SPELLS[sp]
+				if d["tech"] != "" and p.tech_level(d["tech"]) <= 0:
+					continue
+				var price: int = d["live"] if d["live"] > 0 else d["cost"]
+				_add_action("%s (%d)" % [d.get("short", d["name"]), price], func():
+					if SpecialFirms.self_aimed(spc):
+						if not SpecialFirms.cast(f, spc, f.center_loc()):
+							game.notify("No effect.", f.center_loc())
+					else:
+						spell_target_requested.emit(f, spc), SpecialFirms.can_cast(f, spc), _spell_tip(spc))
 		"STABLE":
 			var spu := f.special_unit()
 			var ut: Dictionary = Defs.unit_types.get(spu, {})
@@ -1149,6 +1262,33 @@ func _occupant_buttons(f: Firm) -> void:
 			if who != f.overseer and who.can_lead():
 				f.make_overseer(who)
 		_add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote)
+
+
+func _fryhtan_tech_tip(t: Dictionary) -> String:
+	var tip := ""
+	if t.has("firm"):
+		tip = "Lets your brood build the %s." % Defs.firm_types.get(t["firm"], {}).get("name", t["firm"])
+	if t.has("unit"):
+		tip += " Higher levels make stronger %s." % Defs.unit_types.get(t["unit"], {}).get("name", t["unit"])
+	if t.has("req"):
+		tip += " Needs %s %d." % [Defs.tech_def(t["req"]).get("name", t["req"]), t["req_lvl"]]
+	return tip.strip_edges()
+
+
+func _spell_tip(sp: String) -> String:
+	var d: Dictionary = Defs.SPELLS[sp]
+	var what: String = {
+		"DESTROY": "Strike an enemy building for half its strength, or a town's wall and people",
+		"FREEZE": "Freeze enemies within %d cells of the target for %d days" % [d["radius"], d["effect"]],
+		"WOUND": "Wound enemies within %d cells of the target" % d["radius"],
+		"TELEPORT": "Click one of your units, then the place to send it",
+		"FREEZE_LASER": "Freeze all enemies within %d cells of the building for %d days" % [d["radius"], d["effect"]],
+		"GOD_POWER": "Thunderbolt on enemies and buildings within %d cells of the target" % d["radius"],
+		"LASER": "Burn all enemies within %d cells of the building" % d["radius"],
+	}[sp]
+	var reach := ". Range %d; further costs more." % d["range"] if d["range"] > 0 else "."
+	var price := "%d life points" % d["live"] if d["live"] > 0 else "%d gold" % d["cost"]
+	return what + reach + " Costs %s and %d of the charge." % [price, d["delay"]]
 
 
 func _fill_camp(f: Firm) -> void:

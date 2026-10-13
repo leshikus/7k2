@@ -53,6 +53,7 @@ var caravan_leg := 0              # 0 heading to dest, 1 heading home
 var cargo := {}                   # goods type -> quantity
 var _caravan_wait := 0
 var frozen_until := -1           # Amaterasu's freeze (frame)
+var weapon_version := 0          # war machine / Fryhtan unit: tech level it was built at (get_weapon_version)
 var item_id := 0                  # the item carried (Items.TABLE), 0 = none
 var item_para := 0                # its charges, uses or time (Item::para)
 var death_frames := 0
@@ -72,6 +73,10 @@ func setup(sprite: String, nation: int, at: Vector2i, skill := 20.0) -> void:
 	is_god = utype.get("class", "") == "GOD"
 	is_caravan = utype.get("class", "") == "CARAVAN"
 	_speed = float(Assets.sprites.get(sprite, {}).get("speed", 4))
+	var n := Game.inst.nation(nation) if Game.inst else null
+	var vt := sprite if is_weapon and Defs.unit_tech(sprite) == "" else Defs.unit_tech(sprite)
+	if n and vt != "":
+		weapon_version = maxi(1, n.tech_level(vt))
 	unit_name = Defs.random_person_name(race, Game.inst.rng) if race != "" else utype.get("name", sprite)
 	position = Iso.to_screen(loc)
 
@@ -304,7 +309,7 @@ func order_build(f: Firm) -> void:
 
 
 func can_attack() -> bool:
-	return not utype.get("attacks", []).is_empty()
+	return sprite_code == "EXPCART" or not utype.get("attacks", []).is_empty()
 
 
 func _path_to(dest: Vector2i) -> void:
@@ -405,8 +410,8 @@ func _idle() -> void:
 			order = Order.MOVE
 			_path_to(free)
 			return
-	if not can_attack():
-		return
+	if not can_attack() or sprite_code == "EXPCART":
+		return      # a Porcupine waits for its orders
 	var enemy := Game.inst.find_enemy_near(self, float(utype.get("vis", 5)))
 	if enemy:
 		order_attack(enemy)
@@ -502,12 +507,51 @@ static func _nonzero(d: Dictionary) -> Dictionary:
 	return out
 
 
+## The attacks this unit has: a war machine or Fryhtan unit whose table lists
+## one set of attacks per tech level uses the set of its version.
+var _atk_cache: Array = []
+var _atk_cache_ver := -1
+
+
+func attack_list() -> Array:
+	if _atk_cache_ver == weapon_version:
+		return _atk_cache
+	var atts: Array = utype.get("attacks", [])
+	var maxl := _version_levels()
+	if weapon_version > 0 and maxl > 1 and atts.size() >= maxl and atts.size() % maxl == 0:
+		var per := atts.size() / maxl
+		var v := clampi(weapon_version, 1, maxl)
+		atts = atts.slice((v - 1) * per, v * per)
+	_atk_cache = atts
+	_atk_cache_ver = weapon_version
+	return atts
+
+
+func _version_levels() -> int:
+	var vt := Defs.unit_tech(sprite_code)
+	if vt == "" and is_weapon:
+		vt = sprite_code
+	return int(Defs.tech_def(vt).get("max", 0)) if vt != "" else 0
+
+
+func _versioned_attacks() -> bool:
+	return attack_list().size() != utype.get("attacks", []).size()
+
+
+## Unit::can_attack_with: a special unit's power attack needs the Berserker tech.
+func _berserk_locked(a: Dictionary) -> bool:
+	if a.get("consume", 0) < 20 or not is_human() or not sprite_code.ends_with("_SPU"):
+		return false
+	var n := nation()
+	return n == null or n.tech_level(Defs.spu_berserk_tech(race)) <= 0
+
+
 func current_attack() -> Dictionary:
 	var best: Dictionary = {}
-	var atts: Array = utype.get("attacks", [])
+	var atts: Array = attack_list()
 	var far := target != null and is_instance_valid(target) and distance_to(target) > 1.5
 	for a in atts:
-		if a["combat_lvl"] > combat_level():
+		if a["combat_lvl"] > combat_level() or _berserk_locked(a):
 			continue
 		if best.is_empty():
 			best = a
@@ -539,6 +583,12 @@ func _do_attack() -> bool:
 		if next and is_instance_valid(next) and not next.dead:
 			order_attack(next)
 		return false
+	if sprite_code == "EXPCART":
+		if distance_to(target) <= 1.5:
+			explode()
+			return false
+		var att_c := {"range": 1}
+		return _close_in(att_c)
 	var att := current_attack()
 	if att.is_empty():
 		stop()
@@ -555,6 +605,11 @@ func _do_attack() -> bool:
 			action = att["action"]
 			anim_frame = 0
 		return false
+	return _close_in(att)
+
+
+func _close_in(att: Dictionary) -> bool:
+	var dist := distance_to(target)
 	repath_timer -= 1
 	if repath_timer <= 0 or path_i >= path.size():
 		repath_timer = 15 + obj_id % 7
@@ -600,7 +655,7 @@ func roll_damage(att: Dictionary) -> float:
 	var n := nation()
 	if n and is_human():
 		dmg += 2.0 * n.tech_level("INFRANGE" if att["range"] > 1 else "INFCLOSE")
-	if is_weapon and n:
+	if is_weapon and n and not _versioned_attacks():
 		dmg *= 1.0 + 0.25 * maxi(0, n.tech_level(sprite_code) - 1)
 	if is_weapon and not (target is Unit):
 		dmg *= 2.0
@@ -791,6 +846,43 @@ func on_attacked(attacker: GameObj) -> void:
 		order_attack(attacker)
 		resume_target = building
 	Game.inst.call_for_help(self, attacker)
+
+
+## UnitExpCart: the Porcupine blows up, hurting everything within a cell and
+## setting off other Porcupines within two (EXPLODE_DAMAGE 50 x ATTACK_SLOW_DOWN).
+const EXPLODE_DAMAGE := 150.0
+
+
+func explode() -> void:
+	if dead or sprite_code != "EXPCART":
+		return
+	var g := Game.inst
+	var c := center_loc()
+	var dmg := EXPLODE_DAMAGE * (weapon_version * 0.5 if weapon_version > 2 else 1.0)
+	hp = 0.0
+	die(null)
+	g.spawn_effect(1, loc - Vector2(0.5, 0.5))
+	for u in g.units_near(c, 3.0):
+		if u == self or u.dead or u.inside_firm:
+			continue
+		var d := c.distance_to(u.center_loc())
+		if u.sprite_code == "EXPCART" and d <= 2.5:
+			u.call_deferred("explode")
+		elif d <= 1.6 and not u.utype.get("flying", false):
+			u.take_damage(dmg, self)
+	for o in g.firms + g.towns:
+		if not o.dead and o.footprint().grow(1).has_point(cell()):
+			o.take_damage(dmg, self)
+
+
+## A Porcupine of version 2 or later is camouflaged from other kingdoms
+## (UnitExpCart::is_camouflage), as is a camouflaged spy.
+func hidden_from(nid: int) -> bool:
+	if nid == nation_id or dead:
+		return false
+	if camouflage_days > 0:
+		return true
+	return sprite_code == "EXPCART" and weapon_version > 1
 
 
 func die(killer: GameObj) -> void:

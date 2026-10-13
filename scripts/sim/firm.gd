@@ -6,12 +6,13 @@ extends GameObj
 
 const WORK_FIRMS := ["MINE", "FACTORY", "RESEARCH", "WAR", "BASE"]
 const MILITARY_FIRMS := ["CAMP", "FORT"]
-## Fryhtan and siege structures that shoot at enemies on their own
-## (FirmLishorr / FirmOffensive2::process_monster_firm): [damage, range, delay].
+## Structures that shoot at enemies on their own (FirmLishorr /
+## FirmOffensive2::process_monster_firm): [damage, range, delay]. A Lishorr's
+## damage follows SpecialFirms.lishorr_damage.
 const TOWER_FIRMS := {
-	"LISHORR": [12.0, 8.0, 20], "WLISHORR": [12.0, 8.0, 20], "MAGIC": [30.0, 9.0, 40],
-	"OFF_BLD1": [40.0, 9.0, 40], "OFF_BLD2": [40.0, 9.0, 40], "OFF_BLD3": [60.0, 9.0, 40], "OFF_BLD4": [100.0, 10.0, 60],
+	"LISHORR": [12.0, 8.0, 20], "WLISHORR": [12.0, 8.0, 20], "OFF_BLD3": [60.0, 9.0, 40],
 }
+const FORTRESS_TICK := 5
 const STOCK_CAP := 500.0
 
 var code := ""
@@ -51,6 +52,12 @@ var monster_code := ""              # lair: monster unit sprite
 var raid_timer := 0
 var build_row := 0                  # FBUILD record when the variant was given explicitly (scenarios)
 var _tower_timer := 0
+var cast_charge := Defs.MAX_CAST_DELAY   # spell building: FirmMagic::cast_delay
+var shown_until := 0                # camouflaged Lishorr/Fortress: seen until this frame after firing
+var extra_units: Array[Unit] = []   # Fortress: the Grokkens it was made of
+var animals: Array = []             # Keraal: beasts for hire
+var alchemy_mode := ""              # Alchemist Tor: conversion in use (a tech code)
+var propagate := 1                  # Wilde Lishorr: seedlings it may still spread
 
 var anim_index := 0
 var anim_timer := 0
@@ -94,6 +101,11 @@ func _monster_name() -> String:
 	return Defs.unit_types.get(monster_code, {}).get("name", "Fryhtan")
 
 
+## A camouflaged building other kingdoms cannot see (SpecialFirms.hidden_from).
+func hidden_from(nid: int) -> bool:
+	return SpecialFirms.hidden_from(self, nid)
+
+
 func is_military() -> bool:
 	return code in MILITARY_FIRMS or code == "LAIR"
 
@@ -110,6 +122,8 @@ func capacity() -> int:
 			return 8
 		"LAIR":
 			return 8
+		"FORTRESS":
+			return SpecialFirms.FORTRESS_ARCHERS
 	return 0
 
 
@@ -134,6 +148,13 @@ func armor() -> float:
 func accept_unit(u: Unit) -> bool:
 	if under_construction or u.nation_id != nation_id or dead:
 		return false
+	if code == "FORTRESS":
+		# FirmMonsterFortress::can_accept_assign: Fryhtans of the kingdom man its walls
+		if not SpecialFirms.is_fryhtan_unit(u) or soldiers.size() >= capacity():
+			return false
+		soldiers.append(u)
+		_hide_unit(u)
+		return true
 	if not is_military():
 		return false
 	if code != "LAIR" and (not u.is_human() or u.is_civilian()):
@@ -211,6 +232,8 @@ func change_nation(to_nation: int) -> void:
 			u.remove_meta("sleeper_skill")
 	research_tech = ""
 	research_points = 0.0
+	alchemy_mode = ""
+	animals.clear()
 	weapon = ""
 	weapon_queue = 0
 	weapon_progress = 0.0
@@ -224,6 +247,10 @@ func eject_all() -> void:
 		release_unit(s)
 	if overseer:
 		release_unit(overseer)
+	for u in extra_units:
+		if is_instance_valid(u) and not u.dead:
+			release_unit(u)
+	extra_units.clear()
 
 
 func set_builder(u: Unit) -> bool:
@@ -259,6 +286,8 @@ func sim_frame() -> void:
 		_tower_timer -= 1
 		if _tower_timer <= 0:
 			_tower_shoot()
+	if code == "FORTRESS" and not soldiers.is_empty() and Game.inst.frame % FORTRESS_TICK == obj_id % FORTRESS_TICK:
+		SpecialFirms.fortress_shoot(self)
 
 
 ## Towers fire at the nearest hostile unit in range.
@@ -279,8 +308,9 @@ func _tower_shoot() -> void:
 		return
 	_tower_timer = spec[2]
 	var dmg: float = spec[0]
-	if code.ends_with("LISHORR") and g.weather.rain_scale() <= 0:
-		dmg *= 2.0       # Lishorrs are deadlier in dry weather
+	if code.ends_with("LISHORR"):
+		dmg = SpecialFirms.lishorr_damage(self)
+	shown_until = g.frame + SpecialFirms.SHOWN_AFTER_FIRING
 	var spr: String = build.get("bullet", "")
 	if spr == "" or not Assets.has_sprite(spr):
 		spr = "NO_ARROW"
@@ -349,6 +379,7 @@ func next_day(day: int) -> void:
 			_pray()
 		"LAIR":
 			_lair(day)
+	SpecialFirms.next_day(self, day)
 
 
 func _complete() -> void:
@@ -788,6 +819,8 @@ func render(cv) -> void:
 	# drawn on top of it (Firm::draw_frame in the original).
 	var bitmaps: Array = frames[0]["bitmaps"].duplicate()
 	var mod := Color.WHITE
+	if not under_construction and nation_id == Game.inst.player_id and SpecialFirms.hidden_from(self, -1):
+		mod = Color(1, 1, 1, 0.6)
 	if under_construction:
 		# FirmRes::calc_color_remap_table: solid, brightness 40% -> 90% with completion
 		var br := (progress / 100.0 * 128.0 + 102.0) / 256.0

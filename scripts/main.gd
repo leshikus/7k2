@@ -21,6 +21,9 @@ var rain_player: AudioStreamPlayer
 
 var build_code := ""
 var build_race := ""
+var _spell_firm: Firm = null   # spell building waiting for its target click
+var _spell_code := ""
+var _spell_unit: Unit = null    # teleport: the unit picked by the first click
 var _item_user: Unit = null  # unit about to use an item on what is clicked next        # race of the building to place (a Seat of Power's god)
 var _drag_from := Vector2.ZERO
 var _dragging := false
@@ -47,7 +50,11 @@ func _ready() -> void:
 	# Command-line shortcut for automated runs: --autostart [seed]
 	var args := OS.get_cmdline_user_args()
 	if "--autostart" in args and Assets.ready_ok:
-		_start({"seed": 7, "size": 100, "race": "NORMAN", "ai_count": 3, "cash": 3000})
+		var race := "NORMAN"
+		for a in args:
+			if a.begins_with("--race="):
+				race = a.substr(7)       # a Fryhtan species (GITH, PLANT ...) leads a Fryhtan kingdom
+		_start({"seed": 7, "size": 100, "race": race, "ai_count": 3, "cash": 3000})
 	# --scenario=<file name> [--spectate]: start a premade scenario
 	for a in args:
 		if a.begins_with("--scenario=") and Assets.ready_ok:
@@ -256,6 +263,41 @@ func _demo(what: String) -> void:
 			var home: Town = game.towns.filter(func(t): return t.nation_id == p.id)[0]
 			camera.iso_pos = Iso.to_screen(home.center_loc())
 			get_tree().create_timer(1.6).timeout.connect(func(): game._lightning_strike(); _on_lightning(camera.iso_pos + Vector2(-120, 60)))
+		"specials":
+			# every special building of the kingdom (Fryhtan or offensive), all techs known
+			p.cash = 30000.0
+			p.live_points = 30000.0
+			var anchor: Rect2i
+			var codes: Array
+			if p.is_fryhtan:
+				for t in Defs.FRYHTAN_TECHS:
+					p.tech[t["code"]] = t["max"]
+				anchor = game.firms.filter(func(f): return f.nation_id == p.id)[0].footprint()
+				codes = Defs.FRYHTAN_FIRMS.filter(func(c): return c != "WLISHORR")   # it would turn on us
+			else:
+				for t in Defs.research_techs():
+					if t.has("firm") or t["code"] in Defs.WEAPONS or t["code"].begins_with("SPU"):
+						p.tech[t["code"]] = t["max"]
+				anchor = game.towns.filter(func(t): return t.nation_id == p.id)[0].footprint()
+				codes = Defs.OFFENSIVE_FIRMS
+			var made: Array = []
+			for code in codes:
+				var b := Assets.firm_build(code, p.race)
+				var at := game._place_near(anchor, b.get("loc_w", 4), b.get("loc_h", 4), 12)
+				if at.x >= 0:
+					var f := game.spawn_firm(code, p.id, p.race, at, true)
+					if f:
+						made.append(f)
+			if p.is_fryhtan:
+				var c := game._place_near(anchor, 4, 4, 14) + Vector2i(1, 1)
+				var grok: Array = []
+				for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+					grok.append(game.spawn_unit("GITH", p.id, c + o, 40.0))
+				_set_selection(grok.filter(func(u): return u != null))
+			elif not made.is_empty():
+				_set_selection([made[0]])
+			camera.iso_pos = Iso.to_screen(Vector2(anchor.get_center()))
+			camera.zoom = Vector2(0.8, 0.8)
 		"spies":
 			var home: Town = game.towns.filter(func(t): return t.nation_id == p.id)[0]
 			home.loyalty = 80.0
@@ -439,6 +481,11 @@ func _attach_game() -> void:
 	hud.item_target_requested.connect(func(u):
 		_item_user = u
 		game.notify("Click the target for the %s; right-click to cancel." % Items.item_name(u.item_id), Vector2(-1, -1)))
+	hud.spell_target_requested.connect(func(f, sp):
+		_spell_firm = f
+		_spell_code = sp
+		_spell_unit = null
+		game.notify("Click %s; right-click to cancel." % ("the unit to teleport" if sp == "TELEPORT" else "the target"), Vector2(-1, -1)))
 	hud.center_on.connect(func(l): camera.iso_pos = Iso.to_screen(l))
 	hud.menu_new_game.connect(_show_menu)
 	hud.move_selected_to.connect(func(l):
@@ -616,6 +663,31 @@ func _use_item_on_click() -> void:
 	hud.refresh_selection(true)
 
 
+## Aim a Mage Tor or offensive building's spell at the clicked place.
+func _cast_on_click() -> void:
+	var f := _spell_firm
+	if not is_instance_valid(f) or f.dead:
+		_spell_firm = null
+		return
+	if _spell_code == "TELEPORT" and _spell_unit == null:
+		var u := _pick()
+		if u is Unit and u.nation_id == game.player_id:
+			_spell_unit = u
+			game.notify("Now click where to send it.", Vector2(-1, -1))
+		else:
+			game.notify("Click one of your units.", Vector2(-1, -1))
+		return
+	var at := _mouse_loc()
+	var o := _pick()
+	if o and _spell_code == "DESTROY":
+		at = o.center_loc()
+	if not SpecialFirms.cast(f, _spell_code, at, _spell_unit):
+		game.notify("The spell finds no target there (or cannot be afforded).", Vector2(-1, -1))
+	_spell_firm = null
+	_spell_unit = null
+	hud.refresh_selection(true)
+
+
 func _mouse_loc() -> Vector2:
 	return Iso.to_loc(_world_mouse())
 
@@ -646,7 +718,11 @@ func _placement() -> Dictionary:
 			ok = s.mine == null and game.world.can_place(pos.x, pos.y, w, h, true)
 	else:
 		var r := Rect2i(pos, Vector2i(w, h))
-		ok = game.world.can_place(pos.x, pos.y, w, h) and not game._overlaps_site(r) and game.is_loc_explored(r.get_center())
+		var site_ok := not game._overlaps_site(r)
+		if build_code == "ALCHEMY":
+			var st := game.site_at_rect(r)
+			site_ok = st == null or st.mine == null
+		ok = game.world.can_place(pos.x, pos.y, w, h) and site_ok and game.is_loc_explored(r.get_center())
 	return {"build": b, "pos": pos, "ok": ok}
 
 
@@ -664,11 +740,13 @@ func _place_building() -> void:
 		return
 	var p := game.player()
 	var cost := float(Defs.firm_types.get(build_code, {}).get("cost", 0))
+	var live := SpecialFirms.setup_live(build_code) if p.is_fryhtan else 0.0
 	if build_code == "LAIR":
 		cost = FryhtanAI.LAIR_COST
-		if p.live_points < FryhtanAI.LAIR_LIVE:
-			game.notify("Not enough life points.", Vector2(-1, -1))
-			return
+		live = FryhtanAI.LAIR_LIVE
+	if live > 0.0 and p.live_points < live:
+		game.notify("Not enough life points.", Vector2(-1, -1))
+		return
 	if not p.can_afford(cost):
 		game.notify("Not enough gold.", Vector2(-1, -1))
 		return
@@ -681,9 +759,9 @@ func _place_building() -> void:
 	if f == null:
 		return
 	p.add_cash(-cost)
+	p.live_points -= live
 	if build_code == "LAIR":
 		f.monster_code = p.monster_code
-		p.live_points -= FryhtanAI.LAIR_LIVE
 	var c := f.center_loc()
 	builders.sort_custom(func(a, b): return a.center_loc().distance_to(c) < b.center_loc().distance_to(c))
 	builders[0].order_build(f)
@@ -722,6 +800,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _item_user != null:
 						_use_item_on_click()
 						return
+					if _spell_firm != null:
+						_cast_on_click()
+						return
 					_left_down = true
 					_drag_from = mb.position
 					_dragging = false
@@ -744,6 +825,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_cancel_build()
 					elif _item_user != null:
 						_item_user = null
+					elif _spell_firm != null:
+						_spell_firm = null
 					else:
 						_command(mb.ctrl_pressed)
 	elif event is InputEventMouseMotion and _orbiting:
@@ -913,7 +996,7 @@ func _command(force_attack: bool) -> void:
 				if not humans.is_empty():
 					humans[0].order_build(f)
 				return
-			if f.is_military():
+			if f.is_military() or f.code == "FORTRESS":
 				for u in own:
 					u.order_enter(f)
 				return

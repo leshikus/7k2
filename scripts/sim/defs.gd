@@ -67,6 +67,18 @@ const FIRM_HELP := {
 	"STABLE": "Trains your race's special unit from volunteers of linked loyal towns.",
 	"SPY": "Espionage College. Trains spies to infiltrate enemy and independent towns and buildings.",
 	"BASE": "Seat of Power. Linked people of the kingdom's race pray to summon their Greater Being.",
+	"OFF_BLD1": "Teledamnum. Calls down a thunderbolt on enemies and buildings up to 20 cells away. Costs gold per strike.",
+	"OFF_BLD2": "Preuser. Freezes every enemy within 10 cells for 20 days. Costs gold per blast.",
+	"OFF_BLD3": "Testudo. A tower that shoots at enemies on its own.",
+	"OFF_BLD4": "Archimedetron. Burns every enemy within 8 cells. Costs gold per blast.",
+	"LISHORR": "Lishorr. A Fryhtan plant that shoots at enemies, harder in clear weather.",
+	"WLISHORR": "Wilde Lishorr. Grows wild once planted: it shoots at everyone and spreads in February and July.",
+	"BEE": "Bheema Hyfe. Breeds Bheema, fierce flying insects.",
+	"TERMITE": "Tarmes Mownd. Breeds Tarmes, armoured insects.",
+	"ANIMAL": "Keraal. Wild beasts the brood has tamed come here to be hired.",
+	"ALCHEMY": "Alchemist Tor. Turns gold and life points into each other, or minerals into either when built on a deposit.",
+	"INCUBAT": "Vapngart. Grows living war machines: Cobrez, Peltez and Nemezez.",
+	"MAGIC": "Mage Tor. Casts the spells your brood has learnt: damage buildings, freeze or wound units, teleport.",
 }
 
 const TECHS := [
@@ -90,8 +102,76 @@ const TECHS := [
 	{"code": "STEALTEC", "name": "Technology Theft", "max": 1, "cost": 22, "spy": true, "req": "STEALINF", "req_lvl": 1},
 	{"code": "CAMOUFLG", "name": "Camouflage", "max": 1, "cost": 26, "spy": true, "req": "COUNTERS", "req_lvl": 1, "req2": "ASSASSIN", "req2_lvl": 1},
 	{"code": "INCIDENT", "name": "Create Incident", "max": 1, "cost": 28, "spy": true, "req": "CAMOUFLG", "req_lvl": 1},
+	{"code": "EXPCART", "name": "Porcupine", "max": 3, "cost": 50, "req": "FLAMETHR", "req_lvl": 2},
+	{"code": "F_BALLIS", "name": "Unicorn", "max": 3, "cost": 50, "req": "EXPCART", "req_lvl": 1},
+	# Offensive Buildings (TECH class OFF_BLD; complexity 200 in the original, shortened here)
+	{"code": "OFF_BLD1", "name": "Teledamnum", "max": 1, "cost": 100, "firm": "OFF_BLD1"},
+	{"code": "OFF_BLD2", "name": "Preuser", "max": 1, "cost": 100, "firm": "OFF_BLD2"},
+	{"code": "OFF_BLD3", "name": "Testudo", "max": 1, "cost": 100, "firm": "OFF_BLD3"},
+	{"code": "OFF_BLD4", "name": "Archimedetron", "max": 1, "cost": 100, "firm": "OFF_BLD4"},
 ]
-const WEAPONS := ["CATAPULT", "BALLISTA", "FLAMETHR", "CANNON"]
+const WEAPONS := ["CATAPULT", "BALLISTA", "FLAMETHR", "CANNON", "EXPCART", "F_BALLIS"]
+## Offensive buildings a human kingdom builds once researched.
+const OFFENSIVE_FIRMS := ["OFF_BLD1", "OFF_BLD2", "OFF_BLD3", "OFF_BLD4"]
+
+## Special Unit Structure (SPUS_xxx: build the race's training centre) and Special
+## Unit Berserker (SPUB_xxx: its power attack). Race-specific: a kingdom researches
+## them only for races it has towns of (TechInfo::can_research).
+const SPU_TECH_SUFFIX := {
+	"NORMAN": "NOR", "VIKING": "VIK", "CELTIC": "CEL", "ROMAN": "ROM", "GREEK": "GRE", "CARTH": "CAR",
+	"CHINESE": "CHI", "JAPANESE": "JAP", "MONGOL": "MON", "EGYPTIAN": "EGY", "PERSIAN": "PER", "INDIAN": "IND",
+}
+
+## Fryhtan technologies (TECH classes PLANT ... GREMJERM). A Fryhtan kingdom buys
+## them at a lair of the species with life points (FirmLair::buy_tech); the price
+## is complexity x 20 in the original, x 10 here to suit this economy.
+const FRYHTAN_TECHS := [
+	{"code": "LISHORR", "name": "Lishorr", "max": 3, "cost": 50, "species": "PLANT", "firm": "LISHORR"},
+	{"code": "WLISHORR", "name": "Wilde Lishorr", "max": 1, "cost": 70, "species": "PLANT", "firm": "WLISHORR", "req": "LISHORR", "req_lvl": 1},
+	{"code": "LISH_CAM", "name": "Camouflage Ability", "max": 1, "cost": 50, "species": "PLANT", "req": "LISHORR", "req_lvl": 1, "req2": "WLISHORR", "req2_lvl": 1},
+	{"code": "FBEE", "name": "Bheema Hyfe", "max": 3, "cost": 50, "species": "LYW", "firm": "BEE", "unit": "BEE"},
+	{"code": "FTERMITE", "name": "Tarmes Mownd", "max": 3, "cost": 50, "species": "LYW", "firm": "TERMITE", "unit": "TERMITE"},
+	{"code": "JAGUAR", "name": "Jaguara", "max": 2, "cost": 50, "species": "HOBGLOB", "firm": "ANIMAL", "unit": "JAGUAR"},
+	{"code": "GORILLA", "name": "Goril", "max": 2, "cost": 50, "species": "HOBGLOB", "firm": "ANIMAL", "unit": "GORILLA"},
+	{"code": "RHINOCER", "name": "Rhinokeros", "max": 1, "cost": 50, "species": "HOBGLOB", "firm": "ANIMAL", "unit": "RHINOCER"},
+	{"code": "LIVEGOLD", "name": "Life Points to Gold", "max": 1, "cost": 50, "species": "GIANTET", "firm": "ALCHEMY"},
+	{"code": "GOLDLIVE", "name": "Gold to Life Points", "max": 1, "cost": 100, "species": "GIANTET", "firm": "ALCHEMY"},
+	{"code": "MINELIVE", "name": "Minerals to Life Points", "max": 1, "cost": 150, "species": "GIANTET", "firm": "ALCHEMY"},
+	{"code": "MINEGOLD", "name": "Minerals to Gold", "max": 1, "cost": 150, "species": "GIANTET", "firm": "ALCHEMY"},
+	{"code": "ALCHEMY", "name": "Advanced Alchemy", "max": 2, "cost": 100, "species": "GIANTET"},
+	{"code": "FORTRESS", "name": "Fortress", "max": 3, "cost": 50, "species": "GITH", "firm": "FORTRESS"},
+	{"code": "FORT_CAM", "name": "Camouflaged Fortress", "max": 1, "cost": 50, "species": "GITH", "req": "FORTRESS", "req_lvl": 1},
+	{"code": "WEAPON1", "name": "Cobrez", "max": 3, "cost": 30, "species": "ROCKMAN", "firm": "INCUBAT", "unit": "F__BALLI"},
+	{"code": "WEAPON2", "name": "Peltez", "max": 3, "cost": 50, "species": "ROCKMAN", "firm": "INCUBAT", "unit": "F_CATAPU"},
+	{"code": "WEAPON3", "name": "Nemezez", "max": 3, "cost": 70, "species": "ROCKMAN", "firm": "INCUBAT", "unit": "F_CANNON"},
+	{"code": "MAGIC1", "name": "Damage Building", "max": 1, "cost": 90, "species": "GREMJERM", "firm": "MAGIC"},
+	{"code": "MAGIC2", "name": "Freeze Units", "max": 1, "cost": 40, "species": "GREMJERM", "firm": "MAGIC"},
+	{"code": "MAGIC3", "name": "Wound Units", "max": 1, "cost": 60, "species": "GREMJERM", "firm": "MAGIC"},
+	{"code": "MAGIC4", "name": "Teleport Unit", "max": 1, "cost": 40, "species": "GREMJERM", "firm": "MAGIC"},
+]
+const FRYHTAN_TECH_LIVE_FACTOR := 10.0
+## Fryhtan special buildings placed like other buildings, in menu order. The
+## Fortress is not placed: four Grokkens turn into one.
+const FRYHTAN_FIRMS := ["LISHORR", "WLISHORR", "BEE", "TERMITE", "ANIMAL", "ALCHEMY", "INCUBAT", "MAGIC"]
+const FORTRESS_BUILDER := "GITH"
+
+## Spells of the Mage Tor and the human offensive buildings
+## (FirmMagic::magic_info_array): live/cost are the minimum price, "extra_*" the
+## price per cell beyond the cast range; delay is taken from the 100-point charge.
+const SPELLS := {
+	"DESTROY": {"short": "Blast", "name": "Damage Building", "tech": "MAGIC1", "live": 30, "cost": 0, "delay": 61, "effect": 50, "range": 20, "radius": 0, "extra_live": 5, "extra_cost": 0},
+	"FREEZE": {"short": "Freeze", "name": "Freeze Units", "tech": "MAGIC2", "live": 30, "cost": 0, "delay": 30, "effect": 12, "range": 20, "radius": 3, "extra_live": 4, "extra_cost": 0},
+	"WOUND": {"short": "Wound", "name": "Wound Units", "tech": "MAGIC3", "live": 100, "cost": 0, "delay": 10, "effect": 100, "range": 8, "radius": 3, "extra_live": 6, "extra_cost": 0},
+	"TELEPORT": {"short": "Teleport", "name": "Teleport Unit", "tech": "MAGIC4", "live": 15, "cost": 0, "delay": 5, "effect": 0, "range": 50, "radius": 0, "extra_live": 1, "extra_cost": 0},
+	"FREEZE_LASER": {"short": "Freeze", "name": "Freezing Blast", "tech": "", "live": 0, "cost": 120, "delay": 50, "effect": 20, "range": 0, "radius": 10, "extra_live": 0, "extra_cost": 0},
+	"GOD_POWER": {"short": "Thunderbolt", "name": "Thunderbolt", "tech": "", "live": 0, "cost": 140, "delay": 50, "effect": 100, "range": 20, "radius": 3, "extra_live": 0, "extra_cost": 5},
+	"LASER": {"short": "Death ray", "name": "Death Ray", "tech": "", "live": 0, "cost": 70, "delay": 50, "effect": 150, "range": 0, "radius": 8, "extra_live": 0, "extra_cost": 0},
+}
+const FIRM_SPELLS := {
+	"MAGIC": ["DESTROY", "FREEZE", "WOUND", "TELEPORT"],
+	"OFF_BLD1": ["GOD_POWER"], "OFF_BLD2": ["FREEZE_LASER"], "OFF_BLD4": ["LASER"],
+}
+const MAX_CAST_DELAY := 100
 
 static var races: Array = []          # [{code, name, adj}]
 static var unit_types := {}           # sprite code -> unit type dict
@@ -130,7 +210,7 @@ static func load_from_assets() -> void:
 			t["attacks"].append({
 				"combat_lvl": ar["COMBAT_LVL"].to_int(), "delay": maxi(1, ar["ATTK_DELAY"].to_int()),
 				"range": maxi(1, ar["ATTK_RANGE"].to_int()), "damage": ar["BASIC_DMG"].to_int(),
-				"pierce": ar["PIERCE_DMG"].to_int(), "bullet": ar["BUL_SPRITE"],
+				"pierce": ar["PIERCE_DMG"].to_int(), "bullet": ar["BUL_SPRITE"], "consume": ar["CONSUME_P"].to_int(),
 				"bullet_speed": maxi(4, ar["BUL_SPEED"].to_int()), "action": "A%d" % ar["ATTK_ID"].to_int(),
 			})
 		unit_types[u["SPRITE"]] = t
@@ -218,6 +298,8 @@ static func unit_sprite(race: String, kind: String) -> String:
 static func can_research(n, t: Dictionary) -> bool:
 	if n.tech_level(t["code"]) >= t["max"]:
 		return false
+	if t.has("race") and not Game.inst.nation_has_race_town(n.id, t["race"]):
+		return false
 	if t.has("req") and n.tech_level(t["req"]) < t["req_lvl"]:
 		return false
 	if t.has("req2") and n.tech_level(t["req2"]) < t["req2_lvl"]:
@@ -226,10 +308,83 @@ static func can_research(n, t: Dictionary) -> bool:
 
 
 static func tech_def(code: String) -> Dictionary:
-	for t in TECHS:
+	for t in research_techs():
+		if t["code"] == code:
+			return t
+	for t in FRYHTAN_TECHS:
 		if t["code"] == code:
 			return t
 	return {}
+
+
+static var _research_techs: Array = []
+
+## The research list of the Tower of Science: the common techs plus the
+## special-unit techs of every race (offered only for races the kingdom has towns of).
+static func research_techs() -> Array:
+	if not _research_techs.is_empty():
+		return _research_techs
+	var out: Array = TECHS.duplicate()
+	for r in SPU_TECH_SUFFIX:
+		var sfx: String = SPU_TECH_SUFFIX[r]
+		var adj := race_adj(r)
+		out.append({"code": "SPUS_" + sfx, "name": adj + " Training Centre", "max": 1, "cost": 15, "race": r})
+		out.append({"code": "SPUB_" + sfx, "name": adj + " Berserker", "max": 1, "cost": 25, "race": r, "req": "SPUS_" + sfx, "req_lvl": 1})
+	if not races.is_empty():
+		_research_techs = out
+	return out
+
+
+static func race_adj(code: String) -> String:
+	for r in races:
+		if r["code"] == code:
+			return r["adj"] if r["adj"] != "" else r["name"]
+	return code.capitalize()
+
+
+static func spu_structure_tech(race: String) -> String:
+	return "SPUS_" + SPU_TECH_SUFFIX.get(race, "NOR")
+
+
+static func spu_berserk_tech(race: String) -> String:
+	return "SPUB_" + SPU_TECH_SUFFIX.get(race, "NOR")
+
+
+## Fryhtan techs of one species, bought at its lairs.
+static func fryhtan_techs(species: String) -> Array:
+	return FRYHTAN_TECHS.filter(func(t): return t["species"] == species)
+
+
+static func fryhtan_tech_live_cost(t: Dictionary) -> float:
+	return float(t["cost"]) * FRYHTAN_TECH_LIVE_FACTOR
+
+
+## The techs any of which unlocks a Fryhtan or offensive building.
+static func firm_techs(code: String) -> Array:
+	var out := []
+	for t in FRYHTAN_TECHS + TECHS:
+		if t.get("firm", "") == code:
+			out.append(t["code"])
+	return out
+
+
+## Whether a kingdom knows how to build this Fryhtan or offensive building.
+static func knows_firm(n, code: String) -> bool:
+	var ts := firm_techs(code)
+	if ts.is_empty():
+		return true
+	for c in ts:
+		if n.tech_level(c) > 0:
+			return true
+	return false
+
+
+## The tech a Fryhtan unit (insect, animal, bio-weapon) needs.
+static func unit_tech(sprite: String) -> String:
+	for t in FRYHTAN_TECHS:
+		if t.get("unit", "") == sprite:
+			return t["code"]
+	return ""
 
 
 static func random_person_name(race: String, rng: RandomNumberGenerator) -> String:

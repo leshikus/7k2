@@ -607,6 +607,13 @@ func spawn_firm(code: String, nation_id: int, race: String, at: Vector2i, comple
 	var f := Firm.new()
 	f.build_row = build_row
 	f.setup(code, nation_id, race, at)
+	if code == "ALCHEMY":
+		var s := site_at_rect(f.footprint())
+		if s and s.mine == null:
+			f.site = s
+			f.raw = s.raw
+			f.reserve = s.reserve
+			s.mine = f
 	if code == "MINE":
 		var s := site_at_rect(f.footprint())
 		if s == null or s.mine != null:
@@ -1126,8 +1133,8 @@ func find_enemy_near(obj: GameObj, range: float) -> GameObj:
 	for u in units_near(c, range + 2.0):
 		if u.dead or u.inside_firm or u == obj or u.has_meta("hidden") or not is_hostile(obj, u):
 			continue
-		if u.camouflage_days > 0:
-			continue          # a camouflaged spy is not seen by other kingdoms
+		if u.hidden_from(obj.nation_id):
+			continue          # a camouflaged spy or Porcupine is not seen by other kingdoms
 		var d := c.distance_to(u.center_loc())
 		if d < best_d:
 			best_d = d
@@ -1303,6 +1310,19 @@ func next_day() -> void:
 	_update_fog()
 
 
+## Month of the year, 1-12, as date_string counts it.
+func month() -> int:
+	return mini(11, (day % 365) / 31) + 1
+
+
+## Whether a kingdom has a town of this race (TechInfo::can_research for race techs).
+func nation_has_race_town(nid: int, r: String) -> bool:
+	for t in towns:
+		if t.nation_id == nid and t.race == r and not t.dead:
+			return true
+	return false
+
+
 func date_string() -> String:
 	var y := START_YEAR + day / 365
 	var doy := day % 365
@@ -1405,9 +1425,9 @@ func _update_visibility() -> void:
 		if u.has_meta("hidden"):
 			u.visible = false
 			continue
-		u.visible = u.nation_id == player_id or ((reveal_all or is_loc_visible(u.cell())) and (u.camouflage_days <= 0 or observer()))
+		u.visible = u.nation_id == player_id or ((reveal_all or is_loc_visible(u.cell())) and (not u.hidden_from(player_id) or observer()))
 	for f in firms:
-		f.visible = f.nation_id == player_id or is_explored_rect(f.footprint())
+		f.visible = f.nation_id == player_id or (is_explored_rect(f.footprint()) and (not f.hidden_from(player_id) or observer()))
 	for t in towns:
 		t.visible = t.nation_id == player_id or is_explored_rect(t.footprint())
 	for c in _plants:

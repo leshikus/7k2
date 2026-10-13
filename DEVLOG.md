@@ -320,3 +320,48 @@ Ported from ospy.cpp, ospya.cpp, ospy2.cpp and of_campb.cpp (`scripts/sim/espion
 - Sabotage is gone: 7k2 disabled it (`Spy::can_sabotage` returns 0).
 - Tests: `tests/spy_test` (45 checks); `tests/tools/spy_watch` plays a computer-only
   game and tallies spy events.
+
+## Fryhtan special buildings and the remaining technologies (13 Oct 2026)
+
+Ported from `of_lair.cpp`, `of_mtrn.cpp`, `of_anim.cpp`, `of_alch.cpp`,
+`of_incu.cpp`, `of_mfort.cpp`, `of_lish.cpp` and `of_magi.cpp`
+(`scripts/sim/special_firms.gd`).
+
+- **Fryhtan technology**: each species has its own techs (TECH classes PLANT …
+  GREMJERM), bought at once at a lair of that species for life points
+  (`FirmLair::buy_tech`). The price is complexity × 10 life points (× 20 in the
+  original, halved for this economy).
+- **Special buildings**, each unlocked by its tech: Lishorr (damage by tech level
+  and weather, camouflaged as a plant with Camouflage Ability until it fires),
+  Wilde Lishorr (goes wild and spreads in February and July), Bheema Hyfe and
+  Tarmes Mownd (breed insects), Keraal (tamed beasts come for hire every two
+  weeks), Alchemist Tor (life ↔ gold at 2:1, minerals → 0.2 life or 0.4 gold when
+  built on a deposit, Advanced Alchemy doubles the rate), Vapngart (grows Cobrez,
+  Peltez and Nemezez), Mage Tor (Damage Building, Freeze Units, Wound Units,
+  Teleport Unit; a 100-point charge that refills a day at a time, paid in life
+  points plus extra per cell beyond range).
+- **Fortress**: four Grokkens standing together turn into one (hit points grow
+  with the tech level); up to four Fryhtans posted inside shoot at enemies within
+  8 cells, a Grokken as if 25 combat levels higher. Camouflaged Fortress hides it
+  as a rock.
+- **Independent lairs** can be bought by a Fryhtan kingdom with a commanded lair
+  next to them (`grant_to_non_own_lair`, at least 2000 gold).
+- **Human techs**: the Porcupine (`ou_cart.cpp`: explodes beside its target,
+  sets off nearby carts, camouflaged from version 2) and the Unicorn; per-race
+  training-centre (Special Unit Structure) and Berserker techs, researchable only
+  for races you have towns of. The training centre needs the first; the special
+  unit's power attack needs the second (`Unit::can_attack_with`).
+- **Offensive buildings** (OFF_BLD1–4) researched at the Tower of Science.
+  Teledamnum, Preuser and Archimedetron cast with the Mage Tor rules for gold;
+  Testudo shoots on its own. Computer-owned ones fire by themselves.
+- **Weapon versions**: war machines and Fryhtan units keep the tech level they
+  were built at and use that level's attack set (`get_weapon_version`).
+- **AI**: computer Fryhtans buy techs, build special buildings, breed, hire,
+  convert, make fortresses and take independent lairs once their brood is strong.
+  Computer kingdoms research the new techs and build an offensive building by a
+  fort. Their Towers of Science were often idle, because research was assigned
+  after several early returns; now it is assigned first.
+- `--autostart --race=GITH --demo=specials` starts a Grokken kingdom with every
+  special building; without `--race` it shows the human offensive buildings.
+- New test `special_firms_test` (45 checks) and tool `tests/tools/fryhtan_watch`.
+

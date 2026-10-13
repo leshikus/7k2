@@ -119,6 +119,8 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech,
 		"research_points": f.research_points, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
+		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate,
 	}
 
 
@@ -126,7 +128,7 @@ static func _unit(u: Unit) -> Dictionary:
 	return {
 		"id": u.obj_id, "sprite": u.sprite_code, "nation": u.nation_id, "x": u.loc.x, "y": u.loc.y,
 		"rank": u.rank, "combat": u.combat, "leadership": u.leadership, "hp": u.hp, "max_hp": u.max_hp,
-		"name": u.unit_name, "hero": u.is_hero, "life": u.life_frames, "dir": u.dir,
+		"name": u.unit_name, "hero": u.is_hero, "life": u.life_frames, "dir": u.dir, "ver": u.weapon_version,
 		"home_town": _id(u.home_town), "home_firm": _id(u.home_firm), "inside": _id(u.inside_firm),
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
 		"cloak": u.cloak_id, "camo": [u.camouflage_days, u.camouflage_power], "sleeper": u.sleeper_for, "loyalty": u.loyalty,
@@ -281,6 +283,13 @@ static func load_into(g: Game, slot: String) -> String:
 		f.heroes = fd["heroes"]
 		f.monster_code = fd["monster"]
 		f.raid_timer = int(fd["raid_timer"])
+		f.max_hp = float(fd.get("max_hp", f.max_hp))
+		f.cast_charge = int(fd.get("charge", Defs.MAX_CAST_DELAY))
+		f.animals = fd.get("animals", [])
+		f.alchemy_mode = str(fd.get("alchemy", ""))
+		if f.alchemy_mode != "" and not f.alchemy_mode in SpecialFirms.ALCHEMY_MODES:
+			f.alchemy_mode = ""
+		f.propagate = int(fd.get("propagate", 1))
 		f.set_meta("save", fd)
 		by_id[f.obj_id] = f
 
@@ -298,6 +307,7 @@ static func load_into(g: Game, slot: String) -> String:
 		u.hp = float(ud["hp"])
 		u.unit_name = ud["name"]
 		u.is_hero = ud["hero"]
+		u.weapon_version = int(ud.get("ver", u.weapon_version))
 		u.life_frames = int(ud["life"])
 		u.dir = int(ud["dir"])
 		u.set_meta("save", ud)
@@ -359,6 +369,11 @@ static func load_into(g: Game, slot: String) -> String:
 		if bu is Unit:
 			f.builder = bu
 			_put_inside(bu, f)
+		for eid in fd.get("extra", []):
+			var eu = by_id.get(int(eid))
+			if eu is Unit:
+				f.extra_units.append(eu)
+				_put_inside(eu, f)
 	for td in d.get("treasures", []):
 		g.spawn_treasure(int(td[0]), int(td[1]), int(td[2]), Vector2i(int(td[3]), int(td[4])), int(td[5]))
 	for k in d.get("taken_sites", {}):

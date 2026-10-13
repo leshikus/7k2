@@ -48,8 +48,13 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   rulers, quality of life (goods in markets), linked camps and their generals,
   food and solvency. Disloyal towns rebel, or defect to rival camps.
 * **Research** at the Tower of Science (mining, manufacturing, farming, infantry
-  combat and defence, siege weapons). Build catapults, ballistae, spitfires and
-  cannons at the War Factory.
+  combat and defence, siege weapons, your races' training centres and berserk
+  attacks, the four offensive buildings). Build catapults, ballistae, spitfires,
+  cannons, Porcupines (exploding carts) and Unicorns at the War Factory. Each
+  weapon fights at the tech level it was built at.
+* **Offensive buildings**: the Teledamnum (thunderbolt), Preuser (freezing blast),
+  Testudo (tower) and Archimedetron (death ray), each fired from its panel for gold
+  once charged.
 * **Hire heroes** at the Inn. Pray at the **Seat of Power** to summon your race's
   Greater Being; find another race's **Scroll of Power** to build its Seat and
   summon its Greater Being too.
@@ -62,6 +67,13 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   with gold and life points, build lairs beside independent villages and
   terrorise them until they pay tribute, and raid human kingdoms. An enslaved
   village cannot join you while its lair stands.
+* **Lead a Fryhtan kingdom** yourself: buy your species' technologies at its
+  lairs with life points, and build its special buildings: Lishorr (camouflaged
+  shooting plants), Wilde Lishorr (spreads wild), Bheema Hyfe and Tarmes Mownd
+  (insects), Keraal (beasts for hire), Alchemist Tor (gold, life points and
+  minerals converted), Vapngart (living war machines), Mage Tor (damage buildings,
+  freeze, wound, teleport), and the Fortress four Grokkens turn into. Buy
+  independent lairs next to your own.
 * **Diplomacy:** declare war or propose peace. Attacking a kingdom you are not at
   war with requires Ctrl+right-click and starts a war.
 
@@ -100,8 +112,8 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   and rock, with skeletal animations and particle effects. They are built from CC0
   packs and procedural geometry by `tools/blender/` (`assets/models/CREDITS.md`).
 * All 12 human races with their infantry, special units, civilians and Greater
-  Beings; 7 Fryhtan species with their lairs; computer-run Fryhtan kingdoms;
-  siege weapons.
+  Beings; 7 Fryhtan species with their lairs, technologies and special buildings;
+  computer-run Fryhtan kingdoms; siege weapons and offensive buildings.
 * Espionage: spies disguise themselves in another kingdom's colours, slip into towns,
   forts and camps, sow dissent or lie low, bribe generals and soldiers (a bought
   general hands his fort over), assassinate commanders, steal technology, stage
@@ -130,8 +142,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 
 ## Not yet implemented
 
-The campaign, the Fryhtan special buildings (a Fryhtan kingdom you lead has lairs
-only), and multiplayer. Balance values are adapted where this simplified simulation
+The campaign and multiplayer. Balance values are adapted where this simplified simulation
 differs from the original (noted in the code).
 
 ## Project layout
