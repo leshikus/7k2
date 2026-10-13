@@ -610,3 +610,47 @@ Still simplified (noted in the code): wagons of settlers are villagers;
 hit points do not scale with combat level; kingdoms can talk from the start
 (the original requires contact); trade treaties in premade scenario files are
 assumed for friendly kingdoms, as the files' relation records are not read.
+
+## The remaining simplifications, and the options (13 Oct 2026)
+
+Closing the gaps listed above and the rest of a full review of `src/*.cpp`:
+- **Hit points by combat level** (Skill::actual_max_hit_points): a living unit
+  has its table's hit points times its combat level over 100; war machines,
+  caravans and Greater Beings keep the default level of 100. Blows lose the
+  target's armour and are divided by ATTACK_SLOW_DOWN (3), as
+  BaseObj::being_attack_hit. Starting armies follow Battle::create_unit (king
+  combat and leadership 100, seven fort soldiers at 20, generals 30-100); the
+  old doubled hit points of kings are gone.
+- **Contact between kingdoms** (NationRelation::has_contact): computer
+  kingdoms know each other, and the human rulers of a network game; a human
+  ruler meets a kingdom when exploring reveals its town or building (sent as
+  a command, so network games agree). Diplomacy needs contact.
+- **Scenario files' trade treaties and contacts** are now read from the
+  NationRelation records (244 bytes each, before the status array).
+- **Wagons and new towns** (ou_wagon.cpp, Town::recruit, Unit::settle_town,
+  Town::process_construction): "Send out wagon" sends up to ten villagers in a
+  wagon; any human unit but the king, or a wagon, can "Build a town" (200
+  gold); the town is built a percent every other frame and its builders move
+  in. Wagons settle into towns of their race. Random events and the campaign
+  bring real wagons. Computer kingdoms split towns near their population limit
+  (Town::think_split_town).
+- **Options** (ooptmenu.cpp) in the game menu: sound and music volume, help
+  (none, brief, detailed), display news (major only / all, News::is_major),
+  show unit identities, **show unit paths** (no, main map, world map, both;
+  marching dashes from square to square), inside information (computer
+  kingdoms' details, their units' paths, and an "AI" report page after
+  or_ai.cpp), scrolling speed. With worshippers at a Japanese Seat of Power the
+  paths of units marching on you show in red.
+- **The map** (oworld_m.cpp): Terrain, Political (again: the kingdoms' zones
+  of power, World::set_power) and Trade maps, the Nation and Object filters,
+  and Hide Buildings (coloured squares with names on the main view).
+- **Formations** (oformat.cpp): a troop with a general can take one of the
+  seven formations (vanguard, line, circle, arc, staggered, square,
+  sandwich); it keeps it wherever it stops, and the number pad sets its facing.
+  The shapes are simpler patterns than the original's placement code.
+- **Player profiles** (oprofile.cpp): "Change player" on the start screen; each
+  player has his own saved games and campaign, and his king bears his name.
+- The help file's screen-area entries now give the tooltips of the report
+  tabs, the top bar and the map buttons.
+
+New tests: `wagon_test`, `options_test`.

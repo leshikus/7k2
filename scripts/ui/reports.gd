@@ -5,7 +5,7 @@ extends PanelContainer
 ## kingdoms, your towns, money by kind this year and last, your armies, your
 ## technologies, markets and caravans, and the news so far.
 
-const TABS := ["Kingdoms", "Towns", "Economy", "Military", "Technology", "Trade", "News"]
+const TABS := ["Kingdoms", "Towns", "Economy", "Military", "Technology", "Trade", "News", "AI"]
 
 var game: Game
 var news: Array = []          # [date, text] most recent last
@@ -44,10 +44,16 @@ func _ready() -> void:
 		tabs.add_child(r)
 		pages[t] = r
 	tabs.tab_changed.connect(func(_i): refresh())
+	# HELP.RES: "Kingdoms Report (hotkey: F1)" ... on each page's tab
+	for i in TABS.size():
+		var h := HelpText.area_text(TABS[i] + " Report")
+		if h != "":
+			tabs.set_tab_tooltip(i, h)
 	visible = false
 
 
 func open() -> void:
+	tabs.set_tab_hidden(TABS.find("AI"), not GameOptions.get_opt("inside_info"))
 	visible = not visible
 	if visible:
 		refresh()
@@ -81,6 +87,43 @@ func refresh() -> void:
 	var scroll := r.get_v_scroll_bar().value
 	r.text = call("_" + t.to_lower())
 	r.get_v_scroll_bar().value = scroll
+
+
+## Report of the computer kingdoms' thinking (or_ai.cpp, shown with Inside
+## Information): their war, feelings toward the other kingdoms, treaties,
+## personality and recent diplomacy.
+func _ai() -> String:
+	if not GameOptions.get_opt("inside_info"):
+		return "Turn on Inside Information in the Options to see what the computer kingdoms think."
+	var s := ""
+	for n in game.nations:
+		if not n.alive or n.ai == null:
+			continue
+		s += "[b]%s[/b]
+" % _col(n.color, n.name)
+		var wt: int = n.ai.war_target if "war_target" in n.ai else 0
+		s += "  At war with: %s
+" % (game.nation(wt).name if wt > 0 and game.nation(wt) else "nobody in particular")
+		var feel: Array = []
+		for o in game.nations:
+			if o.alive and o.id != n.id:
+				feel.append("%s %d%s%s" % [o.name, Diplomacy.ai_rel(n, o.id), " (trade)" if Diplomacy.has_trade(n, o.id) else "", "" if n.contact.has(o.id) else " (not met)"])
+		s += "  Feelings: %s
+" % ", ".join(feel)
+		var prefs: Array = []
+		for k in ["peace", "allying", "trading", "courage", "cash_reserve", "honesty"]:
+			prefs.append("%s %d" % [k.replace("_", " "), Diplomacy._pref(n, k)])
+		s += "  Personality: %s
+" % ", ".join(prefs)
+	var recent := game.talk_log.slice(-10)
+	if not recent.is_empty():
+		s += "
+[b]Latest diplomacy[/b]
+"
+		for m in recent:
+			s += "  %s%s
+" % [Diplomacy.describe(game, m), (" — " + m["result"]) if m["result"] != "" else ""]
+	return s
 
 
 func _col(c: Color, s: String) -> String:

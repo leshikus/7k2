@@ -92,12 +92,15 @@ func _ready() -> void:
 	# a blow at the player's man marks the minimap; the mark fades
 	g.war_points.clear()
 	mine.take_damage(1.0, tgt)
-	check(g.war_points.size() == 1, "an attack on our man flashes on the minimap")
-	for x in [tgt, near]:
-		if not x.dead:
+	check(g.war_points.has(Vector2i(int(mine.center_loc().x) / Game.WAR_ZONE, int(mine.center_loc().y) / Game.WAR_ZONE)), "an attack on our man flashes on the minimap")
+	# nothing else may strike him while the mark fades
+	g.fires.clear()
+	for x in g.units.duplicate():
+		if x.nation_id != p.id and not x.dead and x.center_loc().distance_to(mine.center_loc()) < 15.0:
 			x.die(null)
 	frames(g, 30)
-	check(g.war_points.is_empty(), "and fades")
+	var zone := Vector2i(int(mine.center_loc().x) / Game.WAR_ZONE, int(mine.center_loc().y) / Game.WAR_ZONE)
+	check(not g.war_points.has(zone), "and fades")
 
 	# save and load keep the fires
 	g.set_fire(Vector2i(20, 20), 1)

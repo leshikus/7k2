@@ -7,6 +7,7 @@ const SIM_FPS := 20.0               # simulation frames per second at normal spe
 const LOC := 32                      # world pixels per location (LOCATE_WIDTH)
 
 const MAX_TOWN_POPULATION := 100
+const MAX_WAGON_POPULATION := 10   # ou_wagon.h
 const MAX_WORKER := 20
 const MAX_SOLDIER := 15
 const MIN_RECRUIT_LOYALTY := 30
@@ -30,6 +31,7 @@ const PROCESS_GOODS_INTERVAL := 3
 const EFFECTIVE_FIRM_TOWN_DISTANCE := 16
 const EFFECTIVE_FIRM_FIRM_DISTANCE := 16
 const MAX_COMBAT_TRAIN := 100
+const ATTACK_SLOW_DOWN := 3.0      # how many times all attack damage is reduced (gamedef.h)
 const MAX_RAW_RESERVE_QTY := 20000
 const EXPLORE_RANGE := 10
 const TOWN_SIZE := 6

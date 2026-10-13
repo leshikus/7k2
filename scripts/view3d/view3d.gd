@@ -180,6 +180,26 @@ func _process(_delta: float) -> void:
 			_vectors.erase(node)
 	if _frame % 20 == 1:
 		_sync_decals()
+	# Show Unit Paths on the main view: marching ants from square to square
+	var ants := float(_frame % 16) / 16.0
+	for pl in game.unit_paths(1):
+		var vec: Array = []
+		var col := Color(1, 0.2, 0.15) if pl[1] else Color(1, 1, 1, 0.85)
+		var prev: Vector2 = rig.cam.unproject_position(Vector3(pl[0][0].x, 0.0, pl[0][0].y))
+		for i in range(1, pl[0].size()):
+			var p: Vector2 = pl[0][i]
+			var sp: Vector2 = rig.cam.unproject_position(Vector3(p.x, 0.0, p.y))
+			var d := sp - prev
+			var seg := d.length()
+			var k := ants * 8.0
+			while k < seg:
+				var a := prev + d * (k / seg)
+				var b := prev + d * (minf(k + 4.0, seg) / seg)
+				vec.append(["draw_line", [a, b, col, 2.0]])
+				k += 8.0
+			prev = sp
+		if not vec.is_empty():
+			groups.append([Vector2.ZERO, 1.0, vec])
 	overlay.groups = groups
 	overlay.queue_redraw()
 	usec = Time.get_ticks_usec() - t0

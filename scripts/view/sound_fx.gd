@@ -55,5 +55,5 @@ func play(wave: String, world_pos = null) -> void:
 		return
 	_recent[wave] = now
 	player.stream = s
-	player.volume_db = vol
+	player.volume_db = vol + linear_to_db(maxf(0.001, float(GameOptions.get_opt("sfx_volume")) / 100.0))
 	player.play()

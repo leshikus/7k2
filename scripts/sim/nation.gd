@@ -38,6 +38,7 @@ var last_income_year := 0.0
 var last_expense_year := 0.0
 var known_gods := {}             # race -> true: Scrolls of Power held (GodInfo::nation_know_array)
 var items_acquired := {}         # item id -> true, for scenario goals
+var contact := {}                 # nation id -> true: the two know each other (NationRelation::has_contact)
 var trade_treaty := {}            # nation id -> true: caravans may trade there (NationRelation::trade_treaty)
 var ai_rel := {}                  # nation id -> 0..100: how the computer feels about it (ai_relation_level)
 var status_day := {}              # nation id -> day the relation last changed

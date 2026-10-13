@@ -8,6 +8,7 @@ signal item_target_requested(u: Unit)
 signal spell_target_requested(f: Firm, spell: String)
 signal rally_requested(f: Firm)
 signal caravan_route_requested(u: Unit)
+signal found_town_requested(u: Unit)
 
 var inspected_treasure: Treasure = null   # a scroll or item clicked on the map
 signal center_on(loc: Vector2)
@@ -120,6 +121,10 @@ func _build_ui() -> void:
 	top_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	top_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hb.add_child(top_label)
+	# the original's help for its top bar readouts (HELP.RES screen areas)
+	top_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	top_label.tooltip_text = "
+".join(["Treasure", "Food", "Reputation", "Date", "Life Points"].map(func(k): return HelpText.area_text(k)).filter(func(x): return x != ""))
 	for s in [["II", 0.0], ["1x", 1.0], ["2x", 2.0], ["4x", 4.0]]:
 		var b := Button.new()
 		b.text = s[0]
@@ -163,6 +168,25 @@ func _build_ui() -> void:
 	minimap.jump_to.connect(func(l): center_on.emit(l))
 	minimap.order_to.connect(func(l): move_selected_to.emit(l))
 	vb.add_child(minimap)
+	# map mode buttons (MAP-1, MAP-2, MAP-3), the filters and Hide Buildings
+	var mrow := HBoxContainer.new()
+	vb.add_child(mrow)
+	for spec in [["Terrain", "Terrain Map", func(): minimap.set_mode(Minimap.Mode.TERRAIN)],
+			["Political", "World Political Map (again: kingdoms' zones)", func(): minimap.set_mode(Minimap.Mode.POWER)],
+			["Trade", "Trade Map", func(): minimap.set_mode(Minimap.Mode.TRADE)],
+			["Nation", "NATION", func(): minimap.toggle_filter_nation()],
+			["Object", "OBJECT", func(): minimap.toggle_filter_kind()],
+			["Hide", "Hide Buildings", func():
+				game.hide_buildings = not game.hide_buildings]]:
+		var mb := Button.new()
+		mb.text = spec[0]
+		mb.add_theme_font_size_override("font_size", 11)
+		var h := HelpText.by_code(spec[1])
+		mb.tooltip_text = (h["title"] + ": " + h["text"]) if not h.is_empty() else HelpText.area_text(spec[1])
+		if mb.tooltip_text == "":
+			mb.tooltip_text = spec[1]
+		mb.pressed.connect(spec[2])
+		mrow.add_child(mb)
 	var head := HBoxContainer.new()
 	vb.add_child(head)
 	portrait = TextureRect.new()
@@ -253,7 +277,7 @@ func _build_ui() -> void:
 		save_requested.emit()
 		toggle_pause_menu()
 	var do_load := func(): load_requested.emit()
-	for item in [["Resume", toggle_pause_menu], ["Save game (F5)", do_save], ["Load game (F9)", do_load], ["Reveal map (cheat)", reveal],
+	for item in [["Resume", toggle_pause_menu], ["Save game (Ctrl+S)", do_save], ["Load game (F9)", do_load], ["Options", toggle_options], ["Reveal map (cheat)", reveal],
 			["New game", func(): menu_new_game.emit()], ["Quit", func(): get_tree().quit()]]:
 		var b := Button.new()
 		b.text = item[0]
@@ -341,6 +365,63 @@ func _sync_speed_buttons() -> void:
 	speed_buttons[0].button_pressed = game.paused
 	for i in range(1, 4):
 		speed_buttons[i].button_pressed = not game.paused and game.speed == [0.0, 1.0, 2.0, 4.0][i]
+
+
+var options_panel: PanelContainer
+
+
+## The Options menu (ooptmenu.cpp): sound and music volume, help, news, unit
+## identities, unit paths, inside information, scrolling speed. Kept between games.
+func toggle_options() -> void:
+	if options_panel == null:
+		options_panel = PanelContainer.new()
+		options_panel.set_anchors_preset(Control.PRESET_CENTER)
+		pause_menu.get_parent().add_child(options_panel)
+		var v := VBoxContainer.new()
+		options_panel.add_child(v)
+		var t := Label.new()
+		t.text = "Options"
+		t.add_theme_font_size_override("font_size", 18)
+		v.add_child(t)
+		var grid := GridContainer.new()
+		grid.columns = 2
+		v.add_child(grid)
+		var choice := func(label: String, key: String, items: Array, values: Array):
+			var l := Label.new()
+			l.text = label
+			grid.add_child(l)
+			var ob := OptionButton.new()
+			for it in items:
+				ob.add_item(it)
+			ob.select(maxi(0, values.find(GameOptions.get_opt(key))))
+			ob.item_selected.connect(func(i): GameOptions.set_opt(key, values[i]))
+			grid.add_child(ob)
+		var slider := func(label: String, key: String, lo: float, hi: float):
+			var l := Label.new()
+			l.text = label
+			grid.add_child(l)
+			var sl := HSlider.new()
+			sl.min_value = lo
+			sl.max_value = hi
+			sl.step = 1
+			sl.custom_minimum_size = Vector2(180, 0)
+			sl.value = float(GameOptions.get_opt(key))
+			sl.value_changed.connect(func(x): GameOptions.set_opt(key, int(x)))
+			grid.add_child(sl)
+		slider.call("Sound effects volume", "sfx_volume", 0, 100)
+		slider.call("Music volume", "music_volume", 0, 100)
+		choice.call("Help", "help_mode", ["None", "Brief", "Detailed"], [0, 1, 2])
+		choice.call("Display news", "news", ["Major news", "All news"], [0, 1])
+		choice.call("Show unit identities", "show_unit_icons", ["When pointed at", "Always"], [0, 1])
+		choice.call("Show unit paths", "show_unit_path", ["No", "Main map", "World map", "Both"], [0, 1, 2, 3])
+		choice.call("Inside information", "inside_info", ["Off", "On"], [false, true])
+		slider.call("Scrolling speed", "scroll_speed", 1, 10)
+		var close := Button.new()
+		close.text = "Close"
+		close.pressed.connect(func(): options_panel.visible = false)
+		v.add_child(close)
+		options_panel.visible = false
+	options_panel.visible = not options_panel.visible
 
 
 func toggle_pause_menu() -> void:
@@ -558,6 +639,9 @@ func _talk_options(p: Nation, n: Nation) -> Array:
 func _on_message(text: String, _loc: Vector2) -> void:
 	if reports:
 		reports.add_news(game.date_string(), text)
+	# NewsArray::disp: major news only, as chosen (and always in a tutorial)
+	if game.last_message_minor and (int(GameOptions.get_opt("news")) == 0 or game.config.has("tutorial")):
+		return
 	var l := Label.new()
 	l.text = "[%s] %s" % [game.date_string(), text]
 	l.add_theme_color_override("font_color", Color(1, 0.93, 0.7))
@@ -799,11 +883,17 @@ func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_c
 			tutorial_panel.tutorial.press(text)
 		cb.call()
 		refresh_selection(true))
+	# Help option (Config::help_mode): none, brief (the title), detailed
+	var hm := int(GameOptions.get_opt("help_mode"))
 	var original := HelpText.for_label(text)
-	if original != "":
+	if hm == 1:
+		tip = original.get_slice(":", 0) if original != "" else tip.get_slice(".", 0)
+	elif original != "":
 		tip = original + ("
 
 " + tip if tip != "" else "")
+	if hm == 0:
+		tip = ""
 	if tip != "":
 		b.mouse_entered.connect(func(): tooltip_label.text = tip)
 	if right_cb.is_valid():
@@ -851,12 +941,14 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 		if u.camouflage_days > 0:
 			s += "Camouflaged: unseen for %d days\n" % u.camouflage_days
 		s += "[color=#b0a890]Right-click a town, fort or camp to infiltrate it. A kingdom's place needs its colours, put on automatically when no enemy is near. In your own places spies hunt enemy spies.[/color]\n"
-	elif u.nation_id == game.player_id and u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
+	elif (u.nation_id == game.player_id or GameOptions.get_opt("inside_info")) and u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
 		s += "Loyalty %d\n" % int(u.loyalty)
 	if u.item_id > 0:
 		s += "[color=#ffd860]%s[/color]: %s\n" % [Items.item_name(u.item_id), Items.description(u.item_id, u.item_para)]
 	if u.life_frames > 0:
 		s += "Vanishes in %d days\n" % (u.life_frames / Defs.FRAMES_PER_DAY)
+	if u.is_wagon():
+		s += "Carrying %d %s settlers\n" % [u.wagon_pop, Defs.race_adj(u.wagon_race)]
 	if u.is_caravan:
 		var dest := u.caravan_dest.display_name() if u.caravan_dest and is_instance_valid(u.caravan_dest) else "looking for a market"
 		s += "Route: %s ↔ %s\n" % [u.caravan_home.display_name() if u.caravan_home and is_instance_valid(u.caravan_home) else "?", dest]
@@ -898,6 +990,15 @@ func _unit_actions(sel: Array) -> void:
 				_do(SpecialFirms, "transform_to_fortress", [own]),
 			SpecialFirms.fortress_spot(own).x >= 0 and game.player().cash >= cost,
 			"Four selected Grokkens standing side by side turn into a Fortress, from which Fryhtans posted inside shoot at enemies within %d." % int(SpecialFirms.FORTRESS_RANGE))
+	# formations for a troop led by a general (oun_if.cpp: FORMTION buttons)
+	if own.size() > 1 and own.any(func(x): return x.rank >= Defs.Rank.GENERAL):
+		var cur: int = own.filter(func(x): return x.rank >= Defs.Rank.GENERAL)[0].formation
+		for k in range(1, Formations.NAMES.size()):
+			var kind: int = k
+			_add_action("Formation: " + Formations.NAMES[k] + (" ✓" if cur == k else ""), func(): _do(game, "form_troop", [own, kind, Vector2.ZERO]), true,
+				"The troop keeps this formation wherever it stops. Use the number pad to set the direction it faces.")
+		if cur > 0:
+			_add_action("No formation", func(): _do(game, "form_troop", [own, 0, Vector2.ZERO]))
 	if own.size() == 1:
 		var u: Unit = own[0]
 		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian():
@@ -905,8 +1006,11 @@ func _unit_actions(sel: Array) -> void:
 			_add_action("Promote to General", promote, true, "A general can command a camp, extending the kingdom's influence over nearby towns.")
 		if u.rank == Defs.Rank.GENERAL and not u.is_hero:
 			_add_action("Demote to Soldier", func(): _do(u, "demote"))
-		if u.home_town == null and u.is_human():
-			_add_action("Settle in town", func(): _settle(u), true, "Walk to the nearest own town and rejoin its population.")
+		if u.home_town == null and (u.is_human() or u.is_wagon()):
+			_add_action("Settle in town", func(): _settle(u), true, "Walk to the nearest own town of the same race and join its population.")
+		if u.can_found_town():
+			_add_action("Build a town (%d)" % int(Game.TOWN_BUILDING_COST), func(): found_town_requested.emit(u), game.player().cash >= Game.TOWN_BUILDING_COST,
+				"Click where the new town should stand.")
 		if u.item_id > 0:
 			_item_actions(u)
 		if u.is_spy:
@@ -1158,6 +1262,11 @@ func _show_town(t: Town, rebuild: bool) -> void:
 	portrait.texture = _thumb_town(t)
 	title_label.text = t.town_name
 	var s := "%s town, %s\n" % [Defs.race_name(t.race), _owner_line(t)]
+	if t.under_construction:
+		info_label.text = s + "Being built: %d%%  %s\n%d settlers will move in." % [int(t.build_progress), _bar(t.build_progress, 100, "#c0a060"), t.builder_pop]
+		if rebuild:
+			_clear_actions()
+		return
 	s += "Population %d (%d employed, %d jobless)\n" % [t.population, t.employed, t.jobless()]
 	if t.nation_id > 0:
 		s += "Loyalty %d → %d  %s\n" % [int(t.loyalty), int(t.target_loyalty), _bar(t.loyalty, 100, "#e0c040")]
@@ -1188,6 +1297,8 @@ func _show_town(t: Town, rebuild: bool) -> void:
 	if t.nation_id == game.player_id:
 		var do_recruit := func(): _do(t, "recruit")
 		_add_action("Recruit peasant", do_recruit, t.can_recruit(), "Send a villager out as a peasant, to build, found a town or work as a spy. Soldiers come from a fort's \"Fill from towns\". Needs loyalty %d+." % Defs.MIN_RECRUIT_LOYALTY)
+		_add_action("Send out wagon (%d)" % mini(t.jobless(), Defs.MAX_WAGON_POPULATION), func(): _do(t, "recruit_wagon"), t.nation_id > 0 and t.jobless() > 1,
+			"Up to %d jobless villagers leave together to settle in another town of theirs or found a new one." % Defs.MAX_WAGON_POPULATION)
 		var do_tax := func(): _do(t, "collect_tax_cmd")
 		_add_action("Collect tax" + (" (auto %d)" % t.auto_tax_loyalty if t.auto_tax_loyalty > 0 else ""), do_tax, t.has_linked_camp(t.nation_id),
 			"Needs a linked camp with a general. Lowers loyalty. Right-click: collect automatically when loyalty reaches %s." % "/".join(Town.AUTO_TAX_LEVELS.slice(1).map(func(v): return str(v))),
@@ -1225,7 +1336,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		if rebuild:
 			_clear_actions()
 		return
-	if own or f.is_monster():
+	if own or f.is_monster() or GameOptions.get_opt("inside_info"):
 		match f.code:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:

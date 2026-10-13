@@ -422,7 +422,7 @@ static func capture(f: Firm, nation_id: int) -> bool:
 			leaving.append(s)
 	for s in leaving:
 		f.release_unit(s, f)
-	g.notify_nation(old, "%s has been captured by the %s: its general was a spy!" % [f.display_name(), g.nation(nation_id).name], f.center_loc())
+	g.notify_nation(old, "%s has been captured by the %s: its general was a spy!" % [f.display_name(), g.nation(nation_id).name], f.center_loc(), true)
 	g.notify_nation(nation_id, "Your bribed general has handed %s over to you." % f.display_name(), f.center_loc())
 	f.change_nation(nation_id)
 	_log("capture")

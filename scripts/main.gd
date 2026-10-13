@@ -23,6 +23,7 @@ var build_code := ""
 var build_race := ""
 var _editor_tool := {}         # scenario editor: what a left click places
 var _rally_firm: Firm = null   # building waiting for its rally point click
+var _found_town_unit: Unit = null  # unit waiting for the click on its new town's site
 var _route_caravan: Unit = null  # caravan waiting for the click on its destination market
 var _spell_firm: Firm = null   # spell building waiting for its target click
 var _spell_code := ""
@@ -79,6 +80,14 @@ func _ready() -> void:
 			_show_campaign()
 	if "--credits" in args and menu:
 		menu._show_credits.call_deferred()
+	# --show-paths (with --autostart): march the starting army and show its path, for screenshots
+	if "--show-paths" in args and game:
+		GameOptions.reset()
+		GameOptions._values["show_unit_path"] = 3
+		var men := game.units.filter(func(u): return u.nation_id == game.player_id and u.inside_firm == null and not u.dead)
+		for u in men:
+			u.order_move_free(Vector2i(u.cell()) + Vector2i(14, 10))
+		game.selected = men
 	# --editor: the scenario editor on a new map
 	if "--editor" in args and Assets.ready_ok:
 		Defs.load_from_assets()
@@ -624,6 +633,9 @@ func _attach_game() -> void:
 	hud.item_target_requested.connect(func(u):
 		_item_user = u
 		game.notify("Click the target for the %s; right-click to cancel." % Items.item_name(u.item_id), Vector2(-1, -1)))
+	hud.found_town_requested.connect(func(u):
+		_found_town_unit = u
+		game.notify("Click where the new town should stand; right-click to cancel.", Vector2(-1, -1)))
 	hud.caravan_route_requested.connect(func(u):
 		_route_caravan = u
 		game.notify("Click the market this caravan should trade with; right-click to cancel.", Vector2(-1, -1)))
@@ -720,8 +732,12 @@ func _process(delta: float) -> void:
 		elif mp.y > vs.y - EDGE_SCROLL:
 			v.y += 1
 	if v != Vector2.ZERO:
-		camera.pan(v * PAN_SPEED * delta)
+		# the Scrolling Speed option (1-10, 5 normal)
+		camera.pan(v * PAN_SPEED * delta * float(GameOptions.get_opt("scroll_speed")) / 5.0)
+	music.volume_db = -10.0 + linear_to_db(maxf(0.001, float(GameOptions.get_opt("music_volume")) / 100.0))
 	camera.clamp_to(game.world.w, game.world.h)
+	if Engine.get_process_frames() % 6 == 0:
+		game.hovered = _pick()
 	_update_ghost()
 	if _shake > 0.1:
 		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake
@@ -943,6 +959,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _spell_firm != null:
 						_cast_on_click()
 						return
+					if _found_town_unit != null:
+						var l := _mouse_loc()
+						var site := Vector2i(floori(l.x) - Defs.TOWN_SIZE / 2, floori(l.y) - Defs.TOWN_SIZE / 2)
+						if is_instance_valid(_found_town_unit) and not _found_town_unit.dead:
+							if game.can_build_town(site):
+								Net.cmd(_found_town_unit, "order_found_town", [site])
+							else:
+								game.notify("A town cannot be built there.", Vector2(-1, -1))
+						_found_town_unit = null
+						return
 					if _route_caravan != null:
 						var mk = game.object_at_screen(_world_mouse())
 						if mk is Firm and is_instance_valid(_route_caravan) and not _route_caravan.dead:
@@ -989,6 +1015,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_rally_firm = null
 					elif _route_caravan != null:
 						_route_caravan = null
+					elif _found_town_unit != null:
+						_found_town_unit = null
 					elif not _editor_tool.is_empty():
 						_editor_tool = {}
 					else:
@@ -1005,6 +1033,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		match k.keycode:
 			KEY_ENTER, KEY_KP_ENTER:
 				hud.open_chat()
+			KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_4, KEY_KP_6, KEY_KP_7, KEY_KP_8, KEY_KP_9:
+				# the number pad turns a general's troop to face that way
+				var troop := game.selected.filter(func(u): return u is Unit and u.nation_id == game.player_id)
+				var gen := troop.filter(func(u): return u.rank >= Defs.Rank.GENERAL)
+				if not gen.is_empty():
+					Net.cmd(game, "form_troop", [troop, maxi(gen[0].formation, 2), Formations.NUMPAD[k.keycode]])
 			KEY_T:
 				if hud.tutorial_panel:
 					hud.tutorial_panel.visible = not hud.tutorial_panel.visible
@@ -1205,6 +1239,9 @@ func _command(force_attack: bool) -> void:
 
 
 func _formation_move(units: Array, dest: Vector2i) -> void:
+	if units.any(func(u): return u.rank >= Defs.Rank.GENERAL and u.formation > 0):
+		Net.cmd(game, "move_troop", [units, dest])
+		return
 	var cells: Array[Vector2i] = []
 	var r := 0
 	while cells.size() < units.size() and r < 12:

@@ -150,12 +150,10 @@ static func execute(g: Game, id: String) -> String:
 			var n: Nation = alive[rng.randi() % alive.size()]
 			var race: String = Defs.races[rng.randi() % Defs.races.size()]["code"]
 			var pop := WAGON_POP - rng.randi() % 3
-			var first: Unit = null
-			for i in pop:
-				var u := _edge_unit(g, Defs.unit_sprite(race, "CIV"), n.id, 10.0, first.cell() if first else Vector2i(-1, -1))
-				if u and first == null:
-					first = u
+			var first := _edge_unit(g, "WAGON", n.id, 100.0)
 			if first:
+				first.wagon_pop = pop
+				first.wagon_race = race
 				_tell(g, n.id, "A wagon of %d %s settlers has arrived to join your kingdom." % [pop, Defs.race_adj(race)], first.center_loc())
 				return id
 		"ITEM_DISCOVER":

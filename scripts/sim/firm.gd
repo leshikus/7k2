@@ -865,8 +865,15 @@ func render(cv) -> void:
 			if f.nation_id == nation_id:
 				cv.draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, Color(0.5, 0.8, 1.0, 0.7), 2.0)
 	var frames: Array = build.get("frames", [])
-	if frames.is_empty():
+	if frames.is_empty() or Game.inst.hide_buildings:
+		# Hide Buildings: a square in the owner's colour with the building's name
+		var p := PackedVector2Array([
+			Iso.to_screen(Vector2(x1, y1)) - position, Iso.to_screen(Vector2(x1 + w, y1)) - position,
+			Iso.to_screen(Vector2(x1 + w, y1 + h)) - position, Iso.to_screen(Vector2(x1, y1 + h)) - position])
+		cv.draw_colored_polygon(p, Color(col, 0.55))
 		_draw_footprint(cv, col)
+		if Game.inst.hide_buildings:
+			cv.draw_string(ThemeDB.fallback_font, Vector2(-60, 4), display_name(), HORIZONTAL_ALIGNMENT_CENTER, 120, 13, Color.WHITE)
 		return
 	# Frame 1 is the whole building; later frames only hold the animated parts
 	# drawn on top of it (Firm::draw_frame in the original).

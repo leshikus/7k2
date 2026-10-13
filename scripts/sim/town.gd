@@ -37,6 +37,10 @@ const MAX_WALL_PROGRESS := 1000.0
 const WALL_COST := [0, 500, 1000]
 const WALL_BUILDERS := 5
 var last_rebel_day := -1000
+var under_construction := false  # built by a unit or wagon (Town::process_construction)
+var build_progress := 0.0
+var builder_pop := 0             # the people who move in when it is done
+var builder_loyalty := 50.0
 
 
 func setup(name_: String, race_: String, nation: int, at: Vector2i, pop: int) -> void:
@@ -325,7 +329,7 @@ func think_rebel(day: int) -> void:
 # ------------------------------------------------------------------- daily ---
 
 func next_day(day: int) -> void:
-	if dead:
+	if dead or under_construction:
 		return
 	if population <= 0:
 		_check_empty()
@@ -475,6 +479,46 @@ func recruit() -> Unit:
 	return u
 
 
+## Town::recruit(wagon): up to ten villagers leave together in a wagon to
+## settle elsewhere; a single one leaves on foot.
+func recruit_wagon() -> Unit:
+	var count := mini(jobless(), Defs.MAX_WAGON_POPULATION)
+	if nation_id <= 0 or count <= 1 or under_construction:
+		return recruit()
+	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
+	var w := Game.inst.spawn_unit("WAGON", nation_id, c, 100.0)
+	if w == null:
+		return null
+	w.wagon_pop = count
+	w.wagon_race = race
+	w.loyalty = loyalty
+	population -= count
+	loyalty = maxf(0.0, loyalty - minf(10.0, minf(5.0, float(Defs.MAX_TOWN_POPULATION) / maxf(1.0, population + count)) + recruit_penalty / 5.0))
+	recruit_penalty += 5
+	_check_empty()
+	queue_redraw()
+	return w
+
+
+## Town::process_construction: a percent every other frame (eleven under fast
+## build), held up while the site is under attack.
+func process_construction() -> void:
+	if not under_construction or Game.inst.frame % 2 != 0:
+		return
+	if Game.inst.frame - last_attacked_frame < Defs.FRAMES_PER_DAY:
+		return
+	build_progress += 11.0 if Game.inst.fast_build and nation_id == Game.inst.player_id else 1.0
+	if build_progress >= 100.0:
+		under_construction = false
+		population = builder_pop
+		loyalty = builder_loyalty
+		builder_pop = 0
+		Game.inst.update_links()
+		if nation_id == Game.inst.player_id:
+			Game.inst.notify("The town of %s has been built." % town_name, center_loc())
+		queue_redraw()
+
+
 func collect_tax() -> float:
 	if nation_id <= 0 or not has_linked_camp(nation_id):
 		return 0.0
@@ -564,7 +608,8 @@ func _spawn_defenders(attacker: GameObj) -> void:
 func defender_returned(u: Unit) -> void:
 	defenders.erase(u)
 	if u.nation_id == nation_id:
-		population = mini(Defs.MAX_TOWN_POPULATION, population + 1)
+		# Town::assign_unit: a wagon brings all its settlers
+		population = mini(Defs.MAX_TOWN_POPULATION, population + u.settlers())
 	Game.inst.remove_unit(u)
 	queue_redraw()
 
@@ -637,7 +682,7 @@ func take_damage(amount: float, attacker: GameObj) -> void:
 func _check_empty() -> void:
 	# defenders that died in battle never come back
 	defenders = defenders.filter(func(d): return is_instance_valid(d) and not d.dead and d.home_town == self)
-	if population <= 0 and defenders.is_empty() and not dead:
+	if population <= 0 and defenders.is_empty() and not dead and not under_construction:
 		dead = true
 		Game.inst.on_town_destroyed(self)
 

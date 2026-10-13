@@ -5,11 +5,13 @@ class_name SaveGame
 ## targets, projectiles) is not saved: units come back idle.
 
 const VERSION := 1
-const DIR := "user://saves"
+## The logged-in player's save folder (PlayerProfile::save_game_path).
+static func dir() -> String:
+	return Profiles.save_dir()
 
 
 static func path_for(slot: String) -> String:
-	return "%s/%s.json" % [DIR, slot]
+	return "%s/%s.json" % [dir(), slot]
 
 
 static func exists(slot: String) -> bool:
@@ -26,7 +28,7 @@ static func describe(slot: String) -> String:
 # ------------------------------------------------------------------- save ---
 
 static func save(g: Game, slot: String) -> bool:
-	DirAccess.make_dir_recursive_absolute(DIR)
+	DirAccess.make_dir_recursive_absolute(dir())
 	return save_path(g, path_for(slot))
 
 
@@ -73,6 +75,7 @@ static func save_path(g: Game, path: String, extra := {}) -> bool:
 		"talks": g.talks,
 		"rebels": Rebels.to_save(g),
 		"event_days": g.event_days,
+		"contacts_ready": g.contacts_ready,
 		"fires": g.fires.keys().map(func(p): return [p.x, p.y, g.fires[p][0], g.fires[p][1]]),
 		"player_id": g.player_id,
 		"reveal_all": g.reveal_all,
@@ -135,7 +138,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 		"known_gods": n.known_gods.keys(), "items_acquired": n.items_acquired.keys(),
-		"trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
+		"contact": n.contact.keys(), "trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
 		"status_day": _int_keys_to_str(n.status_day), "war_count": _int_keys_to_str(n.war_count),
 		"never_until": n.never_until, "reject_day": n.reject_day, "sent_day": n.sent_day,
 		"prefs": n.prefs, "last_aid_day": n.last_aid_day,
@@ -153,6 +156,7 @@ static func _town(t: Town) -> Dictionary:
 		"qol": t.quality_of_life, "bonus_loyalty": t.bonus_loyalty, "growth": t.population_growth,
 		"tax_penalty": t.tax_penalty, "auto_tax": t.auto_tax_loyalty, "auto_grant": t.auto_grant_loyalty, "recruit_penalty": t.recruit_penalty, "grant_penalty": t.grant_penalty,
 		"last_rebel_day": t.last_rebel_day,
+		"building": [t.under_construction, t.build_progress, t.builder_pop, t.builder_loyalty],
 		"wall_level": t.wall_level, "target_wall_level": t.target_wall_level, "wall_progress": t.wall_progress, "wall_hp": t.wall_hp,
 	}
 
@@ -174,7 +178,8 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 static func _unit(u: Unit) -> Dictionary:
 	return {
 		"id": u.obj_id, "sprite": u.sprite_code, "nation": u.nation_id, "x": u.loc.x, "y": u.loc.y,
-		"rank": u.rank, "combat": u.combat, "leadership": u.leadership, "hp": u.hp, "max_hp": u.max_hp,
+		"rank": u.rank, "combat": u.combat, "leadership": u.leadership, "hp": u.hp, "max_hp": u.max_hp, "hp_scale": u.hp_scale,
+		"wagon": [u.wagon_pop, u.wagon_race], "formation": [u.formation, u.formation_dir.x, u.formation_dir.y], "found": [u.found_site.x, u.found_site.y],
 		"name": u.unit_name, "hero": u.is_hero, "life": u.life_frames, "dir": u.dir, "ver": u.weapon_version,
 		"home_town": _id(u.home_town), "home_firm": _id(u.home_firm), "inside": _id(u.inside_firm),
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
@@ -229,6 +234,7 @@ static func load_path(g: Game, path: String) -> String:
 	g.frame = int(d["frame"])
 	g.day = int(d["day"])
 	g.event_days = int(d.get("event_days", -1))
+	g.contacts_ready = bool(d.get("contacts_ready", false))
 	g.fires.clear()
 	for f in d.get("fires", []):
 		g.fires[Vector2i(int(f[0]), int(f[1]))] = [int(f[2]), int(f[3])]
@@ -272,6 +278,8 @@ static func load_path(g: Game, path: String) -> String:
 		n.last_expense_by = nd.get("last_expense_by", {})
 		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
 		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
+		for k in nd.get("contact", []):
+			n.contact[int(k)] = true
 		for k in nd.get("trade_treaty", {}):
 			n.trade_treaty[int(k)] = bool(nd["trade_treaty"][k])
 		for key in ["ai_rel", "status_day", "war_count"]:
@@ -335,6 +343,11 @@ static func load_path(g: Game, path: String) -> String:
 		t.recruit_penalty = int(td["recruit_penalty"])
 		t.grant_penalty = int(td["grant_penalty"])
 		t.last_rebel_day = int(td["last_rebel_day"])
+		var bd: Array = td.get("building", [false, 0.0, 0, 50.0])
+		t.under_construction = bool(bd[0])
+		t.build_progress = float(bd[1])
+		t.builder_pop = int(bd[2])
+		t.builder_loyalty = float(bd[3])
 		t.wall_level = int(td.get("wall_level", 0))
 		t.target_wall_level = int(td.get("target_wall_level", 0))
 		t.wall_progress = float(td.get("wall_progress", 0.0))
@@ -385,8 +398,17 @@ static func load_path(g: Game, path: String) -> String:
 		u.position = Iso.to_screen(u.loc)
 		u.rank = int(ud["rank"])
 		u.leadership = float(ud["leadership"])
-		u.max_hp = float(ud["max_hp"])
-		u.hp = float(ud["hp"])
+		u.hp_scale = float(ud.get("hp_scale", 1.0))
+		var wg: Array = ud.get("wagon", [0, ""])
+		u.wagon_pop = int(wg[0])
+		u.wagon_race = str(wg[1])
+		var fm: Array = ud.get("formation", [0, 0, 0])
+		u.formation = int(fm[0])
+		u.formation_dir = Vector2(float(fm[1]), float(fm[2]))
+		var fs: Array = ud.get("found", [-1, -1])
+		u.found_site = Vector2i(int(fs[0]), int(fs[1]))
+		u.refresh_max_hp()
+		u.hp = minf(float(ud["hp"]), u.max_hp)
 		u.unit_name = ud["name"]
 		u.is_hero = ud["hero"]
 		u.weapon_version = int(ud.get("ver", u.weapon_version))
@@ -406,6 +428,9 @@ static func load_path(g: Game, path: String) -> String:
 		var it: Array = ud.get("item", [0, 0])
 		u.item_id = int(it[0])
 		u.item_para = int(it[1])
+		# the item may raise the combat level, and with it the hit points
+		u.refresh_max_hp()
+		u.hp = minf(float(ud["hp"]), u.max_hp)
 		u.spy_action = ud.get("spy_action", "dissent")
 		if not u.spy_action in ["idle", "dissent"]:
 			u.spy_action = "dissent"

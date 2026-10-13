@@ -203,6 +203,10 @@ static func can_send(g: Game, from: int, to: int, id: String) -> bool:
 	var b := g.nation(to)
 	if a == null or b == null or not a.alive or not b.alive or from == to:
 		return false
+	if not g.contacts_ready:
+		g._init_contacts()
+	if not a.contact.has(to) and id != "SURRENDER":
+		return false             # TalkRes: only kingdoms that have met can talk
 	var rel := a.relation(to)
 	var trade := has_trade(a, to)
 	if g.talks.any(func(m): return m["from"] == from and m["to"] == to and m["id"] == id):

@@ -138,10 +138,11 @@ func _nations() -> void:
 			if other == nd["recno"] or not nation_map.has(other):
 				continue
 			a.relations[nation_map[other]] = RELATION_MAP[clampi(nd["relations"][k], 0, 4)]
-			# the files' NationRelation::trade_treaty is not read: kingdoms on
-			# friendly or allied terms start with a trade treaty
-			if a.relations[nation_map[other]] >= Defs.Relation.PEACE:
+			if nd["trade"][k] > 0:
 				a.trade_treaty[nation_map[other]] = true
+			if nd["contact"][k] > 0:
+				a.contact[nation_map[other]] = true
+	g.contacts_ready = true          # the file says who has met whom
 	for n in g.nations:
 		if n.is_ai:
 			n.ai = FryhtanAI.new(n, g) if n.is_fryhtan else NationAI.new(n, g)
@@ -275,8 +276,6 @@ func _units() -> void:
 			u.unit_name = heroes[ud["hero_id"] - 1]["NAME"]
 		if kings.has(ud["recno"]) and kings[ud["recno"]] == nid:
 			u.rank = Defs.Rank.KING
-			u.max_hp *= 2.0
-			u.hp = u.max_hp
 			g.nation(nid).king = u
 		if host and not on_map:
 			if ud["mode"] == UNIT_MODE_OVERSEE:

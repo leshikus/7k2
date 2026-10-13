@@ -359,13 +359,19 @@ func _read_nations() -> bool:
 				if z >= 0:
 					name_bytes = name_bytes.slice(0, z)
 				var rel: Array = []
+				var contact: Array = []
+				var trade: Array = []
 				for k in 7:
 					rel.append(_s8(r + 2149 + k))
+					# NationRelation records, 244 bytes each, end where the status
+					# array starts: has_contact, should_attack, trade_treaty, status ...
+					contact.append(_s8(r + 441 + k * 244))
+					trade.append(_s8(r + 441 + k * 244 + 2))
 				nations.append({
 					"recno": rn, "type": _s8(r + 6), "race": _s8(r + 9), "color": _s8(r + 10),
 					"king": _s16(r + 12), "name": name_bytes.get_string_from_ascii(), "cash": _f32(r + 117),
 					"food": _f32(r + 121), "reputation": _f32(r + 129), "live_points": _f32(r + 133),
-					"relations": rel, "class": _s16(j),
+					"relations": rel, "contact": contact, "trade": trade, "class": _s16(j),
 				})
 				last = rn
 				j = r + NATION_REC

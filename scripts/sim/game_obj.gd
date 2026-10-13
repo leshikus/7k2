@@ -79,8 +79,17 @@ func distance_to(other: GameObj) -> float:
 func take_damage(amount: float, attacker: GameObj) -> void:
 	if dead:
 		return
-	amount = maxf(1.0, amount * 20.0 / (20.0 + armor() * 2.0))
-	hp -= amount
+	# BaseObj::being_attack_hit: armour is taken off the blow (a blow weaker
+	# than the armour still does 1/(armour - damage)), never more than the blow
+	# itself, and every hit is slowed down by ATTACK_SLOW_DOWN
+	if amount > 0.0:
+		var d := amount - armor()
+		if d <= -1.0:
+			d = -1.0 / d
+		elif d < 1.0:
+			d = 1.0
+		amount = minf(d, amount)
+	hp -= amount / Defs.ATTACK_SLOW_DOWN
 	# BaseObj::being_attack_hit: every blow struck at a Fryhtan adds to the
 	# attacking kingdom's Fryhtan battling score
 	if attacker and is_instance_valid(attacker) and attacker.nation_id > 0 and attacker.nation_id != nation_id:

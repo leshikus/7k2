@@ -9,7 +9,13 @@ var sprite_code := ""
 var race := ""
 var unit_name := ""
 var rank := Defs.Rank.SOLDIER
-var combat := 10.0
+## Combat level. A living unit's hit points follow it (Skill::actual_max_hit_points:
+## the table's hit points times combat level over 100).
+var combat := 10.0:
+	set(v):
+		combat = v
+		refresh_max_hp()
+var hp_scale := 1.0               # extra toughness of kings and leaders of armies
 var leadership := 0.0
 var loc := Vector2.ZERO           # continuous location; integers are location corners
 
@@ -51,6 +57,11 @@ var caravan_home: Firm = null     # market the caravan was hired at
 var caravan_dest: Firm = null     # the other market on its route
 var caravan_leg := 0              # 0 heading to dest, 1 heading home
 var cargo := {}                   # goods type -> quantity
+var wagon_pop := 0               # a wagon's settlers (UnitWagon::population)
+var wagon_race := ""             # and their race
+var found_site := Vector2i(-1, -1)   # where this unit goes to build a town (UNIT_SETTLE_TOWN)
+var formation := 0               # a general's troop formation (TeamInfo::formation_id), 0 none
+var formation_dir := Vector2.ZERO   # its facing set with the number pad (formation_direction)
 var rebel_id := 0                # member of a rebel band (Unit::unit_mode REBEL)
 var pick_up: Array = []           # goods it loads; empty = what the next stop lacks (CaravanStop::pick_up_type)
 var _caravan_wait := 0
@@ -69,12 +80,11 @@ func setup(sprite: String, nation: int, at: Vector2i, skill := 20.0) -> void:
 	race = utype.get("race", "")
 	nation_id = nation
 	loc = Vector2(at)
-	combat = skill
-	max_hp = float(utype.get("hp", 200)) * 0.5
-	hp = max_hp
 	is_weapon = utype.get("class", "") in ["WEAPON", "BIO_WEAP"]
 	is_god = utype.get("class", "") == "GOD"
 	is_caravan = utype.get("class", "") == "CARAVAN"
+	combat = skill
+	hp = max_hp
 	_speed = float(Assets.sprites.get(sprite, {}).get("speed", 4))
 	var n := Game.inst.nation(nation) if Game.inst else null
 	var vt := sprite if is_weapon and Defs.unit_tech(sprite) == "" else Defs.unit_tech(sprite)
@@ -82,6 +92,23 @@ func setup(sprite: String, nation: int, at: Vector2i, skill := 20.0) -> void:
 		weapon_version = maxi(1, n.tech_level(vt))
 	unit_name = Defs.random_person_name(race, Game.inst.rng) if race != "" else utype.get("name", sprite)
 	position = Iso.to_screen(loc)
+
+
+## Weapons, caravans and Greater Beings keep the default combat level of 100
+## (Unit::init: skill.init(unit_id, 100)); living beings scale with theirs.
+func refresh_max_hp() -> void:
+	var base := float(utype.get("hp", 200))
+	var lvl := 100.0 if is_weapon or is_caravan or is_god else combat_level()
+	max_hp = maxf(1.0, base * lvl / 100.0 * hp_scale)
+	if hp > max_hp:
+		hp = max_hp
+
+
+## Kings and army leaders are made tougher by `k`.
+func scale_hp(k: float) -> void:
+	hp_scale *= k
+	refresh_max_hp()
+	hp = max_hp
 
 
 func footprint() -> Rect2i:
@@ -328,12 +355,13 @@ func return_to_base() -> bool:
 
 
 func can_settle() -> bool:
-	return Game.inst.towns.any(func(t): return t.nation_id == nation_id and t.race == race and not t.dead)
+	return Game.inst.towns.any(func(t): return t.nation_id == nation_id and t.race == settler_race() and not t.dead and not t.under_construction)
 
 
 ## A move ordered by the player: the unit no longer belongs to a camp's sally.
 func order_move_free(dest: Vector2i) -> void:
 	home_firm = null
+	found_site = Vector2i(-1, -1)
 	waypoints.clear()
 	order_move(dest)
 
@@ -346,11 +374,38 @@ func add_waypoint(dest: Vector2i) -> void:
 		order_move_free(dest)
 
 
+func is_wagon() -> bool:
+	return sprite_code == "WAGON"
+
+
+## The people a unit brings to a town: a wagon's settlers, or himself.
+func settlers() -> int:
+	return wagon_pop if is_wagon() else 1
+
+
+func settler_race() -> String:
+	return wagon_race if is_wagon() else race
+
+
+## Human units other than the king, and wagons, may build a town (SETTLE).
+func can_found_town() -> bool:
+	return not dead and inside_firm == null and rank != Defs.Rank.KING and (is_wagon() or (is_human() and not is_spy and not is_caravan))
+
+
+## Unit::settle_town: go to the place and build a town there.
+func order_found_town(at: Vector2i) -> void:
+	if not can_found_town():
+		return
+	order_move_free(Game.inst.world.adjacent_to_rect(Rect2i(at, Vector2i.ONE * Defs.TOWN_SIZE), cell()))
+	found_site = at
+
+
 func order_settle() -> bool:
 	var best: Town = null
 	var best_d := INF
 	for t in Game.inst.towns:
-		if t.nation_id == nation_id and t.race == race and not t.dead:
+		if t.nation_id == nation_id and t.race == settler_race() and not t.dead and not t.under_construction \
+				and t.population + settlers() <= Defs.MAX_TOWN_POPULATION:
 			var d := t.center_loc().distance_to(center_loc())
 			if d < best_d:
 				best_d = d
@@ -416,7 +471,12 @@ func sim_frame() -> void:
 			Order.MOVE:
 				moved = true
 				if _step_move():
-					if waypoints.is_empty():
+					if found_site.x >= 0:
+						var site := found_site
+						found_site = Vector2i(-1, -1)
+						stop()
+						Game.inst.found_town(self, site)
+					elif waypoints.is_empty():
 						stop()
 					else:
 						order_move(waypoints.pop_front())
@@ -1065,7 +1125,10 @@ func render(cv) -> void:
 		cv.draw_circle(Vector2(0, 16), 8, col)
 	if dead:
 		return
-	if rank >= Defs.Rank.GENERAL:
+	# Unit::draw_rank_icon: always, or only when selected or pointed at
+	# (the Show Unit Identities option, Config::show_all_unit_icon)
+	var show_icon := selected or Game.inst.hovered == self or int(GameOptions.get_opt("show_unit_icons")) == 1
+	if rank >= Defs.Rank.GENERAL and show_icon:
 		var top := Vector2(0, -48)
 		cv.draw_line(top, top + Vector2(0, -14), Color(0.3, 0.2, 0.1), 2.0)
 		var flag := PackedVector2Array([top + Vector2(0, -14), top + Vector2(12, -10), top + Vector2(0, -6)])

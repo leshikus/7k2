@@ -366,8 +366,6 @@ func create_monster_lair(at: Vector2i, nid: int, soldiers: int, avg_combat: int,
 		lead.leadership = 50.0 + rnd(30)
 		if n.king == null:
 			lead.rank = Defs.Rank.KING
-			lead.max_hp *= 2.0
-			lead.hp = lead.max_hp
 			n.king = lead
 		else:
 			lead.rank = Defs.Rank.GENERAL
@@ -607,14 +605,23 @@ func create_unit_group(nid: int, count: int, sprite := "", adjust := false, at :
 	return out
 
 
-## Wagons of settlers following an army (UnitWagon): villagers here.
+## Wagons of settlers following an army (Campaign::create_wagon: UnitWagon,
+## ten settlers each).
 func create_wagon(nid: int, pop: int, use_last := false) -> void:
 	var n := g.nation(nid)
 	if n == null or n.is_fryhtan:
 		return
 	var at := last_loc if use_last and last_loc.x >= 0 else _edge_loc(0)
-	for i in maxi(1, pop / WAGON_POP):
-		g.spawn_unit(Defs.unit_sprite(n.race, "CIV"), nid, at + Vector2i(i % 3, 2 + i / 3), 10.0)
+	var left := pop
+	var i := 0
+	while left > 0:
+		var w := g.spawn_unit("WAGON", nid, g.free_unit_cell(at + Vector2i(i % 3, 2 + i / 3)), 100.0)
+		if w == null:
+			break
+		w.wagon_pop = mini(WAGON_POP, left)
+		w.wagon_race = n.race
+		left -= w.wagon_pop
+		i += 1
 
 
 ## Campaign::random_edge_location.
@@ -1587,7 +1594,7 @@ func _hero() -> void:
 	# stage_6_create_hero: combat and leadership 200 to 300 (max 300)
 	u.combat = 200.0 + rnd(100)
 	u.leadership = 100.0
-	u.max_hp *= u.combat / 100.0
+	u.refresh_max_hp()      # hit points follow its combat level
 	u.hp = u.max_hp
 	if Items.TABLE.has(Items.LEADER_ITEM):
 		u.item_id = Items.LEADER_ITEM

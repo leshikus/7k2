@@ -78,6 +78,17 @@ func _ready() -> void:
 	sub.text = "The Fryhtan Wars — Godot edition"
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(sub)
+	# the player profile (PlayerProfile::register_menu)
+	var prow := HBoxContainer.new()
+	vb.add_child(prow)
+	profile_label = Label.new()
+	profile_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	prow.add_child(profile_label)
+	var pbtn := Button.new()
+	pbtn.text = "Change player"
+	pbtn.pressed.connect(_show_profiles)
+	prow.add_child(pbtn)
+	_update_profile_label()
 
 	var ph := HBoxContainer.new()
 	vb.add_child(ph)
@@ -332,6 +343,67 @@ func _show_credits() -> void:
 	vb.add_child(close)
 
 
+var profile_label: Label
+
+
+func _update_profile_label() -> void:
+	var n := Profiles.current()
+	profile_label.text = "Player: %s" % (n if n != "" else "(none: games are saved for everyone)")
+
+
+## The profile menu: choose a player, register a new one, or delete one.
+func _show_profiles() -> void:
+	var layer := PanelContainer.new()
+	layer.set_anchors_preset(Control.PRESET_CENTER)
+	add_child(layer)
+	var v := VBoxContainer.new()
+	v.custom_minimum_size = Vector2(360, 0)
+	layer.add_child(v)
+	var t := Label.new()
+	t.text = "Who is playing?"
+	t.add_theme_font_size_override("font_size", 18)
+	v.add_child(t)
+	for n in Profiles.list():
+		var row := HBoxContainer.new()
+		v.add_child(row)
+		var b := Button.new()
+		b.text = n + (" ✓" if n == Profiles.current() else "")
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pn: String = n
+		b.pressed.connect(func():
+			Profiles.login(pn)
+			_update_profile_label()
+			layer.queue_free())
+		row.add_child(b)
+		var del := Button.new()
+		del.text = "Delete"
+		del.tooltip_text = "Remove this player and his saved games."
+		del.pressed.connect(func():
+			Profiles.remove(pn)
+			_update_profile_label()
+			layer.queue_free()
+			_show_profiles())
+		row.add_child(del)
+	var hb := HBoxContainer.new()
+	v.add_child(hb)
+	var name_in := LineEdit.new()
+	name_in.placeholder_text = "New player's name"
+	name_in.max_length = Profiles.NAME_LEN
+	name_in.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(name_in)
+	var ok := Button.new()
+	ok.text = "Register"
+	ok.pressed.connect(func():
+		if Profiles.login(name_in.text):
+			_update_profile_label()
+			layer.queue_free())
+	hb.add_child(ok)
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(layer.queue_free)
+	v.add_child(close)
+
+
 func _show_hall() -> void:
 	var dlg := AcceptDialog.new()
 	dlg.title = "Hall of Fame"
@@ -524,5 +596,6 @@ func _start() -> void:
 		"reveal": reveal_check.button_pressed or spectate_check.button_pressed,
 		"fryhtan_count": fryhtan_opt.selected,
 		"random_events": events_opt.selected,
+		"player_name": Profiles.current(),
 		"autoplay": spectate_check.button_pressed,
 	})

@@ -187,7 +187,8 @@ func _ready() -> void:
 	cart.order_attack(tgt)
 	for f in 200:
 		g.sim_frame()
-	check(cart.dead and (tgt.dead or tgt.hp < thp - 50.0), "the Porcupine runs up and explodes (%d -> %d)" % [thp, tgt.hp])
+	# EXPLODE_DAMAGE is 50 * ATTACK_SLOW_DOWN through being_attack_hit: about 50 less armour
+	check(cart.dead and (tgt.dead or tgt.hp < thp - 40.0), "the Porcupine runs up and explodes (%d -> %d)" % [thp, tgt.hp])
 	var spu := g.spawn_unit(Defs.unit_sprite(human.race, "SPU"), human.id, Vector2i(arch.x1 - 3, arch.y1), 100.0)
 	var power: Array = spu.utype["attacks"].filter(func(a): return a.get("consume", 0) >= 20)
 	if not power.is_empty():

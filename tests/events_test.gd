@@ -53,8 +53,9 @@ func _ready() -> void:
 	var before := g.units.size()
 	check(RandomEvents.execute(g, "UNIT_JOIN") == "UNIT_JOIN" and g.units.size() == before + 1, "a stranger joins a kingdom")
 	before = g.units.size()
-	check(RandomEvents.execute(g, "WAGON_JOIN") == "WAGON_JOIN" and g.units.size() >= before + 8, "a wagon of 8-10 settlers joins")
+	check(RandomEvents.execute(g, "WAGON_JOIN") == "WAGON_JOIN" and g.units.size() == before + 1, "a wagon joins")
 	var joined: Unit = g.units[-1]
+	check(joined.is_wagon() and joined.wagon_pop >= 8 and joined.wagon_pop <= 10, "carrying 8-10 settlers (%d)" % joined.wagon_pop)
 	check(joined.nation_id > 0 and (joined.cell().x <= 3 or joined.cell().y <= 3 or joined.cell().x >= g.world.w - 4 or joined.cell().y >= g.world.h - 4), "they arrive at the edge of the map")
 	var tr := g.treasures.size()
 	check(RandomEvents.execute(g, "ITEM_DISCOVER") == "ITEM_DISCOVER" and g.treasures.size() >= tr + 3, "a cache of artifacts near a town")

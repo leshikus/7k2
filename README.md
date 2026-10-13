@@ -124,6 +124,14 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   attacks your towns and buildings or settles elsewhere.
 * **Caravans**: choose a caravan's destination market and the goods it loads, or
   clone it onto the same route.
+* **Wagons and new towns**: send villagers out in a wagon, settle them in another
+  town, or have any unit but the king build a new town.
+* **Options** (game menu): volumes, help detail, major or all news, unit
+  identities, unit paths on the main view and the world map, inside information,
+  scrolling speed. The map has Terrain, Political (with zones of power) and Trade
+  modes, kingdom and object filters, and Hide Buildings. A troop led by a general
+  can take one of seven formations (number pad: facing).
+* **Player profiles**: each player has his own saved games and campaign.
 * **Network games** for up to seven players. One player hosts from the start screen:
   "Network game", Host, with the map settings above. The others enter the host's
   address and press Join. Each picks a nationality, Fryhtans included. The host
@@ -207,15 +215,10 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 
 ## Differences from the original
 
-Every module of the original game has a counterpart here. Some are simplified, and
-the code notes each one: wagons of settlers are plain villagers; hit points do not
-grow with combat level; kingdoms may talk from the start (the original needs
-contact); trade treaties in the premade scenario files are assumed between
-friendly kingdoms; the help file's screen-area entries (for the original's
-800x600 layout) are replaced by this interface's tooltips. Balance values are
-adapted where the simulation differs.
-Network play uses Godot's ENet (TCP/UDP over the internet or a LAN) instead of the
-original's DirectPlay; the original's IPX and modem connections are gone.
+Every module of the original game has a counterpart here (see DEVLOG.md for the
+review). Where this port's code is simpler than the original's, the code says so;
+the main one is that formations use simpler placement patterns than oformat.cpp.
+Network play uses Godot's ENet instead of DirectPlay; IPX and modem play are gone.
 
 ## Project layout
 

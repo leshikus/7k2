@@ -37,6 +37,7 @@ func next_day(day: int) -> void:
 	_seek_treasure()
 	_settle_spare_peasants()
 	_economy(day)
+	_think_split_towns(day)
 	_expand(day)
 	_military(day)
 	_use_gods()
@@ -560,6 +561,38 @@ func _nearest_lair() -> Firm:
 
 
 # ------------------------------------------------------------- diplomacy ---
+
+## Town::think_split_town / ai_settle_new: a town close to its population
+## limit sends a villager to found a new town beside it, unless a small town
+## of its race is already nearby.
+func _think_split_towns(day: int) -> void:
+	if not n.can_afford(Game.TOWN_BUILDING_COST + 300.0):
+		return
+	for t in my_towns():
+		if (day / 7 + t.obj_id) % 4 != 0 or t.under_construction:
+			continue
+		if t.population < Defs.MAX_TOWN_POPULATION - 15 + int(Diplomacy._pref(n, "cohesive")) / 10:
+			continue
+		if g.towns.any(func(o): return o != t and o.nation_id == n.id and o.race == t.race and o.population < 20 				and o.center_loc().distance_to(t.center_loc()) < 16.0):
+			continue
+		var c := Vector2i(t.center_loc())
+		var site := Vector2i(-1, -1)
+		for r in range(Defs.TOWN_SIZE + 2, 13):
+			for k in 16:
+				var a := TAU * k / 16.0
+				var p := c + Vector2i(roundi(cos(a) * r), roundi(sin(a) * r)) - Vector2i.ONE * (Defs.TOWN_SIZE / 2)
+				if g.can_build_town(p):
+					site = p
+					break
+			if site.x >= 0:
+				break
+		if site.x < 0:
+			continue
+		var u: Unit = t.recruit()
+		if u:
+			u.order_found_town(site)
+			return
+
 
 func _use_gods() -> void:
 	for u in g.units:

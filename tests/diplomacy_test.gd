@@ -156,6 +156,27 @@ func _ready() -> void:
 	g.talk(a.id, p.id, "SURRENDER")
 	check(g.towns.filter(func(t): return t.nation_id == p.id).size() == my_towns + a_towns and not g.towns.any(func(t): return t.nation_id == a.id), "a surrendering kingdom's towns become ours")
 
+	# ---- contact: computer kingdoms know each other; we meet them by exploring
+	var g4 := Game.new()
+	add_child(g4)
+	g4.start({"seed": 30, "size": 120, "race": "NORMAN", "ai_count": 2, "fryhtan_count": 0})
+	days(g4, 2)
+	var me := g4.player()
+	var ais: Array = g4.nations.filter(func(n): return n.id != me.id)
+	check(ais[0].contact.has(ais[1].id), "computer kingdoms have contact from the start")
+	var far: Nation = ais.filter(func(n): return not me.contact.has(n.id)).front() if ais.any(func(n): return not me.contact.has(n.id)) else null
+	check(far != null, "a kingdom not yet met")
+	if far:
+		check(not Diplomacy.can_send(g4, me.id, far.id, "TRADE"), "no messages before contact")
+		var ft: Town = g4.towns.filter(func(t): return t.nation_id == far.id)[0]
+		g4.reveal_area(me.id, Vector2i(ft.center_loc()), 8)
+		g4._reveal(Vector2i(ft.center_loc()), 8)
+		g4._explore_contacts()
+		check(me.contact.has(far.id) and far.contact.has(me.id), "exploring its town makes contact")
+		check(Diplomacy.can_send(g4, me.id, far.id, "TRADE"), "then they can talk")
+	g4.queue_free()
+	Game.inst = g
+
 	# ---- the computer starts talks by itself
 	var g3 := Game.new()
 	add_child(g3)

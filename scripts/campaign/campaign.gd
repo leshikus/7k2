@@ -42,7 +42,9 @@ const STAGE_NAMES := ["", "Fryhtan Invasion", "Fryhtan Invasion", "Build Up", "B
 const MAX_NATION := 7
 const MAX_DIFFICULTY := 5
 const BONUS_MAX_YEAR := 30
-const SAVE_PATH := "user://saves/campaign.json"
+## The campaign is kept with the logged-in player's games.
+static func save_file() -> String:
+	return Profiles.save_dir().path_join("campaign.json")
 
 const MINISTER_OF_WAR := "war"
 const MINISTER_OF_FOREIGN_AFFAIRS := "foreign"
@@ -1690,8 +1692,8 @@ func from_dict(d: Dictionary) -> void:
 
 
 func save() -> bool:
-	DirAccess.make_dir_recursive_absolute("user://saves")
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	DirAccess.make_dir_recursive_absolute(Profiles.save_dir())
+	var f := FileAccess.open(save_file(), FileAccess.WRITE)
 	if f == null:
 		return false
 	f.store_string(JSON.stringify(to_dict()))
@@ -1699,13 +1701,13 @@ func save() -> bool:
 
 
 static func exists() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+	return FileAccess.file_exists(save_file())
 
 
 static func load_saved() -> Campaign:
 	if not exists():
 		return null
-	var d = JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+	var d = JSON.parse_string(FileAccess.get_file_as_string(save_file()))
 	if not d is Dictionary:
 		return null
 	Defs.load_from_assets()

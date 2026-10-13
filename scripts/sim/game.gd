@@ -55,6 +55,7 @@ var campaign_battle = null           # CampaignBattle building and running this 
 var fx_rng := RandomNumberGenerator.new()
 var peace_offers := {}               # nation -> {nation that offered peace: true}
 var talks: Array = []                # diplomatic messages awaiting a human kingdom's reply
+var contacts_ready := false          # the opening contacts have been made
 var rebels: Array = []               # rebel bands (RebelArray)
 var next_rebel_id := 1
 var event_days := -1                 # days to the next random event (RandomEvent::day_to_event)
@@ -306,25 +307,29 @@ func _generate_starts(size: int) -> void:
 		var fw: int = fort_build.get("loc_w", 6)
 		var fpos := _place_near(Rect2i(tpos, Vector2i(6, 6)), fw, fort_build.get("loc_h", 6))
 		var fort := spawn_firm("FORT", nat.id, nat.race, fpos, true)
-		var king := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), 60.0)
+		# Battle::create_unit: the king has combat and leadership 100
+		var king := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), 100.0)
 		king.rank = Defs.Rank.KING
-		king.leadership = 70.0
-		king.max_hp *= 2.0
-		king.hp = king.max_hp
+		king.leadership = 100.0
+		# the player's king bears the player's name (config.player_name)
+		if nat.id == player_id and str(config.get("player_name", "")) != "":
+			king.unit_name = str(config["player_name"])
 		nat.king = king
 		if fort:
 			fort.accept_unit(king)
-			for k in 4:
-				var s := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), float(rng.randi_range(20, 35)))
-				s.leadership = float(rng.randi_range(10, 40))
+			# create_human_town_unit: seven soldiers of basic training (combat 20)
+			for k in 7:
+				var s := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), 20.0)
+				s.leadership = 20.0
 				fort.accept_unit(s)
 		# A general and two soldiers outside, ready to build and explore.
 		var spot := world.adjacent_to_rect(town.footprint(), Vector2i(tpos.x + 3, tpos.y + 7))
-		var g := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, spot, 35.0)
+		# generals 30-100 combat, 40-90 leadership; soldiers 20-80 (Battle::create_unit)
+		var g := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, spot, float(30 + rng.randi() % 70))
 		g.rank = Defs.Rank.GENERAL
-		g.leadership = float(rng.randi_range(40, 60))
+		g.leadership = float(40 + rng.randi() % 50)
 		for k in 2:
-			spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, spot + Vector2i(k + 1, 0), 25.0)
+			spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, spot + Vector2i(k + 1, 0), float(20 + rng.randi() % 60))
 
 
 ## A Fryhtan kingdom starts with a lair commanded by its leader and a brood.
@@ -333,12 +338,11 @@ func _start_fryhtan(nat: Nation, at: Vector2i) -> void:
 	if lair == null:
 		return
 	lair.monster_code = nat.monster_code
-	var leader := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), 70.0)
+	# Battle::create_monster_town: the leader has combat 50-100, skill 20-100
+	var leader := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), float(50 + rng.randi() % 50))
 	if leader:
 		leader.rank = Defs.Rank.KING
-		leader.leadership = 70.0
-		leader.max_hp *= 2.0
-		leader.hp = leader.max_hp
+		leader.leadership = float(20 + rng.randi() % 80)
 		nat.king = leader
 		lair.accept_unit(leader)
 	for k in 5:
@@ -717,6 +721,42 @@ func spawn_town(race: String, nation_id: int, at: Vector2i, pop: int, name := ""
 	return t
 
 
+## World::can_build_town: a free town-sized place with a cell of room around it.
+func can_build_town(at: Vector2i) -> bool:
+	return world.can_place(at.x - 1, at.y - 1, Defs.TOWN_SIZE + 2, Defs.TOWN_SIZE + 2) \
+		and not _overlaps_site(Rect2i(at, Vector2i.ONE * Defs.TOWN_SIZE))
+
+
+const TOWN_BUILDING_COST := 200.0
+
+
+## TownArray::build_town: the unit (or wagon) builds a town and moves in when
+## it is finished.
+func found_town(u: Unit, at: Vector2i) -> Town:
+	if not u.can_found_town() or not can_build_town(at):
+		if u.nation_id == player_id:
+			notify("A town cannot be built there.", u.center_loc())
+		return null
+	var n := u.nation()
+	if n and not n.can_afford(TOWN_BUILDING_COST):
+		if u.nation_id == player_id:
+			notify("Building a town costs %d gold." % int(TOWN_BUILDING_COST), u.center_loc())
+		return null
+	if n:
+		n.add_cash(-TOWN_BUILDING_COST, "Construction")
+	var t := spawn_town(u.settler_race(), u.nation_id, at, 0)
+	t.under_construction = true
+	t.build_progress = 0.0
+	t.builder_pop = u.settlers()
+	t.builder_loyalty = u.loyalty if u.nation_id > 0 else 50.0
+	if u.nation_id == 0:
+		for nid in nation_ids():
+			t.resistance[nid] = 60.0
+	remove_unit(u)
+	update_links()
+	return t
+
+
 func spawn_firm(code: String, nation_id: int, race: String, at: Vector2i, complete: bool, build_row := 0) -> Firm:
 	var f := Firm.new()
 	f.build_row = build_row
@@ -980,6 +1020,52 @@ func reveal_area(nid: int, c: Vector2i, r: int) -> void:
 	_reveal(c, r)
 	fog_view.update_from(fog)
 	_ground_dirty = true
+	_explore_contacts()
+
+
+## NationBase::init_relation: computer kingdoms know each other from the start,
+## as do the human rulers of a network game; a human ruler meets a computer
+## kingdom when exploring reveals its town or building, or at once on a
+## revealed map.
+func _init_contacts() -> void:
+	contacts_ready = true
+	for a in nations:
+		for b in nations:
+			if a.id < b.id and (a.is_ai == b.is_ai or reveal_all):
+				establish_contact(a.id, b.id)
+
+
+## World::explore: an explored town or building of a kingdom we have not met
+## makes the contact (a command, so every machine of a network game agrees).
+var _contact_asked := {}
+
+
+func _explore_contacts() -> void:
+	var me := player()
+	if me == null or reveal_all or not contacts_ready:
+		return
+	var found := {}
+	for t in towns:
+		if t.nation_id > 0 and t.nation_id != me.id and not me.contact.has(t.nation_id) and not _contact_asked.has(t.nation_id) and is_explored_rect(t.footprint()):
+			found[t.nation_id] = true
+	for f in firms:
+		if f.nation_id > 0 and f.nation_id != GameObj.MONSTER_NATION and f.nation_id != me.id and not me.contact.has(f.nation_id) and not _contact_asked.has(f.nation_id) and is_explored_rect(f.footprint()):
+			found[f.nation_id] = true
+	for nid in found:
+		_contact_asked[nid] = true    # asked once (not game state); the command makes it mutual
+		Net.cmd(self, "establish_contact", [me.id, nid])
+
+
+func establish_contact(a: int, b: int) -> void:
+	var na := nation(a)
+	var nb := nation(b)
+	if na == null or nb == null or a == b:
+		return
+	var new := not (na.contact.has(b) and nb.contact.has(a))
+	na.contact[b] = true
+	nb.contact[a] = true
+	if new and contacts_ready and (a == player_id or b == player_id) and day > 1:
+		notify("You have made contact with the %s." % (nb.name if a == player_id else na.name), Vector2(-1, -1))
 
 
 ## Tengri: a unit changes sides (Unit::betray).
@@ -1045,6 +1131,79 @@ const FIRE_SCAN := 16               # each cell is looked at every SCAN_FIRE_DIS
 const FIRE_DAMAGE := 2.0 / 3.0      # config.fire_damage / ATTACK_SLOW_DOWN
 
 var fires := {}                     # cell -> [fire strength, flammability]
+
+
+## The unit paths to draw (draw_unit_path_on_zoom_map): the selected units of
+## the player that are on the move, when "Show Unit Paths" is on for this map
+## (`bit` 1 the main view, 2 the world map), and, while the player's Japanese
+## Greater Being has worshippers, the paths of units marching to attack him
+## (in red). Returns [[points in locations], is_attacker], display only.
+func unit_paths(bit: int) -> Array:
+	var out: Array = []
+	var own := int(GameOptions.get_opt("show_unit_path")) & bit != 0
+	var inside := bool(GameOptions.get_opt("inside_info"))
+	var warned := firms.any(func(f): return f.code == "BASE" and f.race == "JAPANESE" and f.nation_id == player_id and not f.dead and f.workers() > 0)
+	if not own and not warned:
+		return out
+	for u in units:
+		if u.dead or u.inside_firm != null or not u.visible or u.path.is_empty() or u.path_i >= u.path.size():
+			continue
+		var attacker := false
+		if own and u in selected and (u.nation_id == player_id or inside) and u.order != Unit.Order.IDLE:
+			pass
+		elif warned and u.order == Unit.Order.ATTACK and u.target and is_instance_valid(u.target) 				and u.target.nation_id == player_id and not u.attacking:
+			attacker = true
+		else:
+			continue
+		var pts: Array = [u.center_loc()]
+		for i in range(u.path_i, u.path.size()):
+			pts.append(Vector2(u.path[i]) + Vector2(0.5, 0.5))
+		if not attacker:
+			for w in u.waypoints:
+				pts.append(Vector2(w) + Vector2(0.5, 0.5))
+		out.append([pts, attacker])
+	return out
+
+
+## UnitGroup::formation (a command): the general among `units` keeps the
+## formation, and the troop forms up in it where the general stands.
+func form_troop(units: Array, kind: int, facing: Vector2) -> void:
+	var own := units.filter(func(u): return u is Unit and not u.dead and u.inside_firm == null)
+	var general = null
+	for u in own:
+		if u.rank >= Defs.Rank.GENERAL:
+			general = u
+			break
+	if general == null:
+		return
+	general.formation = kind
+	if facing.length() > 0.01:
+		general.formation_dir = facing
+	move_troop(own, general.cell(), general.formation_dir if general.formation_dir.length() > 0.01 else Vector2(0, 1))
+
+
+## A group move: in its general's formation when he has one, facing the
+## way it marches unless he has a set facing.
+func move_troop(units: Array, dest: Vector2i, facing := Vector2.ZERO) -> bool:
+	var general = null
+	for u in units:
+		if u is Unit and u.rank >= Defs.Rank.GENERAL and u.formation > 0:
+			general = u
+			break
+	if general == null:
+		return false
+	var f: Vector2 = general.formation_dir
+	if f.length() < 0.01:
+		f = facing
+	if f.length() < 0.01:
+		var c := Vector2.ZERO
+		for u in units:
+			c += u.center_loc()
+		f = Vector2(dest) - c / units.size()
+	var cells := Formations.place(self, units, dest, f, general.formation)
+	for u in cells:
+		u.order_move_free(cells[u])
+	return true
 
 
 ## WarPoint::inc
@@ -1461,6 +1620,8 @@ func sim_frame() -> void:
 		f.sim_frame()
 	for t in towns:
 		t.town_shoot()
+		if t.under_construction:
+			t.process_construction()
 	for z in war_points.keys():
 		war_points[z] >>= 1
 		if war_points[z] == 0:
@@ -1505,6 +1666,8 @@ func sim_frame() -> void:
 
 func next_day() -> void:
 	day += 1
+	if not contacts_ready:
+		_init_contacts()
 	_plant_ops()
 	weather.next_day(rng)
 	if weather.is_lightning() and rng.randf() < 0.35:
@@ -1699,6 +1862,7 @@ func _update_fog() -> void:
 			_reveal(Vector2i(t.center_loc()), Defs.EXPLORE_RANGE)
 	fog_view.update_from(fog)
 	_ground_dirty = true
+	_explore_contacts()
 
 
 func _reveal(c: Vector2i, r: int) -> void:
@@ -1740,8 +1904,47 @@ func play_sound(kind: String, code: String, action: String, loc: Vector2) -> voi
 	sound_event.emit(kind, code, action, Iso.to_screen(loc))
 
 
-func notify(text: String, loc: Vector2) -> void:
+## A news message. `minor` news (News::is_major false: buildings and towns
+## attacked, lost or taken, idle buildings, Fryhtan lairs and gold, tornados,
+## migrations) is only shown when the Display News option is "All news".
+var last_message_minor := false
+var hovered: GameObj = null          # the object under the mouse (display only)
+var hide_buildings := false          # Hide Buildings: squares and names instead of buildings
+
+
+## World::set_power: each town and building claims the land within
+## EFFECTIVE_POWER_DISTANCE of it, in a diamond, first come first served.
+## Returns nation id per cell (0 none), for the political map's zones.
+const EFFECTIVE_POWER_DISTANCE := 3
+
+
+func power_map() -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(world.w * world.h)
+	var claim := func(x1: int, y1: int, x2: int, y2: int, nid: int):
+		var ax1 := maxi(0, x1 - EFFECTIVE_POWER_DISTANCE + 1)
+		var ay1 := maxi(0, y1 - EFFECTIVE_POWER_DISTANCE + 1)
+		var ax2 := mini(world.w - 1, x2 + EFFECTIVE_POWER_DISTANCE - 1)
+		var ay2 := mini(world.h - 1, y2 + EFFECTIVE_POWER_DISTANCE - 1)
+		var cy := (ay1 + ay2) / 2
+		for y in range(ay1, ay2 + 1):
+			var t := absi(y - cy) / 2
+			for x in range(ax1 + t, ax2 - t + 1):
+				if out[y * world.w + x] == 0:
+					out[y * world.w + x] = nid
+	for t in towns:
+		if t.nation_id > 0 and t.nation_id < 255 and not t.dead:
+			claim.call(t.x1, t.y1, t.x1 + Defs.TOWN_SIZE - 1, t.y1 + Defs.TOWN_SIZE - 1, t.nation_id)
+	for f in firms:
+		if f.nation_id > 0 and f.nation_id < 255 and not f.dead and not f.under_construction:
+			claim.call(f.x1, f.y1, f.x1 + f.w - 1, f.y1 + f.h - 1, f.nation_id)
+	return out
+
+
+func notify(text: String, loc: Vector2, minor := false) -> void:
+	last_message_minor = minor
 	message.emit(text, loc)
+	last_message_minor = false
 
 
 ## True when nobody plays: every kingdom is AI-controlled and the human watches.
@@ -1749,9 +1952,9 @@ func observer() -> bool:
 	return config.get("autoplay", false)
 
 
-func notify_nation(nid: int, text: String, loc: Vector2) -> void:
+func notify_nation(nid: int, text: String, loc: Vector2, minor := false) -> void:
 	if nid == player_id and not observer():
-		notify(text, loc)
+		notify(text, loc, minor)
 
 
 func deselect(o: GameObj) -> void:
@@ -1836,11 +2039,11 @@ func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 			var treasure := float(rng.randi_range(500, 1500))
 			kn.add_cash(treasure, "Treasure")
 			kn.change_reputation(5.0)
-			notify_nation(kn.id, "Fryhtan lair destroyed! Treasure found: %d gold." % int(treasure), f.center_loc())
+			notify_nation(kn.id, "Fryhtan lair destroyed! Treasure found: %d gold." % int(treasure), f.center_loc(), true)
 	elif observer() and f.nation_id > 0 and nation(f.nation_id):
-		notify("The %s has lost a %s." % [nation(f.nation_id).name, f.display_name()], f.center_loc())
+		notify("The %s has lost a %s." % [nation(f.nation_id).name, f.display_name()], f.center_loc(), true)
 	elif f.nation_id == player_id:
-		notify("%s destroyed!" % f.display_name(), f.center_loc())
+		notify("%s destroyed!" % f.display_name(), f.center_loc(), true)
 	f.queue_free()
 	update_links()
 	_ground_dirty = true
@@ -1849,11 +2052,11 @@ func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 func on_town_changed(t: Town, old_nation: int) -> void:
 	if observer():
 		var tn := nation(t.nation_id)
-		notify("%s now belongs to the %s." % [t.town_name, tn.name] if tn else "%s has become independent." % t.town_name, t.center_loc())
+		notify("%s now belongs to the %s." % [t.town_name, tn.name] if tn else "%s has become independent." % t.town_name, t.center_loc(), true)
 	elif t.nation_id == player_id:
-		notify("%s has joined your kingdom!" % t.town_name, t.center_loc())
+		notify("%s has joined your kingdom!" % t.town_name, t.center_loc(), true)
 	elif old_nation == player_id:
-		notify("%s has been lost!" % t.town_name, t.center_loc())
+		notify("%s has been lost!" % t.town_name, t.center_loc(), true)
 	var n := nation(t.nation_id)
 	if n:
 		n.change_reputation(1.0)
