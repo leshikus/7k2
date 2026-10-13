@@ -91,6 +91,13 @@ func add_cash(v: float, kind := "Other") -> void:
 		expense_by[kind] = expense_by.get(kind, 0.0) - v
 
 
+## A refund taken off the year's expense of that kind (add_expense with a negative amount).
+func refund_expense(v: float, kind: String) -> void:
+	cash += v
+	expense_year -= v
+	expense_by[kind] = expense_by.get(kind, 0.0) - v
+
+
 func new_year() -> void:
 	last_import_year = import_year
 	import_year = {}

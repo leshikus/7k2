@@ -28,6 +28,10 @@ func next_day(day: int) -> void:
 	if not n.alive:
 		return
 	Espionage.ai_think(n, g, war_target, day)
+	# FirmSpecial::process_ai, FirmSpy::process_ai
+	for f in my_firms():
+		if Training.is_train_firm(f) and not f.under_construction:
+			Training.process_ai(f, self, day)
 	if (day + n.id * 3) % 7 != 0:
 		return
 	if my_towns().is_empty() and my_firms().is_empty():
@@ -333,9 +337,6 @@ func _economy(day: int) -> void:
 	if day > 600 and my_firms("SPY").is_empty() and n.cash > 2000:
 		if _try_build("SPY", towns[0].footprint(), [towns[0].center_loc()]):
 			return
-	for sc in my_firms("SPY"):
-		if sc.weapon_queue == 0 and n.cash > 1500 and g.units.filter(func(u): return u.is_spy and u.nation_id == n.id).size() < 4:
-			sc.weapon_queue = 1
 	# caravans between our markets and those of friendly kingdoms
 	if n.cash > 900:
 		for mk in my_firms("MARKET"):
@@ -345,9 +346,6 @@ func _economy(day: int) -> void:
 	if day > 500 and my_firms("STABLE").is_empty() and n.cash > 1200 and n.tech_level(Defs.spu_structure_tech(n.race)) > 0:
 		if _try_build("STABLE", towns[0].footprint(), [towns[0].center_loc()]):
 			return
-	for st in my_firms("STABLE"):
-		if st.weapon == "" and n.cash > 700 and (war_target > 0 or n.cash > 2500):
-			st.queue_weapon(st.special_unit())
 	if day > 700 and my_firms("WAR").is_empty() and n.cash > 2000 and n.tech_level("CATAPULT") > 0:
 		if _try_build("WAR", towns[0].footprint()):
 			return

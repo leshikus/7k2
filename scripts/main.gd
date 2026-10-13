@@ -359,8 +359,15 @@ func _demo(what: String) -> void:
 			home.loyalty = 80.0
 			var col := game.spawn_firm("SPY", p.id, p.race, game._place_near(home.footprint(), 5, 5, 8, [home.center_loc()]), true)
 			game.update_links()
-			var s1 := game.spy_spawn(col)
-			var s2 := game.spy_spawn(col)
+			var s1: Unit = null
+			var s2: Unit = null
+			for k in 2:
+				Training.order_train(col, Training.CIVILIAN)
+				col.trainees[-1]["training"] = false
+				col.trainees[-1]["spy_skill"] = 40.0
+			if col.trainees.size() == 2:
+				s1 = Training.mobilize(col, 1)
+				s2 = Training.mobilize(col, 0)
 			var indep: Array = game.towns.filter(func(t): return t.nation_id == 0)
 			if s1 and not indep.is_empty():
 				game.spy_enter(s1, indep[0])
@@ -377,6 +384,26 @@ func _demo(what: String) -> void:
 			else:
 				_set_selection([col])
 				camera.iso_pos = Iso.to_screen(col.center_loc())
+		"menus":
+			# the build menu of a general and the pause menu, to look at the icons
+			var gen2: Array = game.units.filter(func(u): return u.nation_id == p.id and u.rank == Defs.Rank.GENERAL)
+			_set_selection([gen2[0]])
+			hud.build_menu_open = true
+			hud.refresh_selection(true)
+			hud.toggle_pause_menu()
+		"college":
+			# an Espionage College with trainees, to show the training panel
+			var home: Town = game.towns.filter(func(t): return t.nation_id == p.id)[0]
+			home.loyalty = 80.0
+			var col := game.spawn_firm("SPY", p.id, p.race, game._place_near(home.footprint(), 5, 5, 8, [home.center_loc()]), true)
+			game.update_links()
+			for k in 3:
+				Training.order_train(col, [Training.CIVILIAN, Training.INFANTRY, Training.CIVILIAN][k])
+			if not col.trainees.is_empty():
+				col.trainees[0]["training"] = false
+				col.trainees[0]["spy_skill"] = 35.0
+			_set_selection([col])
+			camera.iso_pos = Iso.to_screen(col.center_loc())
 		"gallery":
 			# every work building in all four architectural styles, for visual checks
 			var base := Vector2i(10, 10)

@@ -739,3 +739,29 @@ numbers worked out by hand from the original.
   state of quakes and tornadoes.
 
 New test: `fidelity_test`.
+
+## Training buildings, icon buttons (13 Oct 2026)
+
+- **FirmTrain** (of_train.cpp, otrainee.cpp, of_spec*.cpp, of_spy*.cpp) replaces
+  the old production queue of the Training Ground and the Espionage College.
+  Volunteers from linked towns enrol as trainees (up to eight) and stay inside.
+  Basic training takes one man at a time each day: combat to 10 for civilians,
+  to 20 (30 with the Roman Greater Being) over the unit's build days for
+  soldiers, leadership and spying skill a point a day to 20. Advanced training
+  follows each month (twice at the college) by the man's potentials, with the
+  Celtic and Egyptian gods' modifiers. The player mobilizes a man (or all of
+  them); one still in basic training can be sent home and the cost is refunded.
+  With a rally point the trained walk out by themselves. The college trains
+  civilian, infantry and special-unit spies; an infantry spy's town must also be
+  linked to a fort, a special unit's to a training ground; a training ground
+  takes only its own race. An enemy spy living in the town may enrol, and walks
+  out still serving his kingdom. A destroyed building lets the trained out and
+  sends the rest home. The computer trains special units every 15 days when it
+  can spend (Nation::ai_should_spend) and sends them to the nearest camp with
+  room; it trains spies within its population quota and sends them out.
+- **Icons instead of words** on the in-game buttons: the action panel, the top
+  bar, the map buttons, the pause menu and the diplomacy and spy dialogs show a
+  Unicode symbol (Windows' symbol and emoji fonts), with figures such as costs
+  and chances beside it; the words are the tooltip and the help line.
+
+New test: `training_test`.

@@ -84,7 +84,7 @@ func _drag(a: Vector2, b: Vector2) -> void:
 
 func _press_hud_button(prefix: String) -> bool:
 	for b in main.hud.actions.get_children():
-		if b is Button and b.text.begins_with(prefix) and not b.disabled:
+		if b is Button and String(b.get_meta("label", b.text)).begins_with(prefix) and not b.disabled:
 			b.pressed.emit()
 			await _frames(2)
 			return true

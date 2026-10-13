@@ -48,6 +48,7 @@ var weapon := ""
 var weapon_progress := 0.0
 var weapon_queue := 0
 var heroes: Array = []              # inn: heroes for hire
+var trainees: Array = []            # training ground, espionage college: Training records (FirmTrain::trainee_array)
 var monster_code := ""              # lair: monster unit sprite
 var raid_timer := 0
 var build_row := 0                  # FBUILD record when the variant was given explicitly (scenarios)
@@ -284,11 +285,6 @@ func fill_from_towns() -> int:
 	return n
 
 
-## Espionage College: one more spy to train.
-func queue_spy() -> void:
-	weapon_queue += 1
-
-
 func eject_all() -> void:
 	for s in soldiers.duplicate():
 		release_unit(s)
@@ -418,10 +414,8 @@ func next_day(day: int) -> void:
 			_war_factory()
 		"INN":
 			_inn(day)
-		"STABLE":
-			_train_special()
-		"SPY":
-			_train_spies()
+		"STABLE", "SPY":
+			Training.next_day(self, day)
 		"BASE":
 			_pray()
 		"LAIR":
@@ -669,61 +663,9 @@ func _war_factory() -> void:
 			weapon = ""
 
 
-## Special unit trained at this race's training centre (FirmTrain, simplified):
-## a volunteer from a linked loyal town plus the unit's cost.
+## The special unit of this training ground's race.
 func special_unit() -> String:
 	return Defs.unit_sprite(race, "SPU")
-
-
-func _train_special() -> void:
-	var n := nation()
-	if weapon == "" or n == null:
-		return
-	if weapon_progress <= 0.0:
-		var cost := float(Defs.unit_types.get(weapon, {}).get("cost", 50))
-		if not n.can_afford(cost):
-			return
-		var town: Town = null
-		for t in linked_towns:
-			if t.nation_id == nation_id and t.can_spare_trainee():
-				town = t
-				break
-		if town == null:
-			return
-		town.population -= 1
-		town._check_empty()
-		town.loyalty = maxf(0.0, town.loyalty - 1.0)
-		n.add_cash(-cost, "Training")
-		weapon_progress = 0.01
-	var days := float(Defs.unit_types.get(weapon, {}).get("build_days", 30))
-	weapon_progress += 100.0 / days * Game.inst.work_speed(nation_id)
-	if weapon_progress >= 100.0:
-		weapon_progress = 0.0
-		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
-		var u := Game.inst.spawn_unit(weapon, nation_id, c, float(Game.inst.rng.randi_range(35, 55)))
-		send_to_rally(u)
-		if u:
-			u.leadership = float(Game.inst.rng.randi_range(20, 50))
-			if nation_id == Game.inst.player_id and not Game.inst.observer():
-				Game.inst.notify("%s trained." % u.type_name(), center_loc())
-		weapon_queue -= 1
-		if weapon_queue <= 0:
-			weapon_queue = 0
-			weapon = ""
-
-
-## Espionage College: queued spies are trained one every 20 days.
-func _train_spies() -> void:
-	if weapon_queue <= 0:
-		return
-	weapon_progress += 5.0 * Game.inst.work_speed(nation_id)
-	if weapon_progress >= 100.0:
-		weapon_progress = 0.0
-		var u := Game.inst.spy_spawn(self)
-		if u:
-			weapon_queue -= 1
-			if nation_id == Game.inst.player_id:
-				Game.inst.notify("A spy has been trained (skill %d)." % int(u.spy_skill), center_loc())
 
 
 func queue_weapon(unit_code: String) -> void:

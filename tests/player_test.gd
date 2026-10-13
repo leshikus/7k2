@@ -55,8 +55,11 @@ func _ready() -> void:
 	var spu := st.special_unit()
 	var before_spu := g.units.filter(func(u): return u.sprite_code == spu and u.nation_id == p.id).size()
 	home.loyalty = 80.0
-	st.queue_weapon(spu)
-	st.queue_weapon(spu)
+	# FirmTrain: volunteers train inside and walk out to the rally point when done
+	st.set_rally(st.door() + Vector2i(3, 3))
+	Training.order_train(st, Training.SPECIAL)
+	Training.order_train(st, Training.SPECIAL)
+	print("trainees ", st.trainees.size())
 	for d in 200: _day(g)
 	var after_spu := g.units.filter(func(u): return u.sprite_code == spu and u.nation_id == p.id).size()
 	print("training centre '", st.display_name(), "' trained ", after_spu - before_spu, " x ", Defs.unit_types[spu]["name"])

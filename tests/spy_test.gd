@@ -36,11 +36,11 @@ func _ready() -> void:
 	home.loyalty = 80.0
 	var college := g.spawn_firm("SPY", 1, "NORMAN", g._place_near(home.footprint(), 5, 5, 8, [home.center_loc()]), true)
 	g.update_links()
-	college.weapon_queue = 1
+	_check(Training.order_train(college, Training.CIVILIAN), "a villager enrols at the Espionage College")
 	_days(g, 30)
-	var spy: Unit = null
-	for u in g.units:
-		if u.is_spy: spy = u
+	_check(not college.trainees.is_empty() and not college.trainees[0]["training"] and college.trainees[0]["spy_skill"] >= 20.0,
+		"after basic training his spying skill is 20 (%s)" % (Training.describe(college.trainees[0]) if not college.trainees.is_empty() else "none"))
+	var spy: Unit = Training.mobilize(college, 0) if not college.trainees.is_empty() else null
 	_check(spy != null, "a spy is trained at the Espionage College")
 	if spy == null:
 		_finish(); return

@@ -127,9 +127,10 @@ func _build_ui() -> void:
 	top_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	top_label.tooltip_text = "
 ".join(["Treasure", "Food", "Reputation", "Date", "Life Points"].map(func(k): return HelpText.area_text(k)).filter(func(x): return x != ""))
-	for s in [["II", 0.0], ["1x", 1.0], ["2x", 2.0], ["4x", 4.0]]:
+	for s in [["⏸", 0.0, "Pause"], ["▶", 1.0, "Normal speed"], ["⏩", 2.0, "Double speed"], ["⏭", 4.0, "Four times as fast"]]:
 		var b := Button.new()
 		b.text = s[0]
+		b.tooltip_text = s[2]
 		b.toggle_mode = true
 		b.custom_minimum_size = Vector2(34, 0)
 		var spd: float = s[1]
@@ -137,21 +138,20 @@ func _build_ui() -> void:
 		hb.add_child(b)
 		speed_buttons.append(b)
 	var dip := Button.new()
-	dip.text = "Diplomacy"
+	_icon_button(dip, "🤝", "Diplomacy")
 	dip.pressed.connect(toggle_diplomacy)
 	hb.add_child(dip)
 	var spy_btn := Button.new()
-	spy_btn.text = "Spies"
+	_icon_button(spy_btn, "🕵", "Spies")
 	spy_btn.pressed.connect(toggle_spies)
 	hb.add_child(spy_btn)
 	_top_buttons = hb
 	var rep_btn := Button.new()
-	rep_btn.text = "Reports"
-	rep_btn.tooltip_text = "Kingdoms F1, Towns F2, Economy F3, Trade F4, Military F5, Technology F6, Espionage F7, Ranking F8"
+	_icon_button(rep_btn, "📊", "Reports: Kingdoms F1, Towns F2, Economy F3, Trade F4, Military F5, Technology F6, Espionage F7, Ranking F8")
 	rep_btn.pressed.connect(func(): reports.open())
 	hb.add_child(rep_btn)
 	var menu := Button.new()
-	menu.text = "Menu"
+	_icon_button(menu, "☰", "Menu")
 	menu.pressed.connect(toggle_pause_menu)
 	hb.add_child(menu)
 
@@ -174,16 +174,17 @@ func _build_ui() -> void:
 	# map mode buttons (MAP-1, MAP-2, MAP-3), the filters and Hide Buildings
 	var mrow := HBoxContainer.new()
 	vb.add_child(mrow)
-	for spec in [["Terrain", "Terrain Map", func(): minimap.set_mode(Minimap.Mode.TERRAIN)],
-			["Political", "World Political Map (again: kingdoms' zones)", func(): minimap.set_mode(Minimap.Mode.POWER)],
-			["Trade", "Trade Map", func(): minimap.set_mode(Minimap.Mode.TRADE)],
-			["Nation", "NATION", func(): minimap.toggle_filter_nation()],
-			["Object", "OBJECT", func(): minimap.toggle_filter_kind()],
-			["Hide", "Hide Buildings", func():
+	for spec in [["⛰", "Terrain Map", func(): minimap.set_mode(Minimap.Mode.TERRAIN)],
+			["🗺", "World Political Map (again: kingdoms' zones)", func(): minimap.set_mode(Minimap.Mode.POWER)],
+			["⚖", "Trade Map", func(): minimap.set_mode(Minimap.Mode.TRADE)],
+			["🏳", "NATION", func(): minimap.toggle_filter_nation()],
+			["◈", "OBJECT", func(): minimap.toggle_filter_kind()],
+			["🙈", "Hide Buildings", func():
 				game.hide_buildings = not game.hide_buildings]]:
 		var mb := Button.new()
 		mb.text = spec[0]
-		mb.add_theme_font_size_override("font_size", 11)
+		mb.add_theme_font_size_override("font_size", 16)
+		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var h := HelpText.by_code(spec[1])
 		mb.tooltip_text = (h["title"] + ": " + h["text"]) if not h.is_empty() else HelpText.area_text(spec[1])
 		if mb.tooltip_text == "":
@@ -215,7 +216,7 @@ func _build_ui() -> void:
 	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner.add_child(info_label)
 	actions = GridContainer.new()
-	actions.columns = 2
+	actions.columns = 4
 	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	inner.add_child(actions)
 	tooltip_label = Label.new()
@@ -252,7 +253,7 @@ func _build_ui() -> void:
 	diplo_list = VBoxContainer.new()
 	dv.add_child(diplo_list)
 	var dclose := Button.new()
-	dclose.text = "Close"
+	_icon_button(dclose, "✖", "Close")
 	dclose.pressed.connect(toggle_diplomacy)
 	dv.add_child(dclose)
 
@@ -280,15 +281,26 @@ func _build_ui() -> void:
 		save_requested.emit()
 		toggle_pause_menu()
 	var do_load := func(): load_requested.emit()
-	for item in [["Resume", toggle_pause_menu], ["Save game (Ctrl+S)", do_save], ["Load game (F9)", do_load], ["Options", toggle_options], ["Reveal map (cheat)", reveal],
-			["Computer's information (cheat)", func():
+	var prow := HBoxContainer.new()
+	prow.alignment = BoxContainer.ALIGNMENT_CENTER
+	pv.add_child(prow)
+	var hint := Label.new()
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pv.add_child(hint)
+	for item in [["▶", "Resume", toggle_pause_menu], ["💾", "Save game (Ctrl+S)", do_save], ["📂", "Load game (F9)", do_load], ["⚙", "Options", toggle_options],
+			["👁", "Reveal map (cheat)", reveal],
+			["🧠", "Computer's information (cheat)", func():
 				GameOptions.set_opt("show_ai_info", not GameOptions.get_opt("show_ai_info"))
 				game.notify("Computer's information %s." % ("shown" if GameOptions.get_opt("show_ai_info") else "hidden"), Vector2(-1, -1))],
-			["New game", func(): menu_new_game.emit()], ["Quit", func(): get_tree().quit()]]:
+			["🆕", "New game", func(): menu_new_game.emit()], ["🚪", "Quit", func(): get_tree().quit()]]:
 		var b := Button.new()
-		b.text = item[0]
-		b.pressed.connect(item[1])
-		pv.add_child(b)
+		_icon_button(b, item[0], item[1])
+		b.custom_minimum_size = Vector2(56, 52)
+		b.add_theme_font_size_override("font_size", 26)
+		var words: String = item[1]
+		b.mouse_entered.connect(func(): hint.text = words)
+		b.pressed.connect(item[2])
+		prow.add_child(b)
 
 	# --- game over overlay
 	overlay = PanelContainer.new()
@@ -425,7 +437,7 @@ func toggle_options() -> void:
 		choice.call("Scrolling method", "scroll_method", ["Comfort", "Speed"], [0, 1])
 		slider.call("Scrolling speed", "scroll_speed", 1, 10)
 		var close := Button.new()
-		close.text = "Close"
+		_icon_button(close, "✖", "Close")
 		close.pressed.connect(func(): options_panel.visible = false)
 		v.add_child(close)
 		options_panel.visible = false
@@ -457,7 +469,7 @@ func toggle_spies() -> void:
 		spies_list = VBoxContainer.new()
 		v.add_child(spies_list)
 		var close := Button.new()
-		close.text = "Close"
+		_icon_button(close, "✖", "Close")
 		close.pressed.connect(func(): spies_panel.visible = false)
 		v.add_child(close)
 		spies_panel.visible = false
@@ -487,14 +499,14 @@ func _fill_spies() -> void:
 		row.add_child(l)
 		if u.has_meta("hidden") and u.spy_place.nation_id != game.player_id:
 			var mode := Button.new()
-			mode.text = "Sow dissent" if u.spy_action == "dissent" else "Sleep"
+			_icon_button(mode, "🗣" if u.spy_action == "dissent" else "💤", "Sow dissent" if u.spy_action == "dissent" else "Sleep")
 			mode.tooltip_text = "Click to switch between sowing dissent and lying low."
 			mode.pressed.connect(func():
 				_do(u, "set", ["spy_action", "idle" if u.spy_action == "dissent" else "dissent"])
 				_fill_spies.call_deferred())
 			row.add_child(mode)
 		var go := Button.new()
-		go.text = "Show"
+		_icon_button(go, "👁", "Show")
 		go.pressed.connect(func():
 			var o: GameObj = u.spy_place if u.has_meta("hidden") else u
 			for x in game.selected:
@@ -506,7 +518,7 @@ func _fill_spies() -> void:
 		row.add_child(go)
 		if u.has_meta("hidden"):
 			var rc := Button.new()
-			rc.text = "Recall"
+			_icon_button(rc, "↩", "Recall")
 			rc.pressed.connect(func():
 				_do(game, "spy_leave", [u])
 				_fill_spies.call_deferred())
@@ -537,7 +549,7 @@ func _fill_diplomacy() -> void:
 		row0.add_child(ml)
 		for yes in [true, false]:
 			var rb := Button.new()
-			rb.text = "Accept" if yes else "Reject"
+			_icon_button(rb, "✔" if yes else "✖", "Accept" if yes else "Reject")
 			var mm: Dictionary = m
 			var y: bool = yes
 			rb.pressed.connect(func():
@@ -567,14 +579,14 @@ func _fill_diplomacy() -> void:
 		var rel := p.relation(n.id)
 		if game.peace_offers.get(p.id, {}).has(n.id) and rel <= Defs.Relation.NEUTRAL:
 			var acc := Button.new()
-			acc.text = "Accept peace"
+			_icon_button(acc, "🕊", "Accept peace")
 			var nid3 := n.id
 			acc.pressed.connect(func():
 				_do(game, "make_peace", [nid3, p.id])
 				_fill_diplomacy.call_deferred())
 			row.add_child(acc)
 		var talk := MenuButton.new()
-		talk.text = "Send message ▾"
+		_icon_button(talk, "✉ ▾", "Send message")
 		talk.flat = false
 		var pm := talk.get_popup()
 		var opts := _talk_options(p, n)
@@ -589,7 +601,7 @@ func _fill_diplomacy() -> void:
 		row.add_child(talk)
 		if rel != Defs.Relation.WAR and rel >= Defs.Relation.PEACE:
 			var w := Button.new()
-			w.text = "Declare war"
+			_icon_button(w, "⚔", "Declare war")
 			w.tooltip_text = "Breaking a treaty costs reputation."
 			var nid2 := n.id
 			w.pressed.connect(func():
@@ -779,6 +791,8 @@ func _update_top() -> void:
 func refresh_selection(force := false) -> void:
 	var sel: Array = game.selected.filter(func(o): return is_instance_valid(o) and not o.dead)
 	var key := ",".join(sel.map(func(o): return str(o.obj_id))) + "|" + str(build_menu_open)
+	if sel.size() == 1 and sel[0] is Firm and Training.is_train_firm(sel[0]):
+		key += "|" + Training.signature(sel[0])     # the buttons follow the trainees
 	var rebuild := force or key != _last_sel_key
 	_last_sel_key = key
 	if sel.is_empty() and is_instance_valid(inspected_treasure) and inspected_treasure.is_inside_tree():
@@ -892,13 +906,27 @@ func _clear_actions() -> void:
 	tooltip_label.text = ""
 
 
-func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_cb := Callable()) -> Button:
+## A button that shows a symbol, its words as the tooltip.
+func _icon_button(b: Button, icon: String, words: String) -> void:
+	b.text = icon
+	b.tooltip_text = words
+	b.set_meta("label", words)
+	b.custom_minimum_size = Vector2(38, 0)
+	b.add_theme_font_size_override("font_size", 18)
+
+
+func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_cb := Callable(), icon := "") -> Button:
 	var b := Button.new()
-	b.text = text
+	b.text = Icons.caption(text, icon)    # a symbol (and its figures); the words are the tooltip
+	b.tooltip_text = text
+	b.set_meta("label", text)
 	b.disabled = not enabled
+	if not enabled:
+		b.modulate = Color(1, 1, 1, 0.35)  # colour symbols do not grey out by themselves
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.clip_text = true
-	b.custom_minimum_size = Vector2(130, 28)
+	b.custom_minimum_size = Vector2(52, 36)
+	b.add_theme_font_size_override("font_size", 16)
 	b.pressed.connect(func():
 		if tutorial_panel and tutorial_panel.tutorial:
 			tutorial_panel.tutorial.press(text)
@@ -915,8 +943,8 @@ func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_c
 " + tip if tip != "" else "")
 	if hm == 0:
 		tip = ""
-	if tip != "":
-		b.mouse_entered.connect(func(): tooltip_label.text = tip)
+	tip = text + ("\n" + tip if tip != "" else "")
+	b.mouse_entered.connect(func(): tooltip_label.text = tip)
 	if right_cb.is_valid():
 		b.gui_input.connect(func(ev: InputEvent):
 			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
@@ -1425,11 +1453,13 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				s += "Charge %d / %d  %s\n" % [f.cast_charge, Defs.MAX_CAST_DELAY, _bar(f.cast_charge, Defs.MAX_CAST_DELAY, "#a080ff")]
 				if f.hp < f.max_hp:
 					s += "[color=#ff9060]Recharges only when undamaged.[/color]\n"
-			"STABLE":
-				if f.weapon != "":
-					s += "Training %s: %d%% (%d queued)\n" % [Defs.unit_types[f.weapon]["name"], int(f.weapon_progress), f.weapon_queue]
-				else:
+			"STABLE", "SPY":
+				if f.code == "STABLE":
 					s += "Trains: %s\n" % Defs.unit_types.get(f.special_unit(), {}).get("name", "?")
+				if own or GameOptions.get_opt("show_ai_info") or f.revealed_to.has(game.player_id):
+					s += "Trainees %d / %d\n" % [f.trainees.size(), Training.MAX_TRAINEE]
+					for rec in f.trainees:
+						s += "  " + Training.describe(rec) + "\n"
 			"WAR":
 				s += "Workers %d / %d\n" % [f.workers(), Defs.MAX_WORKER]
 				if f.weapon != "":
@@ -1504,17 +1534,15 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				var label := "%s %d" % [t["name"], lvl + 1] if lvl < t["max"] else "%s (max)" % t["name"]
 				var b := _add_action(label, func(): _do(f, "start_research", [tc]), ok)
 				if f.research_tech == tc:
-					b.text = "▶ " + label
+					b.text = Icons.caption("▶ " + label)
 		"WAR":
 			for wcode in Defs.WEAPONS + Defs.MEGA_WEAPONS.filter(func(w): return p.tech_level(w) > 0 and Assets.has_sprite(w)):
 				var ut: Dictionary = Defs.unit_types.get(wcode, {})
 				var wc: String = wcode
 				_add_action("%s (%d)" % [ut.get("name", wcode), ut.get("cost", 0)], func(): _do(f, "queue_weapon", [wc]), p.tech_level(wcode) > 0,
 					"Research %s at a Tower of Science first." % ut.get("name", wcode) if p.tech_level(wcode) == 0 else "")
-		"SPY":
-			var can_spy := f.linked_towns.any(func(t): return t.nation_id == f.nation_id and t.can_recruit())
-			_add_action("Train spy (%d)" % Defs.SPY_COST, func(): _do(f, "queue_spy"), can_spy and p.cash >= Defs.SPY_COST,
-				"Needs a linked town of yours with loyalty %d+. Right-click a spy on an enemy or independent town or building to infiltrate it." % Defs.MIN_RECRUIT_LOYALTY)
+		"SPY", "STABLE":
+			_train_actions(f)
 		"BEE", "TERMITE", "INCUBAT":
 			for sprite in SpecialFirms.buildable_units(f):
 				var sc: String = sprite
@@ -1552,12 +1580,6 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 						_do(SpecialFirms, "cast", [f, spc, f.center_loc()])
 					else:
 						spell_target_requested.emit(f, spc), SpecialFirms.can_cast(f, spc), _spell_tip(spc))
-		"STABLE":
-			var spu := f.special_unit()
-			var ut: Dictionary = Defs.unit_types.get(spu, {})
-			var can := f.linked_towns.any(func(t): return t.nation_id == f.nation_id and t.can_recruit())
-			_add_action("Train %s (%d)" % [ut.get("name", spu), ut.get("cost", 0)], func(): _do(f, "queue_weapon", [spu]), can and p.cash >= ut.get("cost", 0),
-				"Needs a linked town of yours with loyalty %d+ to supply a volunteer." % Defs.MIN_RECRUIT_LOYALTY)
 		"INN":
 			for i in f.heroes.size():
 				var hdef: Dictionary = f.heroes[i]
@@ -1574,6 +1596,42 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		_add_action("Rally point" + (" ✓" if f.rally.x >= 0 else ""), func(): rally_requested.emit(f), true,
 			"Click: choose where the units made here gather. Right-click: clear it.", func(): _do(f, "clear_rally"))
 	_add_action("Demolish", func(): _do(f, "die", [null]), true, "Destroy this building. Units inside will leave.")
+
+
+## FirmTrain's panel: a button per trainee (left-click: he walks out, or quits
+## training and goes home), "mobilize all", and the train buttons - one per
+## race that a linked town can supply (FirmSpy: civilian, infantry, special).
+const TRAIN_ICONS := ["🕵", "🗡", "🐎"]     # civilian, infantry, special-unit trainees
+
+
+func _train_actions(f: Firm) -> void:
+	var p := game.player()
+	for i in f.trainees.size():
+		var rec: Dictionary = f.trainees[i]
+		var idx := i
+		var ut: Dictionary = Defs.unit_types.get(rec["unit"], {})
+		_add_action(("Cancel " if rec["training"] else "Mobilize ") + str(ut.get("name", rec["unit"])), func(): _do(Training, "order_mobilize", [f, idx]), true,
+			Training.describe(rec) + (". He goes back to his town and the cost is refunded." if rec["training"] else ". He walks out."))
+	if f.trainees.any(func(rec): return not rec["training"]):
+		_add_action("Mobilize all", func(): _do(Training, "order_mobilize_all", [f]), true, "Every trained man walks out.")
+	for type in Training.train_types(f):
+		var ty: int = type
+		var towns := Training.best_towns(f, ty)
+		if towns.is_empty():
+			var need: String = Training.REQUIRED_LINKED[ty]
+			var label: String = ("Train %s spy" % Training.TYPE_NAME[ty]) if f.code == "SPY" else ("Train %s" % Defs.unit_types.get(f.special_unit(), {}).get("name", "?"))
+			_add_action(label, func(): pass, false,
+				"Needs a linked town of yours%s with loyalty above %d%s." % [" of this race" if Training.same_race(f) else "", Defs.MIN_RECRUIT_LOYALTY,
+				(", itself linked to a %s" % Defs.firm_types.get(need, {}).get("name", need)) if need != "" else ""], Callable(), TRAIN_ICONS[ty])
+			continue
+		for t in towns:
+			var town: Town = t
+			var sprite := Training.unit_of(town.race, ty)
+			var cost := int(Training.build_cost(sprite))
+			var nm: String = Defs.unit_types.get(sprite, {}).get("name", sprite)
+			var label := "Train %s%s (%d)" % [nm, " spy" if f.code == "SPY" else "", cost]
+			_add_action(label, func(): _do(Training, "order_train", [f, ty, town.race]), Training.can_recruit(f, town, ty) and p.cash >= cost,
+				"A volunteer from %s (loyalty %d) trains here until you mobilize him." % [town.town_name, int(town.loyalty)], Callable(), TRAIN_ICONS[ty])
 
 
 ## One button per occupant: left-click sends him out and selects him,
@@ -1593,7 +1651,8 @@ func _occupant_buttons(f: Firm) -> void:
 		var promote := func():
 			if who != f.overseer and who.can_lead():
 				_do(f, "make_overseer", [who])
-		_add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote)
+		var icon := "👹" if not who.is_human() else ("👑" if who.rank == Defs.Rank.KING else ("🎖" if who.rank == Defs.Rank.GENERAL else "💂"))
+		_add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote, icon)
 
 
 func _fryhtan_tech_tip(t: Dictionary) -> String:

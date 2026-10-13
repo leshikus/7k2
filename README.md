@@ -204,7 +204,9 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 * Towns (population growth, loyalty, resistance, taxes, grants, recruiting,
   rebellion, surrender, militia defenders); camps and forts (garrisons, training,
   influence, sallying out); mine, factory and market production; Tower of Science,
-  War Factory, Inn and Seat of Power.
+  War Factory, Inn and Seat of Power; Training Grounds and the Espionage College,
+  where trainees learn inside until you mobilize them.
+* Buttons show symbols instead of words; hover for the words and the help text.
 * Combat with the original's formulas: hit points by combat level, damage with
   piercing, leadership and technology bonuses, armour effectiveness and blow
   direction, guarding, heroes' special abilities, monthly training under a

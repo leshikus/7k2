@@ -349,11 +349,11 @@ func _eval(c: Array) -> bool:
 		"researching":
 			return g.firms.any(func(f): return f.nation_id == p.id and f.code == "RESEARCH" and f.research_tech != "")
 		"stable_busy":
-			return g.firms.any(func(f): return f.nation_id == p.id and f.code == "STABLE" and f.weapon != "")
+			return g.firms.any(func(f): return f.nation_id == p.id and f.code == "STABLE" and not f.trainees.is_empty())
 		"war_busy":
 			return g.firms.any(func(f): return f.nation_id == p.id and f.code == "WAR" and f.weapon != "")
 		"college_busy":
-			return g.firms.any(func(f): return f.nation_id == p.id and f.code == "SPY" and f.weapon_queue > 0)
+			return g.firms.any(func(f): return f.nation_id == p.id and f.code == "SPY" and not f.trainees.is_empty())
 		"spy_in_sel_town":
 			# c[1]: any town (a spy guarding home counts); false: another kingdom's town
 			if not first is Town or (not c[1] and first.nation_id == p.id):

@@ -966,29 +966,6 @@ func on_firm_changed(f: Firm, old_nation: int) -> void:
 		notify("%s now belongs to the %s." % [f.display_name(), n.name if n else "independents"], f.center_loc())
 
 
-func spy_spawn(college: Firm) -> Unit:
-	var n := college.nation()
-	if n == null or not n.can_afford(Defs.SPY_COST):
-		return null
-	var town: Town = null
-	for t in college.linked_towns:
-		if t.nation_id == college.nation_id and t.can_spare_trainee():
-			town = t
-			break
-	if town == null:
-		return null
-	town.population -= 1
-	town._check_empty()
-	n.add_cash(-float(Defs.SPY_COST), "Spies")
-	var c := world.adjacent_to_rect(college.footprint(), Vector2i(college.center_loc()))
-	var u := spawn_unit(Defs.unit_sprite(town.race, "CIV"), college.nation_id, c, 10.0)
-	if u:
-		u.is_spy = true
-		u.spy_skill = float(rng.randi_range(25, 50))
-		college.send_to_rally(u)
-	return u
-
-
 func spawn_tornado(caster: Unit, at: Vector2) -> void:
 	var t := Tornado.new()
 	t.setup(caster.nation_id, at)
@@ -2084,6 +2061,21 @@ func notify_nation(nid: int, text: String, loc: Vector2, minor := false) -> void
 		notify(text, loc, minor)
 
 
+## The tutorial's computer side stays idle (FirmTrain::basic_train in GAME_TUTORIAL).
+func tutorial_ai_idle(nid: int) -> bool:
+	return config.has("tutorial") and nid != player_id
+
+
+func select_only(o: GameObj) -> void:
+	for x in selected:
+		if is_instance_valid(x):
+			x.selected = false
+			x.queue_redraw()
+	selected = [o]
+	o.selected = true
+	o.queue_redraw()
+
+
 func deselect(o: GameObj) -> void:
 	if o in selected:
 		selected.erase(o)
@@ -2141,6 +2133,8 @@ func _best_heir(n: Nation) -> Unit:
 
 func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 	deselect(f)
+	if Training.is_train_firm(f):
+		Training.free_all(f)
 	f.eject_all()
 	if f.builder and is_instance_valid(f.builder):
 		f.builder.inside_firm = null

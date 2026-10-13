@@ -172,7 +172,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"research_points": f.research_points, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
-		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(),
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees,
 	}
 
 
@@ -395,6 +395,14 @@ static func load_path(g: Game, path: String) -> String:
 		f.propagate = int(fd.get("propagate", 1))
 		var ra: Array = fd.get("rally", [-1, -1])
 		f.rally = Vector2i(int(ra[0]), int(ra[1]))
+		f.trainees = []
+		for rec in fd.get("trainees", []):
+			var trd: Dictionary = rec
+			for k in ["type", "pot_combat", "pot_skill", "pot_spy", "potential", "src"]:
+				trd[k] = int(trd[k])
+			if trd["spy"] != null:
+				trd["spy"]["nation"] = int(trd["spy"]["nation"])
+			f.trainees.append(trd)
 		for nid in fd.get("revealed", []):
 			f.revealed_to[int(nid)] = true
 		f.set_meta("save", fd)
