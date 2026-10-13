@@ -60,6 +60,12 @@ var cargo := {}                   # goods type -> quantity
 var wagon_pop := 0               # a wagon's settlers (UnitWagon::population)
 var wagon_race := ""             # and their race
 var found_site := Vector2i(-1, -1)   # where this unit goes to build a town (UNIT_SETTLE_TOWN)
+var potential := 0               # Skill::skill_potential: how fast he learns (0, or 10-100)
+var basic_days := 0              # days of basic training left (Soldier::remain_build_days)
+var guard_frames := 0            # a raised shield (Sprite::guard_count)
+var spab := ""                    # special ability in use: mirage, reflect or freeze
+var spab_day := -1000             # when it was last used (last_special_ability_start_date)
+var leader: Unit = null           # the general leading this man (Unit::leader_unit_recno)
 var formation := 0               # a general's troop formation (TeamInfo::formation_id), 0 none
 var formation_dir := Vector2.ZERO   # its facing set with the number pad (formation_direction)
 var rebel_id := 0                # member of a rebel band (Unit::unit_mode REBEL)
@@ -91,6 +97,11 @@ func setup(sprite: String, nation: int, at: Vector2i, skill := 20.0) -> void:
 	if n and vt != "":
 		weapon_version = maxi(1, n.tech_level(vt))
 	unit_name = Defs.random_person_name(race, Game.inst.rng) if race != "" else utype.get("name", sprite)
+	# Skill::init: one in fifteen has a talent of 50-100, one 25-50, one 10-25
+	match Game.inst.rng.randi() % 15:
+		0: potential = 50 + Game.inst.rng.randi() % 51
+		1: potential = 25 + Game.inst.rng.randi() % 26
+		2: potential = 10 + Game.inst.rng.randi() % 15
 	position = Iso.to_screen(loc)
 
 
@@ -443,6 +454,12 @@ func _path_to(dest: Vector2i) -> void:
 # --------------------------------------------------------------- simulation ---
 
 func sim_frame() -> void:
+	if cast_target.x >= 0:
+		_check_cast()
+	if guard_frames > 0:
+		guard_frames += 1
+		if guard_frames > Defs.GUARD_COUNT_MAX:
+			guard_frames = 0
 	if inside_firm or spy_place != null and has_meta("hidden"):
 		return
 	if dead:
@@ -488,6 +505,8 @@ func sim_frame() -> void:
 				moved = _do_return()
 	if not attacking:
 		action = "M" if moved else "S"
+		if guard_frames > 0:
+			action = "GM" if moved and Assets.has_action(sprite_code, "GM") else ("G" if Assets.has_action(sprite_code, "G") else action)
 		anim_frame = anim_frame + 1 if moved else 0
 	position = Iso.to_screen(loc)
 	queue_redraw()
@@ -817,23 +836,170 @@ func _attack_anim() -> void:
 			_deliver_hit()
 
 
+## Unit::actual_damage: the attack's damage plus 0-2, a share of its piercing
+## damage by combat level (up to the trained maximum), the item, a hero's
+## extra 1 for every 50 combat, the infantry techs, and the leading general's
+## leadership share (at most 10).
 func roll_damage(att: Dictionary) -> float:
 	var rng := Game.inst.rng
-	var dmg := float(att["damage"]) + rng.randi_range(0, 2)
-	# heroes may exceed the trained maximum (Skill::set_max_combat_level 300)
-	dmg += float(att["pierce"]) * rng.randi_range(0, int(minf(combat_level(), 300.0 if is_hero else Defs.MAX_COMBAT_TRAIN))) / 100.0
+	var base := float(att["damage"]) + rng.randi_range(0, 2)
+	var c := combat_level()
+	var deci := float(att["pierce"]) * rng.randi_range(0, int(minf(c, Defs.MAX_COMBAT_TRAIN)))
 	var extra := item_ability(Items.Ability.ARROW_DAMAGE if att["range"] > 1 else Items.Ability.MELEE_DAMAGE)
 	if extra > 0:
-		dmg += extra
+		base += extra
 		use_item()
+	if c > Defs.MAX_COMBAT_TRAIN:
+		deci += c * 2.0
 	var n := nation()
-	if n and is_human():
-		dmg += 2.0 * n.tech_level("INFRANGE" if att["range"] > 1 else "INFCLOSE")
+	if n and is_human() and (sprite_code.ends_with("_INF") or sprite_code.ends_with("_SPU")):
+		base += 2.0 * n.tech_level("INFRANGE" if att["range"] > 1 else "INFCLOSE")
+	var lead := leading_general()
+	if lead:
+		var bonus := minf(base * lead.lead_skill(), 1000.0)
+		deci += bonus
+		if lead.race == "CELTIC" and sprite_code == "CE_SPU":
+			deci += bonus
+	var dmg := base + deci / 100.0
 	if is_weapon and n and not _versioned_attacks():
 		dmg *= 1.0 + 0.25 * maxi(0, n.tech_level(sprite_code) - 1)
-	if is_weapon and not (target is Unit):
-		dmg *= 2.0
+	# Place::being_attack_hit: a Killer Bee stings buildings five times as hard
+	if sprite_code == "BEE" and target and is_instance_valid(target) and not (target is Unit):
+		dmg *= 5.0
+	# AttackAttribute::effectiveness against the target's defence
+	if target and is_instance_valid(target) and target.has_method("defense"):
+		dmg *= Defs.effectiveness(att.get("att", [0, 0, 0, 0]), target.defense())
+	# a blow from behind does half again, from the side a quarter more
+	if target is Unit:
+		var diff := absi(dir - (target as Unit).dir) % 8
+		diff = mini(diff, 8 - diff)
+		dmg += dmg * (4 - diff) / 8.0
 	return dmg
+
+
+## Sprite::can_stand_guard / can_move_guard: the sprite has the shield frames
+## and the unit's combat has reached its guard level.
+func can_guard(moving: bool) -> bool:
+	if combat_level() < int(utype.get("guard_level", 0)):
+		return false
+	return Assets.has_action(sprite_code, "GM" if moving else "G")
+
+
+## Unit::obj_power: its hit points, a war machine's weapon power counting 15 a point.
+func obj_power() -> float:
+	if is_weapon or is_caravan:
+		return hp + float(utype.get("weapon_power", 0)) * 15.0 + float(maxi(0, weapon_version - 1)) * 15.0
+	return hp
+
+
+func is_guarding() -> bool:
+	return guard_frames > 0
+
+
+## Bullet::warn_target: an arrow about to land makes the units around raise
+## their shields if they can and it comes from the front.
+func warned(bullet_dir: int) -> void:
+	if dead or guard_frames > 0:
+		return
+	if order == Order.IDLE and not attacking and can_guard(false):
+		dir = (bullet_dir + 4) % 8          # turn to face the arrow
+		guard_frames = 1
+	elif order == Order.MOVE and can_guard(true) and _dir_diff(dir, bullet_dir) >= 3:
+		guard_frames = 1
+
+
+static func _dir_diff(a: int, b: int) -> int:
+	var d := absi(a - b) % 8
+	return mini(d, 8 - d)
+
+
+## Bullet::hit_target's reductions: a shield facing the arrow takes 10 off (4
+## while attacking); Japanese and Chinese special units sometimes shrug off up to 9.
+func arrow_reduction(dmg: float, bullet_dir: int) -> float:
+	if is_guarding() and _dir_diff(dir, bullet_dir) >= 3:
+		dmg -= 4.0 if attacking else 10.0
+	if sprite_code in ["JA_SPU", "CH_SPU"] and dmg > 0.0:
+		var r := Game.inst.rng.randi() % 10
+		if r >= 7:
+			dmg -= r
+	return dmg
+
+
+func special_ability() -> String:
+	var g := Game.inst
+	if spab != "" and g.day - spab_day < Defs.SPECIAL_ABILITY_DURATION:
+		return spab
+	return ""
+
+
+## Unit::think_use_special_ability (daily): men above battle-hardened combat,
+## or heroes who could become so, now and then call on their special power.
+func think_special_ability() -> void:
+	if not is_human() or is_civilian() or dead:
+		return
+	var level := 0
+	if combat_level() > 200.0:
+		level = int(combat_level()) / 4
+	elif is_hero:
+		level = 1
+	else:
+		return
+	var g := Game.inst
+	if g.day - spab_day < Defs.SPECIAL_ABILITY_DELAY:
+		return
+	if g.rng.randi() % (100 + level) < 100:
+		return
+	var ab: String = Defs.SPECIAL_ABILITY.get(sprite_code, "")
+	if ab == "":
+		return
+	spab = ab
+	# mirage arrows last twice as long
+	spab_day = g.day + (Defs.SPECIAL_ABILITY_DURATION if ab == "mirage" else 0)
+
+
+## Unit::attack (SPAB_FREEZE): a blow freezes enemies of the target's kingdom
+## within 8 cells for 40 frames, unless their combat saves them.
+func _freeze_around(tgt: GameObj) -> void:
+	var g := Game.inst
+	for o in g.units_near(center_loc(), 8.5):
+		if o == tgt or o.dead or o.inside_firm != null or o.nation_id != tgt.nation_id:
+			continue
+		if g.rng.randi() % maxi(1, int(o.combat_level())) < g.rng.randi() % maxi(1, int(combat_level() / 2.0)):
+			if o.frozen_until <= g.frame:
+				o.frozen_until = g.frame + 40
+
+
+## The general whose leadership counts (leader_unit_recno): one in the field
+## within EFFECTIVE_LEADING_DISTANCE, or the commander of the fort the man
+## came out of, measured from the fort.
+func leading_general() -> Unit:
+	var l: Unit = leader
+	if (l == null or not is_instance_valid(l) or l.dead) and home_firm and is_instance_valid(home_firm) and not home_firm.dead:
+		l = home_firm.overseer
+	if l == null or not is_instance_valid(l) or l.dead or l == self or l.nation_id != nation_id:
+		return null
+	var at: Vector2 = l.inside_firm.center_loc() if l.inside_firm else l.center_loc()
+	return l if at.distance_to(center_loc()) <= Defs.EFFECTIVE_LEADING_DISTANCE else null
+
+
+## UNIT_JAGUAR / UNIT_GORILLA special attack: horsemen nearby panic and flee.
+func _frighten() -> void:
+	var g := Game.inst
+	for o in g.units_near(center_loc(), 4.0):
+		if o == self or o == target or o.dead or o.inside_firm != null or not g.is_hostile(self, o):
+			continue
+		var spu: String = o.sprite_code
+		var flees: bool = spu in ["NO_SPU", "RO_SPU", "GR_SPU", "MO_SPU", "EG_SPU"] or (sprite_code == "GORILLA" and spu in ["CT_SPU", "IN_SPU"])
+		if not flees or absf(o.center_loc().x - center_loc().x) > 3.5 or absf(o.center_loc().y - center_loc().y) > 3.5:
+			continue
+		var sx := 1 + g.rng.randi() % 5
+		var sy := 1 + g.rng.randi() % 5
+		if cell().x > o.cell().x:
+			sx = -sx
+		if cell().y > o.cell().y:
+			sy = -sy
+		o.stop()
+		o.order_move_free(Vector2i(clampi(o.cell().x + sx, 0, g.world.w - 1), clampi(o.cell().y + sy, 0, g.world.h - 1)))
 
 
 func _deliver_hit() -> void:
@@ -841,6 +1007,8 @@ func _deliver_hit() -> void:
 	if att.is_empty():
 		return
 	var dmg := roll_damage(att)
+	if sprite_code in ["JAGUAR", "GORILLA"] and int(att.get("consume", 0)) > 0:
+		_frighten()
 	_item_strike(dmg)
 	if visible:
 		Game.inst.play_sound("S", sprite_code, att["action"], center_loc())
@@ -848,8 +1016,22 @@ func _deliver_hit() -> void:
 		var b := Game.inst.spawn_bullet(self, target, att["bullet"], att["bullet_speed"], dmg)
 		b.radius = att.get("radius", 0)
 		b.fire = att.get("fire", 0)
+		# SPAB_MIRAGE_ARROW: an arrow for every enemy of the target's kingdom in
+		# the same direction and within reach (not those reflecting arrows)
+		if int(att.get("consume", 0)) == 0 and special_ability() == "mirage":
+			for o in Game.inst.units_near(center_loc(), float(att["range"]) + 0.5):
+				if o == target or o == self or o.dead or o.inside_firm != null or o.nation_id != target.nation_id:
+					continue
+				if o.special_ability() == "reflect" or Iso.dir_of(o.center_loc() - center_loc()) != dir:
+					continue
+				if o.center_loc().distance_to(center_loc()) <= float(att["range"]) + 0.5:
+					var mb := Game.inst.spawn_bullet(self, o, att["bullet"], att["bullet_speed"], dmg)
+					mb.radius = b.radius
+					mb.fire = b.fire
 	else:
 		target.take_damage(dmg, self)
+		if special_ability() == "freeze":
+			_freeze_around(target)
 		if att.get("fire", 0) > 0:
 			Game.inst.set_fire(target.cell() if target is Unit else Vector2i(target.center_loc()), att["fire"])
 	gain_experience()
@@ -971,46 +1153,126 @@ func can_cast_power() -> bool:
 
 
 ## UnitGod::cast_power: the race's power around the Greater Being.
-func cast_power() -> bool:
+## Unit::go_cast_power: the god walks to within DO_CAST_POWER_RANGE (3) of
+## the place and then casts his power on it.
+const DO_CAST_POWER_RANGE := 3.0
+var cast_target := Vector2i(-1, -1)
+
+
+func order_cast_power(at: Vector2i) -> void:
+	if not can_cast_power():
+		return
+	if Vector2(at).distance_to(Vector2(cell())) <= DO_CAST_POWER_RANGE:
+		cast_power(at)
+		return
+	order_move_free(Game.inst.world.nearest_walkable(at))
+	cast_target = at
+
+
+func _check_cast() -> void:
+	if cast_target.x < 0:
+		return
+	if Vector2(cast_target).distance_to(Vector2(cell())) <= DO_CAST_POWER_RANGE:
+		var at := cast_target
+		cast_target = Vector2i(-1, -1)
+		stop()
+		cast_power(at)
+	elif order == Order.IDLE:
+		cast_target = Vector2i(-1, -1)     # could not get there
+
+
+## UnitGod::cast_power on the location `at` (default: where the god stands).
+func cast_power(at := Vector2i(-1, -1)) -> bool:
 	if not can_cast_power():
 		return false
 	var gi := god_info()
 	var g := Game.inst
 	var n := nation()
 	n.prayer_points -= gi["power_pray"]
-	var c := center_loc()
+	if at.x < 0:
+		at = cell()
+	var c := Vector2(at) + Vector2(0.5, 0.5)
 	var r: float = gi["cast_range"]
 	var effect: String = Defs.RACE_PREFIX.get(gi["race"], "NO") + "_EFF1"
 	if Assets.has_sprite(effect):
 		g.spawn_sprite_effect(effect, c, nation_color())
+	# UnitGod::cast_power: Indian and Carthaginian gods act on their own;
+	# the others act on every location within cast_power_range of the god.
 	match gi["race"]:
-		"ROMAN":
-			for u in g.units:
-				if u.nation_id == nation_id and u.is_human() and u.rank != Defs.Rank.SOLDIER and u.center_loc().distance_to(c) <= r:
-					u.leadership = minf(100.0, u.leadership + 30.0)
-		"GREEK":
-			for u in g.units:
-				if u.nation_id == nation_id and not u.dead and u.center_loc().distance_to(c) <= r:
-					u.invulnerable_until = g.frame + Defs.FRAMES_PER_DAY * 30
-		"JAPANESE":
-			for u in g.units:
-				if not u.dead and g.is_hostile(self, u) and u.center_loc().distance_to(c) <= r:
-					u.frozen_until = g.frame + Defs.FRAMES_PER_DAY * 10
-					u.stop()
-		"MONGOL":
-			for u in g.units.duplicate():
-				if u.dead or u.inside_firm or u.rank == Defs.Rank.KING or u.nation_id == nation_id or u.nation_id == 0 or u.is_god:
-					continue
-				if u.center_loc().distance_to(c) <= r and g.rng.randf() < 0.5:
-					g.defect_unit(u, nation_id)
-		"CARTH":
-			g.earthquake(nation_id, c, 16.0)   # cast_quake radius 32 world steps
-		"PERSIAN":
-			g.reveal_area(nation_id, Vector2i(c), int(r * 4))
 		"INDIAN":
 			g.spawn_tornado(self, c + Vector2.from_angle(dir * PI / 4.0 - PI / 2.0) * 2.0)
+		"CARTH":
+			g.cast_quake(cell(), 32)          # carth_cast_quake: centred on the god
+		_:
+			if gi["race"] == "JAPANESE":
+				_japanese_kill_spy(int(gi["cast_range"]))
+			_cast_area(gi["race"], at, int(gi["cast_range"]))
 	g.play_sound("S", sprite_code, "A1", c)
 	return true
+
+
+## UnitGod::cast_on_loc over the square of locations around `at`: units on
+## the ground, the commanders of forts and camps (their share of the effect by
+## how much of the building lies in it), inns, buildings and towns.
+func _cast_area(race_code: String, at: Vector2i, rng_: int) -> void:
+	var g := Game.inst
+	var area := Rect2i(at - Vector2i.ONE * (rng_ - 1), Vector2i.ONE * (rng_ * 2 - 1))
+	for u in g.units.duplicate():
+		if not u.dead and u.inside_firm == null and area.has_point(u.cell()):
+			_cast_on_unit(race_code, u, 1.0)
+	for f in g.firms:
+		if f.dead:
+			continue
+		var cut := area.intersection(f.footprint())
+		if cut.size.x <= 0 or cut.size.y <= 0:
+			continue
+		var divider := float(mini(f.w, rng_) * mini(f.h, rng_))
+		var share := float(cut.size.x * cut.size.y) / divider
+		if Espionage.is_camp(f) and f.overseer:
+			_cast_on_unit(race_code, f.overseer, 1.0 / maxf(0.01, share) if share < 1.0 else 1.0)
+		if race_code == "PERSIAN" and nation_id > 0:
+			f.revealed_to[nation_id] = true        # Firm::reveal_info
+		if race_code == "JAPANESE" and f.code == "INN":
+			for hd in f.heroes:                    # japanese_cast_inn
+				hd["cost"] = int(hd["cost"] * 7 / 10)
+				hd["days"] = maxi(int(hd["days"]), 10)
+	if race_code == "EGYPTIAN":
+		for t in g.towns:
+			if not t.dead and t.nation_id == nation_id and area.intersects(t.footprint()):
+				t.population = mini(Defs.MAX_TOWN_POPULATION, t.population + 10)
+
+
+func _cast_on_unit(race_code: String, u: Unit, divider: float) -> void:
+	var g := Game.inst
+	match race_code:
+		"ROMAN":
+			if u.nation_id == nation_id and u.is_human() and u.rank != Defs.Rank.SOLDIER:
+				u.leadership = minf(100.0, u.leadership + 30.0 / divider)
+		"GREEK":
+			if u.nation_id == nation_id:
+				u.invulnerable_until = maxi(u.invulnerable_until, g.frame + Defs.FRAMES_PER_DAY * 30)
+		"MONGOL":
+			# mongol_cast_power: never the king, a spy, an independent or our own
+			if u.rank == Defs.Rank.KING or u.inside_firm != null or u.is_spy or u.nation_id == 0 or u.nation_id == nation_id or u.is_god:
+				return
+			var turn := 100 - int(u.loyalty) / 2
+			if divider > 1.0 and turn > 0 and turn < 100:
+				turn = 100 - int(exp(log((100.0 - turn) / 100.0) / divider) * 100.0)
+			if g.rng.randi() % 100 < turn:
+				g.defect_unit(u, nation_id)
+
+
+## UnitGod::japanese_kill_spy: enemy spies within range in our colours (or
+## none), in towns and buildings, are exposed.
+func _japanese_kill_spy(rng_: int) -> void:
+	var g := Game.inst
+	for s in g.spies.duplicate():
+		if s.nation_id == nation_id or not is_instance_valid(s.spy_place):
+			continue
+		if s.cloak_id != 0 and s.cloak_id != nation_id and s.spy_place.nation_id != nation_id:
+			continue
+		if s.spy_place.center_loc().distance_to(center_loc()) < rng_:
+			g.spy_caught(s)
 
 
 func on_attacked(attacker: GameObj) -> void:

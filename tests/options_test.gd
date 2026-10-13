@@ -134,6 +134,20 @@ func _ready() -> void:
 	check(spread.size() == troop.size(), "the men take their places at the destination")
 	gen.formation = 0
 	check(not g.move_troop(troop, dest), "without a formation the group moves as before")
+	# with no direction set, the first direction that fits on open ground (line: across x)
+	gen.formation_dir = Vector2.ZERO
+	var auto := Formations.place(g, troop, gen.cell(), Vector2.ZERO, Formations.LINE)
+	var ys := {}
+	var xs := {}
+	var d1 := {}
+	var d2 := {}
+	for m in auto:
+		ys[auto[m].y] = true
+		xs[auto[m].x] = true
+		d1[auto[m].x - auto[m].y] = true
+		d2[auto[m].x + auto[m].y] = true
+	var straight: bool = ys.size() == 1 or xs.size() == 1 or d1.size() == 1 or d2.size() == 1
+	check(not auto.is_empty() and straight, "Line without a direction: the first direction that fits, a straight line (%d rows, %d files)" % [ys.size(), xs.size()])
 	var men8: Array = troop.slice(1)
 	var every := true
 	for kind in range(1, Formations.NAMES.size()):
@@ -154,6 +168,31 @@ func _ready() -> void:
 	check(SaveGame.dir().contains("profiles/Test Player"), "his games go to his own folder (%s)" % SaveGame.dir())
 	check(SaveGame.save(g, "profile_slot") and SaveGame.exists("profile_slot"), "and are saved there")
 	check(Campaign.save_file().begins_with(SaveGame.dir()), "with his campaign")
+	# the roster: a won game keeps the surviving heroes and the men's items
+	var hero := g.spawn_unit(Defs.unit_sprite("NORMAN", "INF"), p.id, g.world.nearest_walkable(Vector2i(30, 30)), 70.0)
+	hero.is_hero = true
+	hero.rank = Defs.Rank.GENERAL
+	hero.unit_name = "Sir Testalot"
+	hero.leadership = 66.0
+	var carrier := g.spawn_unit(Defs.unit_sprite("NORMAN", "INF"), p.id, g.world.nearest_walkable(Vector2i(32, 30)), 30.0)
+	carrier.item_id = Items.random_id(g.rng, Items.MIN_RARITY, Items.MAX_RARITY)
+	carrier.item_para = 1
+	Roster.settle(g, true)
+	var ros := Roster.load_roster()
+	check(ros["heroes"].any(func(h): return h["name"] == "Sir Testalot" and is_equal_approx(float(h["leadership"]), 66.0)), "a won game puts the hero on the player's roster")
+	check(carrier.item_id == 0 or ros["items"].size() >= 1, "and the items his men carry")
+	var g5 := Game.new()
+	add_child(g5)
+	g5.start({"seed": 9, "size": 90, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "reveal": true})
+	var came := Roster.bring(g5)
+	var back := g5.units.filter(func(u): return u.is_hero and u.unit_name == "Sir Testalot")
+	check(came >= 1 and back.size() == 1 and is_equal_approx(back[0].combat, 70.0) and back[0].nation_id == g5.player_id, "a new game brings him along, as he was")
+	check(Roster.load_roster()["heroes"].any(func(h): return h["name"] == "Sir Testalot" and h["on_duty"]), "he is on duty meanwhile")
+	back[0].die(null)
+	Roster.settle(g5, false)
+	check(not Roster.load_roster()["heroes"].any(func(h): return h["name"] == "Sir Testalot"), "fallen, he is struck off")
+	g5.queue_free()
+	Game.inst = g
 	Profiles.remove("Test Player")
 	check(not SaveGame.exists("profile_slot") and not Profiles.list().has("Test Player"), "deleting the player removes his games")
 	if before != "":

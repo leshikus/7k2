@@ -205,8 +205,11 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   rebellion, surrender, militia defenders); camps and forts (garrisons, training,
   influence, sallying out); mine, factory and market production; Tower of Science,
   War Factory, Inn and Seat of Power.
-* Combat with melee and ranged attacks, projectiles, experience, death animations,
-  armour and technology bonuses.
+* Combat with the original's formulas: hit points by combat level, damage with
+  piercing, leadership and technology bonuses, armour effectiveness and blow
+  direction, guarding, heroes' special abilities, monthly training under a
+  general, and forts and camps sending men to defend what is attacked.
+* Greater Beings' aimed powers, natural earthquakes and tornadoes.
 * Save and load (Ctrl+S/F9, pause menu, yearly autosave, "continue" on the start screen).
 * The original game's 10 premade scenarios, read from your install, playable or
   watched as **AI vs AI** (also available for random maps), with their goals: kill
@@ -219,10 +222,8 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 ## Differences from the original
 
 Every module of the original game has a counterpart here (see DEVLOG.md for the
-review). Formations follow the original's placement rules but turn the shape to the
-troop's facing instead of searching for an orientation that fits the ground.
-The original's player profiles carry code for keeping heroes and items between
-games that nothing in the original ever calls; it is not reproduced.
+review). The original's player profiles carry code for keeping heroes and items
+between games that no menu of the original uses; here it is the start screen's "Bring the heroes and items of your profile" option.
 Network play uses Godot's ENet instead of DirectPlay; IPX and modem play are gone.
 
 ## Project layout

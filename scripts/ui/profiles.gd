@@ -64,6 +64,10 @@ static func remove(player_name: String) -> void:
 			for f in d.get_files():
 				d.remove(f)
 			DirAccess.remove_absolute(dir.path_join(sub))
+	var top := DirAccess.open(dir)
+	if top:
+		for f in top.get_files():
+			top.remove(f)          # the roster of heroes and items
 	DirAccess.remove_absolute(dir)
 	if current() == _safe(player_name):
 		set_current("")

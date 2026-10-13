@@ -40,6 +40,11 @@ func armor() -> float:
 	return 0.0
 
 
+## DefenseAttribute [sturdiness, is wood]; towns are (80, wood), Town::init.
+func defense() -> Array:
+	return [50, 0]
+
+
 func display_name() -> String:
 	return "Object"
 

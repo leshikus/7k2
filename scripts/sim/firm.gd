@@ -58,6 +58,7 @@ var extra_units: Array[Unit] = []   # Fortress: the Grokkens it was made of
 var animals: Array = []             # Keraal: beasts for hire
 var alchemy_mode := ""              # Alchemist Tor: conversion in use (a tech code)
 var propagate := 1                  # Wilde Lishorr: seedlings it may still spread
+var revealed_to := {}              # nation id -> true: a Persian god showed it what goes on inside (reveal_info)
 var rally := Vector2i(-1, -1)       # where the units it makes go (Firm::rally_dest)
 
 var anim_index := 0
@@ -141,6 +142,10 @@ func productivity() -> float:
 
 func armor() -> float:
 	return 0.0
+
+
+func defense() -> Array:
+	return build.get("def", [100, 0])
 
 
 # --------------------------------------------------------------- garrison ---
@@ -446,21 +451,50 @@ func _complete() -> void:
 	queue_redraw()
 
 
-## Soldiers in a camp train toward a cap set by the general's leadership.
+## FirmCamp::basic_train (daily) and advanced_train (every 30 days): recruits
+## train to combat 20 (30 with a Roman Greater Being) over their unit's build
+## days; then each month the general's leadership grows with his men, and
+## the men grow toward his leadership, by their health and talent.
 func _train() -> void:
-	if overseer == null:
-		return
-	var lead := overseer.lead_skill()
-	var cap := minf(Defs.MAX_COMBAT_TRAIN, 30.0 + lead * 0.7)
-	# FirmCamp::train_unit: The Art of Training speeds it up
-	var rate := 0.2 * (1.0 + lead / 100.0) * (100.0 + overseer.item_ability(Items.Ability.TRAIN)) / 100.0 * Game.inst.work_speed(nation_id)
+	var g := Game.inst
+	var basic := 20.0 + (10.0 if g.god_worshipped(nation_id, "ROMAN") else 0.0)
 	for s in soldiers:
-		if s.combat < cap:
-			s.combat = minf(cap, s.combat + rate)
-		s.hp = minf(s.max_hp, s.hp + s.max_hp * 0.02)
-	if overseer.leadership < 100.0:
-		overseer.leadership = minf(100.0, overseer.leadership + 0.03)
-	overseer.hp = minf(overseer.max_hp, overseer.hp + overseer.max_hp * 0.02)
+		if s.basic_days > 0:
+			var total := maxf(1.0, float(s.utype.get("build_days", 10)))
+			s.combat = minf(basic, s.combat + (basic + 0.125) / total)
+			s.leadership = minf(20.0, s.leadership + 20.125 / total)
+			s.basic_days -= 1
+			s.hp = s.max_hp
+		else:
+			s.hp = minf(s.max_hp, s.hp + s.max_hp * 0.02)
+	if overseer:
+		overseer.hp = minf(overseer.max_hp, overseer.hp + overseer.max_hp * 0.02)
+	if overseer == null or g.day % 30 != obj_id % 30:
+		return
+	var o := overseer
+	var celtic := g.god_worshipped(nation_id, "CELTIC")
+	var lead := int(o.lead_skill())
+	var trained := soldiers.filter(func(x): return x.basic_days <= 0 and x != o)
+	if not trained.is_empty() and o.leadership < 100.0:
+		var inc := 5.0 * trained.size() * o.hp / o.max_hp * (100.0 + o.potential * 2) / 100.0
+		o.leadership = minf(100.0, o.leadership + inc / 100.0)
+	if o.combat < Defs.MAX_COMBAT_TRAIN:
+		var inc := 10.0 * o.hp / o.max_hp * (100.0 + o.potential * 2) / 100.0
+		if celtic:
+			inc += inc / 2.0 if o.race == "CELTIC" else inc / 5.0
+		o.combat = minf(Defs.MAX_COMBAT_TRAIN, o.combat + inc / 100.0)
+	for s in trained:
+		if s.combat < lead and s.combat < Defs.MAX_COMBAT_TRAIN:
+			var inc: float = maxf(20.0, lead - s.combat) * s.hp / s.max_hp * (100.0 + s.potential * 2 + o.item_ability(Items.Ability.TRAIN)) / 100.0
+			if celtic:
+				inc += inc / 2.0 if s.race == "CELTIC" else inc / 5.0
+			if s.race == "EGYPTIAN" and g.god_worshipped(nation_id, "EGYPTIAN"):
+				var pc := g.god_worshippers(nation_id, "EGYPTIAN")
+				inc = inc * (Defs.MAX_WORKER * 2) / (Defs.MAX_WORKER * 2 + pc)
+			s.combat = minf(minf(float(lead), Defs.MAX_COMBAT_TRAIN), s.combat + inc / 100.0)
+		if s.potential > 0 and s.leadership < 100.0:
+			var inc: float = maxf(50.0, lead - s.leadership) * s.hp / s.max_hp * s.potential * 2 / 100.0
+			s.leadership = minf(100.0, s.leadership + inc / 100.0)
 
 
 ## Send the garrison out against enemies that come close.
@@ -784,7 +818,7 @@ func _lair(day: int) -> void:
 		if u.home_firm == self and not u.dead and u.inside_firm == null:
 			outside += 1
 	if soldiers.size() + outside < capacity() and rng.randf() < 0.02:
-		var u := Game.inst.spawn_unit(monster_code, nation_id, Vector2i(x1, y1 + h), float(rng.randi_range(20, 60)))
+		var u := Game.inst.spawn_unit(monster_code, nation_id, Vector2i(x1, y1 + h), 20.0)   # recruited and trained to BASIC_COMBAT_TRAIN
 		if u:
 			accept_unit(u)
 	raid_timer -= 1
@@ -810,7 +844,7 @@ func breed() -> Unit:
 	var live := float(ut.get("live_cost", 50))
 	if n.cash < cost or n.live_points < live:
 		return null
-	var u := Game.inst.spawn_unit(monster_code, nation_id, Vector2i(x1, y1 + h), float(Game.inst.rng.randi_range(25, 50)))
+	var u := Game.inst.spawn_unit(monster_code, nation_id, Vector2i(x1, y1 + h), 20.0)   # FirmLair::recruit_soldier, basic training
 	if u == null:
 		return null
 	n.add_cash(-cost, "Training")

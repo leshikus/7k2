@@ -55,6 +55,10 @@ func _ready() -> void:
 	var ok := true
 	# units leave by the door side (right-down face, x = x1 + w)
 	var fort: Firm = g.firms.filter(func(x): return x.nation_id == p.id and x.code == "FORT")[0]
+	# the garrison may all be out defending by now: put a man in to test the door
+	if not g.units.any(func(u): return u.nation_id == p.id and u.inside_firm == fort):
+		var man := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(fort.x1 + fort.w + 1, fort.y1)), 20.0)
+		fort.accept_unit(man)
 	var u2: Unit = g.units.filter(func(u): return u.nation_id == p.id and u.inside_firm == fort)[0]
 	fort.release_unit(u2)
 	print("exit cell ", u2.cell(), " fort x ", fort.x1, "..", fort.x1 + fort.w - 1, " y ", fort.y1, "..", fort.y1 + fort.h - 1)
@@ -63,6 +67,9 @@ func _ready() -> void:
 	# fill from towns: instant, no loyalty loss
 	var town: Town = fort.linked_towns.filter(func(t): return t.nation_id == p.id)[0]
 	town.loyalty = 80.0
+	# the camps may have drawn every last man from it by now
+	if town.population < 10:
+		town.population = 20
 	var loy := town.loyalty
 	var pop := town.population
 	var n0 := fort.soldiers.size()

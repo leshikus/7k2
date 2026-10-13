@@ -147,6 +147,54 @@ static func offsets(kind: int, men: Array) -> Dictionary:
 	return out
 
 
+## The LEADER_AT_* directions as the way the troop faces: in the original the
+## vanguard's wedge, the sandwich's front and the staggered ranks lie toward the
+## named side (LEADER_AT_TOP: toward -y).
+const TOP := Vector2(0, -1)
+const BOTTOM := Vector2(0, 1)
+const LEFT := Vector2(-1, 0)
+const RIGHT := Vector2(1, 0)
+const TOP_LEFT := Vector2(-1, -1)
+const TOP_RIGHT := Vector2(1, -1)
+const BOTTOM_LEFT := Vector2(-1, 1)
+const BOTTOM_RIGHT := Vector2(1, 1)
+
+const TRY_ORDER := {
+	VANGUARD: [TOP, BOTTOM, RIGHT, LEFT, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT],
+	# line_formation names the axis the line spans: along x (LEFT), along y
+	# (TOP), then the two diagonals; the troop faces across it
+	LINE: [TOP, LEFT, TOP_RIGHT, BOTTOM_RIGHT],
+	ARC: [TOP, BOTTOM, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT],
+	STAGGERED: [BOTTOM, TOP, RIGHT, LEFT],
+	SQUARE: [RIGHT, BOTTOM, LEFT, TOP, TOP_RIGHT, TOP_LEFT, BOTTOM_LEFT, BOTTOM_RIGHT],
+	SANDWICH: [TOP, LEFT, BOTTOM, RIGHT],
+	CIRCLE: [TOP],
+}
+
+
+static func _cells(at: Vector2i, offs: Dictionary, f: Vector2) -> Dictionary:
+	var right := Vector2(-f.y, f.x)
+	var out := {}
+	for u in offs:
+		var o: Vector2 = offs[u]
+		out[u] = Vector2i((Vector2(at) + right * o.x + f * o.y).round())
+	return out
+
+
+## Whether every place is open (Location::can_move): walkable, inside the map,
+## and not held by anyone outside the troop.
+static func _fits(g: Game, cells: Dictionary, troop: Array) -> bool:
+	var seen := {}
+	for u in cells:
+		var c: Vector2i = cells[u]
+		if seen.has(c) or not g.world.is_walkable(c):
+			return false
+		seen[c] = true
+		if g.unit_cells.get(c, 0) > 0 and not troop.any(func(m): return m.cell() == c):
+			return false
+	return true
+
+
 ## Cells for the men of `units` (the first general found leads) at `at`, facing `facing`.
 static func place(g: Game, units: Array, at: Vector2i, facing: Vector2, kind: int) -> Dictionary:
 	var general: Unit = null
@@ -157,20 +205,29 @@ static func place(g: Game, units: Array, at: Vector2i, facing: Vector2, kind: in
 	if general == null or kind <= 0:
 		return out
 	var men := units.filter(func(u): return u != general)
-	# the eight directions of the original
-	var f := facing.normalized() if facing.length() > 0.01 else Vector2(0, 1)
-	f = Vector2(signf(roundf(f.x * 1.2)), signf(roundf(f.y * 1.2)))
-	if f == Vector2.ZERO:
-		f = Vector2(0, 1)
-	var right := Vector2(-f.y, f.x)
-	var taken := {}
-	out[general] = g.world.nearest_walkable(at)
-	taken[out[general]] = true
 	var offs := offsets(kind, men)
+	at = g.world.nearest_walkable(at)
+	var f := Vector2.ZERO
+	if facing.length() > 0.01:
+		# a set direction is kept whatever the ground (the eight directions of the original)
+		f = Vector2(signf(roundf(facing.normalized().x * 1.2)), signf(roundf(facing.normalized().y * 1.2)))
+		if f == Vector2.ZERO:
+			f = TOP
+	else:
+		var probe := offs.duplicate()
+		probe[general] = Vector2.ZERO
+		for d in TRY_ORDER.get(kind, [TOP]):
+			if _fits(g, _cells(at, probe, d), units):
+				f = d
+				break
+		if f == Vector2.ZERO:
+			return {}            # no direction fits: the troop stays as it is
+	var placed := _cells(at, offs, f)
+	var taken := {}
+	out[general] = at
+	taken[at] = true
 	for u in men:
-		var o: Vector2 = offs.get(u, Vector2.ZERO)
-		var c := Vector2i((Vector2(at) + right * o.x + f * o.y).round())
-		c = g.world.nearest_walkable(c)
+		var c: Vector2i = g.world.nearest_walkable(placed[u])
 		var tries := 0
 		while taken.has(c) and tries < 24:
 			c = g.world.nearest_walkable(c + Vector2i(tries % 3 - 1, tries / 3 % 3 - 1))

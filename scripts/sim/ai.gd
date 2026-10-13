@@ -594,11 +594,55 @@ func _think_split_towns(day: int) -> void:
 			return
 
 
+## UnitGod::think_*_god: where a computer kingdom's Greater Being casts.
 func _use_gods() -> void:
 	for u in g.units:
-		if u.is_god and u.nation_id == n.id and not u.dead and u.can_cast_power():
-			if g.find_enemy_near(u, float(u.god_info().get("cast_range", 6))):
-				u.cast_power()
+		if not u.is_god or u.nation_id != n.id or u.dead or not u.can_cast_power() or u.cast_target.x >= 0:
+			continue
+		var at := _god_target(u)
+		if at.x >= 0:
+			u.order_cast_power(at)
+
+
+func _god_target(god: Unit) -> Vector2i:
+	var c := god.center_loc()
+	match god.god_info().get("race", ""):
+		"ROMAN":
+			# think_roman_god: the commander most in need of leadership
+			var best: Firm = null
+			var best_r := 0.0
+			for f in my_firms():
+				if Espionage.is_camp(f) and f.overseer and f.overseer.is_human() and f.overseer.leadership <= 70.0:
+					var r := 5000.0 + (5000.0 if f.overseer.rank == Defs.Rank.KING else 0.0) - absf(f.overseer.leadership - 40.0) * 70.0
+					for s in f.soldiers:
+						r += f.overseer.combat - s.combat
+					if r > best_r:
+						best_r = r
+						best = f
+			return Vector2i(best.center_loc()) if best else Vector2i(-1, -1)
+		"GREEK", "MONGOL", "INDIAN", "CARTH":
+			# fighting near by: the god goes where the enemy is
+			var e = g.find_enemy_near(god, 12.0)
+			if e and (god.god_info()["race"] != "CARTH" or not (e is Unit)):
+				return Vector2i(e.center_loc())
+			if e and god.god_info()["race"] == "CARTH":
+				return Vector2i(-1, -1)
+			return Vector2i(-1, -1)
+		"PERSIAN":
+			for f in g.firms:
+				if not f.dead and f.nation_id != n.id and f.nation_id > 0 and not f.revealed_to.has(n.id) and f.center_loc().distance_to(c) < 20.0:
+					return Vector2i(f.center_loc())
+		"EGYPTIAN":
+			var small: Town = null
+			for t in my_towns():
+				if t.population < Defs.MAX_TOWN_POPULATION - 10 and (small == null or t.population < small.population):
+					small = t
+			return Vector2i(small.center_loc()) if small else Vector2i(-1, -1)
+		"JAPANESE":
+			for s in g.spies:
+				if s.nation_id != n.id and is_instance_valid(s.spy_place) and s.spy_place.nation_id == n.id:
+					return Vector2i(s.spy_place.center_loc())
+	return Vector2i(-1, -1)
 
 
 ## Nation::think_diplomacy about once a month: cease-fires, treaties, food

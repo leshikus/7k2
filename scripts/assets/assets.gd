@@ -270,6 +270,7 @@ func _build_firms() -> void:
 			"underc": b["UNDERC_BMP"].to_int(),
 			"underc_count": b["UNDERC_MAX"].to_int(),
 			"idle": b["IDLE_BMP"].to_int(),
+			"def": [b.get("STURDINESS", "0").to_int(), b.get("IS_WOOD", "0").to_int()],
 			"loc_w": 3,
 			"loc_h": 3,
 		}

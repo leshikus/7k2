@@ -14,6 +14,7 @@ var color := Color.WHITE
 var done := false
 var radius := 0         # BUL_RADIUS: hurts everything this close (in 1/32 of a cell)
 var fire := 0           # FL_RADIUS: sets the ground alight
+var warned := false
 
 
 func setup(from: Unit, to: GameObj, sprite: String, spd: float, dmg: float) -> void:
@@ -37,12 +38,31 @@ func sim_frame() -> void:
 	if target and is_instance_valid(target) and not target.dead:
 		dest = Iso.to_screen(target.center_loc()) + Vector2(0, -8)
 	var d := dest - position
+	# Bullet::warn_target: a step before landing, the units around the target see it coming
+	if not warned and d.length() <= speed * 2.0:
+		warned = true
+		var at := Iso.to_loc(dest - Vector2(0, -8))
+		for u in Game.inst.units_near(at, 2.5):
+			if not u.dead and u.inside_firm == null and (shooter == null or not is_instance_valid(shooter) or u.nation_id != shooter.nation_id):
+				u.warned(dir)
 	if d.length() <= speed:
 		done = true
 		var at := Iso.to_loc(dest - Vector2(0, -8))
 		if target and is_instance_valid(target) and not target.dead:
 			at = target.center_loc()
-			target.take_damage(damage, shooter if is_instance_valid(shooter) else null)
+			# SPAB_REFLECT_ARROW: the arrow flies back, a point weaker, now the reflecter's
+			if target is Unit and target.special_ability() == "reflect" and damage > 1.0 \
+					and shooter and is_instance_valid(shooter) and not shooter.dead:
+				var back := Game.inst.spawn_bullet(target, shooter, sprite_code, speed, maxf(0.0, damage - 1.0))
+				back.radius = radius
+				if Assets.has_sprite("REFLECT"):
+					Game.inst.spawn_sprite_effect("REFLECT", at, Color.WHITE)
+				return
+			var dmg := damage
+			if target is Unit:
+				dmg = (target as Unit).arrow_reduction(dmg, dir)
+			if dmg > 0.0:
+				target.take_damage(dmg, shooter if is_instance_valid(shooter) else null)
 		_splash(at)
 		if fire > 0:
 			Game.inst.set_fire(Vector2i(at.floor()), fire)

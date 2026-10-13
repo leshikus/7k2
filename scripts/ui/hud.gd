@@ -9,6 +9,7 @@ signal spell_target_requested(f: Firm, spell: String)
 signal rally_requested(f: Firm)
 signal caravan_route_requested(u: Unit)
 signal found_town_requested(u: Unit)
+signal cast_target_requested(u: Unit)
 
 var inspected_treasure: Treasure = null   # a scroll or item clicked on the map
 signal center_on(loc: Vector2)
@@ -1059,7 +1060,8 @@ func _unit_actions(sel: Array) -> void:
 		if u.is_god:
 			var gi := u.god_info()
 			if not gi.is_empty() and Defs.GOD_POWERS.has(gi["race"]):
-				_add_action("Cast power (%d)" % gi["power_pray"], func(): _do(u, "cast_power"), u.can_cast_power(), Defs.GOD_POWERS[gi["race"]] + ". Costs prayer points.")
+				_add_action("Cast power (%d)" % gi["power_pray"], func(): cast_target_requested.emit(u), u.can_cast_power(),
+					Defs.GOD_POWERS.get(gi["race"], "") + ". Click where to cast it. Costs prayer points.")
 
 
 ## Use, switch on or drop the carried item.
@@ -1356,7 +1358,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		if rebuild:
 			_clear_actions()
 		return
-	if own or f.is_monster() or GameOptions.get_opt("show_ai_info"):
+	if own or f.is_monster() or GameOptions.get_opt("show_ai_info") or f.revealed_to.has(game.player_id):
 		match f.code:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:

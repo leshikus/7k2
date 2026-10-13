@@ -346,7 +346,7 @@ func _start_fryhtan(nat: Nation, at: Vector2i) -> void:
 		nat.king = leader
 		lair.accept_unit(leader)
 	for k in 5:
-		var u := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), float(rng.randi_range(30, 50)))
+		var u := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), 20.0)
 		if u:
 			lair.accept_unit(u)
 	var spot := world.adjacent_to_rect(lair.footprint(), Vector2i(at.x + 3, at.y + lair.h + 2))
@@ -470,7 +470,7 @@ func _generate_lairs(size: int, cfg: Dictionary) -> void:
 			continue
 		lair.monster_code = m["unit"]
 		for k in rng.randi_range(3, 6):
-			var u := spawn_unit(m["unit"], GameObj.MONSTER_NATION, Vector2i(p.x, p.y + lh), float(rng.randi_range(20, 50)))
+			var u := spawn_unit(m["unit"], GameObj.MONSTER_NATION, Vector2i(p.x, p.y + lh), 20.0)
 			if u:
 				lair.accept_unit(u)
 
@@ -806,6 +806,19 @@ func prayer_count(nid: int) -> int:
 	return c
 
 
+## GodInfo::nation_prayer_count: worshippers at the kingdom's Seats of Power of `race`.
+func god_worshippers(nid: int, race: String) -> int:
+	var n := 0
+	for f in firms:
+		if f.code == "BASE" and f.race == race and f.nation_id == nid and not f.dead:
+			n += f.workers()
+	return n
+
+
+func god_worshipped(nid: int, race: String) -> bool:
+	return nid > 0 and god_worshippers(nid, race) > 0
+
+
 ## True when nation `nid` is of `race` and has worshippers: its god's blessing applies.
 func blessed(nid: int, race: String) -> bool:
 	var n := nation(nid)
@@ -991,22 +1004,128 @@ func spawn_sprite_effect(code: String, at: Vector2, color: Color) -> void:
 	effects_list.append(e)
 
 
-## Baal-Hammon's earthquake: enemy buildings and units in range are shaken.
-func earthquake(nid: int, c: Vector2, r: float) -> void:
-	var n := nation(nid)
+## Earthquakes (World::earth_quake, Weather::quake_rate): within the radius
+## the rate is 100 less half the distance; buildings lose that many hit points,
+## town walls take it and the towns lose people, units lose the rate times
+## their hit points over 400 (at least 5, never their last point). A god's
+## quake (MagicWeather::cast_quake) lasts two days; with random events on,
+## nature sends one now and then anywhere (Weather::day_to_quake).
+var quake := {}                      # {x, y, radius, days}
+var day_to_quake := -1
+
+
+func cast_quake(at: Vector2i, radius: int) -> void:
+	quake = {"x": at.x, "y": at.y, "radius": radius, "days": 2}
+
+
+func quake_rate(c: Vector2) -> int:
+	if quake.is_empty():
+		return 0
+	var d := int(c.distance_to(Vector2(quake["x"], quake["y"])))
+	return maxi(0, 100 - d / 2) if d <= int(quake["radius"]) else 0
+
+
+func _quake_next_day() -> void:
+	var freq := int(config.get("random_events", 0))
+	if freq > 0:
+		var period := 2000 - freq * 400 + int(config.get("seed", 0)) % 300
+		if day_to_quake < 0:
+			day_to_quake = period + rng.randi() % period
+		day_to_quake -= 1
+		if day_to_quake <= 0:
+			day_to_quake = period + rng.randi() % period
+			quake = {"x": rng.randi() % world.w, "y": rng.randi() % world.h, "radius": 500, "days": 1}
+	if quake.is_empty():
+		return
+	earth_quake()
+	quake["days"] -= 1
+	if quake["days"] <= 0:
+		quake = {}
+
+
+func earth_quake() -> void:
 	for f in firms.duplicate():
-		if f.dead or f.nation_id == nid or f.center_loc().distance_to(c) > r:
+		if f.dead:
 			continue
-		if n and f.nation_id > 0 and f.nation_id != GameObj.MONSTER_NATION and not n.is_hostile_to(f.nation_id):
+		var r := quake_rate(f.center_loc())
+		if r <= 0:
 			continue
-		f.take_damage(f.max_hp * 0.25, null)
-	for u in units.duplicate():
-		if u.dead or u.inside_firm or u.nation_id == nid or u.center_loc().distance_to(c) > r:
+		f.hp -= r
+		if f.hp <= 0.0:
+			f.hp = 0.0
+			f.die(null)
+	for t in towns:
+		if t.dead or t.population == 0:
 			continue
-		if n and u.nation_id > 0 and u.nation_id != GameObj.MONSTER_NATION and not n.is_hostile_to(u.nation_id):
+		var dmg := quake_rate(t.center_loc())
+		if dmg <= 0:
 			continue
-		u.take_damage(25.0, null)
+		if t.wall_level > 0 and t.wall_hp >= dmg:
+			t.wall_hp -= dmg
+			dmg /= 2
+		elif t.wall_level > 0:
+			dmg -= int(t.wall_hp) / 2
+			t.wall_hp = 0.0
+		for k in dmg / 20:
+			if t.population > 0:
+				t.population -= 1
+		t.queue_redraw()
+	for u in units:
+		if u.dead or u.inside_firm != null or u.utype.get("flying", false):
+			continue
+		var r := quake_rate(u.center_loc())
+		if r <= 0:
+			continue
+		var dmg := float(r) * u.max_hp / 400.0
+		if dmg >= u.hp:
+			dmg = u.hp - 1.0
+		dmg = maxf(dmg, 5.0)
+		u.hp -= dmg
+		if u.hp <= 0.0:
+			u.hp = 0.0
+			u.die(null)
 	shake.emit(10.0)
+	if player():
+		notify("An earthquake has struck!", Vector2(quake["x"], quake["y"]))
+
+
+## Weather::has_tornado: twenty days at least after the last, in hot windy
+## weather, a tornado comes in from the edge the wind blows from (random events on).
+var tornado_count := 1
+
+
+func _natural_tornado() -> void:
+	if int(config.get("random_events", 0)) == 0:
+		return
+	if tornado_count > 20 and weather.base_temp() >= 25 and weather.wind_spd >= 40 and rng.randi() % 10 < 2:
+		tornado_count = 0
+		var d := (weather.wind_dir + 180) % 360
+		var mx := world.w
+		var my := world.h
+		var x: int
+		var y: int
+		if d < 45:
+			x = mx * (d + 45) / 90
+			y = 0
+		elif d < 135:
+			x = mx - 1
+			y = my * (d - 45) / 90
+		elif d < 225:
+			x = mx * (224 - d) / 90
+			y = my - 1
+		elif d < 315:
+			x = 0
+			y = my * (314 - d) / 90
+		else:
+			x = mx * (d - 315) / 90
+			y = 0
+		var t := Tornado.new()
+		t.setup(0, Vector2(x, y))
+		t.life = 600
+		effects.add_child(t)
+		tornadoes.append(t)
+	else:
+		tornado_count += 1
 
 
 ## Mithra: the land around is revealed (for the player's fog of war).
@@ -1179,7 +1298,7 @@ func form_troop(units: Array, kind: int, facing: Vector2) -> void:
 	general.formation = kind
 	if facing.length() > 0.01:
 		general.formation_dir = facing
-	move_troop(own, general.cell(), general.formation_dir if general.formation_dir.length() > 0.01 else Vector2(0, 1))
+	move_troop(own, general.cell())
 
 
 ## A group move: in its general's formation when he has one, facing the
@@ -1192,15 +1311,18 @@ func move_troop(units: Array, dest: Vector2i, facing := Vector2.ZERO) -> bool:
 			break
 	if general == null:
 		return false
-	var f: Vector2 = general.formation_dir
-	if f.length() < 0.01:
-		f = facing
-	if f.length() < 0.01:
-		var c := Vector2.ZERO
+	# the general's set direction, or the first that fits (no set direction)
+	for u in units:
+		if u != general:
+			u.leader = general          # the troop follows its general (TeamInfo)
+	var cells := Formations.place(self, units, dest, general.formation_dir, general.formation)
+	if cells.is_empty():
+		# no direction fits there: the troop goes as a plain group
+		var spot := dest
 		for u in units:
-			c += u.center_loc()
-		f = Vector2(dest) - c / units.size()
-	var cells := Formations.place(self, units, dest, f, general.formation)
+			u.order_move_free(free_unit_cell(spot))
+			spot = free_unit_cell(spot)
+		return true
 	for u in cells:
 		u.order_move_free(cells[u])
 	return true
@@ -1689,7 +1811,12 @@ func next_day() -> void:
 	if campaign_battle != null:
 		campaign_battle.next_day()
 	RandomEvents.next_day(self)
+	_quake_next_day()
+	_natural_tornado()
 	Rebels.next_day(self)
+	for u in units:
+		if not u.dead and (u.is_hero or u.combat > 200.0):
+			u.think_special_ability()
 	_check_homeless()
 	_items_next_day()
 	if day % 5 == 0:
@@ -2080,6 +2207,63 @@ func on_object_attacked(victim: GameObj, attacker: GameObj) -> void:
 		if an and an.relation(victim.nation_id) != Defs.Relation.WAR:
 			declare_war(attacker.nation_id, victim.nation_id)
 	call_for_help(victim, attacker)
+	if not (victim is Unit):
+		invoke_camp_defense(victim, attacker)
+
+
+## World::net_attacker_power_in_area: the power of the attacker's moving or
+## attacking units within `r`, less the defender's.
+func net_attacker_power(c: Vector2, attacker_nid: int, defender_nid: int, r: float) -> float:
+	var net := 0.0
+	for u in units_near(c, r):
+		if u.dead or u.inside_firm != null or absf(u.center_loc().x - c.x) > r or absf(u.center_loc().y - c.y) > r:
+			continue
+		if u.order != Unit.Order.MOVE and u.order != Unit.Order.ATTACK:
+			continue
+		if u.nation_id == attacker_nid:
+			net += u.obj_power()
+		elif u.nation_id == defender_nid:
+			net -= u.obj_power()
+	return net
+
+
+## Place::invoke_camp_defense: a town or building under attack calls the
+## soldiers of its kingdom's forts and camps within EFFECTIVE_DEFEND_DISTANCE;
+## each sends out men until their power is two and a half times the
+## attackers' (FirmCamp::invoke_defense). A village paying tribute calls on
+## the lair it pays.
+var _defense_frame := {}
+
+
+func invoke_camp_defense(victim: GameObj, attacker: GameObj) -> void:
+	if attacker == null or not is_instance_valid(attacker) or attacker.dead:
+		return
+	if frame - int(_defense_frame.get(victim, -100)) < 20:
+		return             # once in a while, not at every blow
+	_defense_frame[victim] = frame
+	var c := victim.center_loc()
+	var camps: Array = []
+	if victim.nation_id > 0 and victim.nation_id != GameObj.MONSTER_NATION:
+		camps = firms.filter(func(f): return not f.dead and f.nation_id == victim.nation_id and Espionage.is_camp(f) \
+			and f.center_loc().distance_to(c) <= Defs.EFFECTIVE_DEFEND_DISTANCE)
+	elif victim is Town and victim.tribute_to() > 0:
+		camps = firms.filter(func(f): return not f.dead and f.code == "LAIR" and f.nation_id == victim.tribute_to() \
+			and f.center_loc().distance_to(c) <= Defs.EFFECTIVE_DEFEND_DISTANCE * 2.0)
+	if camps.is_empty():
+		return
+	var need := net_attacker_power(c, attacker.nation_id, victim.nation_id if victim.nation_id > 0 else -1, Defs.EFFECTIVE_DEFEND_DISTANCE)
+	if need <= 0.0:
+		return
+	for f in camps:
+		var power := 0.0
+		for s in f.soldiers.duplicate():
+			if power > need * 2.5:
+				break
+			if s == f.overseer or s.hp < s.max_hp * 0.3:
+				continue
+			power += s.obj_power()
+			f.release_unit(s, attacker)
+			s.home_firm = f
 
 
 func call_for_help(victim: GameObj, attacker: GameObj) -> void:

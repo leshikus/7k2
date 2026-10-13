@@ -25,6 +25,7 @@ var build_code := ""
 var build_race := ""
 var _editor_tool := {}         # scenario editor: what a left click places
 var _rally_firm: Firm = null   # building waiting for its rally point click
+var _cast_god: Unit = null         # Greater Being waiting for the click on where to cast
 var _found_town_unit: Unit = null  # unit waiting for the click on its new town's site
 var _route_caravan: Unit = null  # caravan waiting for the click on its destination market
 var _spell_firm: Firm = null   # spell building waiting for its target click
@@ -495,6 +496,9 @@ func _attach_campaign() -> void:
 
 
 func _teardown() -> void:
+	# an unfinished game: the heroes it took from the roster come back (or not)
+	if game and is_instance_valid(game) and not game.over and game.config.get("bring_roster", false):
+		Roster.settle(game, false)
 	for n in [hud, game, camera, view3d, overlay_layer, select_layer, menu, campaign_screen]:
 		if n and is_instance_valid(n):
 			n.queue_free()
@@ -519,6 +523,12 @@ func _start(cfg: Dictionary) -> void:
 	add_child(game)
 	game.start(cfg)
 	_attach_game()
+	if cfg.get("bring_roster", false) and not cfg.has("mp") and not cfg.has("tutorial") and cfg.get("campaign_battle") == null:
+		var came := Roster.bring(game)
+		if came > 0:
+			game.notify("%d hero%s of yours %s joined you." % [came, "" if came == 1 else "es", "has" if came == 1 else "have"], Vector2(-1, -1))
+	if not cfg.has("mp") and not cfg.has("tutorial") and cfg.get("campaign_battle") == null and Profiles.current() != "":
+		game.game_over.connect(func(victory: bool, _t: String): Roster.settle(game, victory))
 	if cfg.get("autoplay", false):
 		game.notify("AI against AI: every kingdom is computer-controlled. Sit back and watch.", Vector2(-1, -1))
 	if not cfg.get("autoplay", false) and not cfg.has("mp") and not cfg.has("tutorial") and not cfg.get("editor", false) 			and not cfg.get("no_tips", false) and TipsBox.enabled() and not Array(OS.get_cmdline_user_args()).any(func(a): return a.begins_with("--shot") or a.begins_with("--demo")):
@@ -635,6 +645,9 @@ func _attach_game() -> void:
 	hud.item_target_requested.connect(func(u):
 		_item_user = u
 		game.notify("Click the target for the %s; right-click to cancel." % Items.item_name(u.item_id), Vector2(-1, -1)))
+	hud.cast_target_requested.connect(func(u):
+		_cast_god = u
+		game.notify("Click where the Greater Being should cast his power; right-click to cancel.", Vector2(-1, -1)))
 	hud.found_town_requested.connect(func(u):
 		_found_town_unit = u
 		game.notify("Click where the new town should stand; right-click to cancel.", Vector2(-1, -1)))
@@ -971,6 +984,12 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _spell_firm != null:
 						_cast_on_click()
 						return
+					if _cast_god != null:
+						if is_instance_valid(_cast_god) and not _cast_god.dead:
+							var cl := _mouse_loc()
+							Net.cmd(_cast_god, "order_cast_power", [Vector2i(floori(cl.x), floori(cl.y))])
+						_cast_god = null
+						return
 					if _found_town_unit != null:
 						var l := _mouse_loc()
 						var site := Vector2i(floori(l.x) - Defs.TOWN_SIZE / 2, floori(l.y) - Defs.TOWN_SIZE / 2)
@@ -1029,6 +1048,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_route_caravan = null
 					elif _found_town_unit != null:
 						_found_town_unit = null
+					elif _cast_god != null:
+						_cast_god = null
 					elif not _editor_tool.is_empty():
 						_editor_tool = {}
 					else:

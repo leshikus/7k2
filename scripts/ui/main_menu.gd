@@ -23,6 +23,7 @@ var towns_opt: OptionButton
 var lairs_opt: OptionButton
 var fryhtan_opt: OptionButton
 var events_opt: OptionButton
+var roster_check: CheckBox
 var seed_edit: LineEdit
 var name_edit: LineEdit
 var reveal_check: CheckBox
@@ -131,6 +132,10 @@ func _ready() -> void:
 	reveal_check = CheckBox.new()
 	reveal_check.text = "Reveal the whole map"
 	setup_box.add_child(reveal_check)
+	roster_check = CheckBox.new()
+	roster_check.text = "Bring the heroes and items of your profile"
+	roster_check.tooltip_text = "Heroes who survived your won games, and the items your men carried (PlayerProfile)."
+	setup_box.add_child(roster_check)
 	spectate_check = CheckBox.new()
 	spectate_check.text = "Watch AI vs AI (every kingdom is computer-controlled)"
 	setup_box.add_child(spectate_check)
@@ -597,5 +602,6 @@ func _start() -> void:
 		"fryhtan_count": fryhtan_opt.selected,
 		"random_events": events_opt.selected,
 		"player_name": Profiles.current(),
+		"bring_roster": roster_check.button_pressed and Profiles.current() != "",
 		"autoplay": spectate_check.button_pressed,
 	})

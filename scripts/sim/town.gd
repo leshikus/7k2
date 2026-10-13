@@ -453,6 +453,7 @@ func draft_into(f: Firm) -> Unit:
 		return null
 	u.leadership = float(Game.inst.rng.randi_range(10, 40))
 	u.loyalty = loyalty          # a recruit brings the town's loyalty with him
+	u.basic_days = int(u.utype.get("build_days", 10))     # he arrives for basic training
 	if not f.accept_unit(u):
 		Game.inst.remove_unit(u)
 		return null
@@ -646,6 +647,10 @@ func defender_killed(u: Unit, killer: GameObj) -> void:
 
 
 ## Hits on the town itself kill villagers once no defenders are left.
+func defense() -> Array:
+	return [80, 100]      # Town::init: defense_attribute.init(80, 100)
+
+
 func take_damage(amount: float, attacker: GameObj) -> void:
 	if dead:
 		return

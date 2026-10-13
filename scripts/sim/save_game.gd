@@ -75,6 +75,7 @@ static func save_path(g: Game, path: String, extra := {}) -> bool:
 		"talks": g.talks,
 		"rebels": Rebels.to_save(g),
 		"event_days": g.event_days,
+		"quake": g.quake, "day_to_quake": g.day_to_quake, "tornado_count": g.tornado_count,
 		"contacts_ready": g.contacts_ready,
 		"fires": g.fires.keys().map(func(p): return [p.x, p.y, g.fires[p][0], g.fires[p][1]]),
 		"player_id": g.player_id,
@@ -171,7 +172,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"research_points": f.research_points, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
-		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y],
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(),
 	}
 
 
@@ -179,7 +180,7 @@ static func _unit(u: Unit) -> Dictionary:
 	return {
 		"id": u.obj_id, "sprite": u.sprite_code, "nation": u.nation_id, "x": u.loc.x, "y": u.loc.y,
 		"rank": u.rank, "combat": u.combat, "leadership": u.leadership, "hp": u.hp, "max_hp": u.max_hp, "hp_scale": u.hp_scale,
-		"wagon": [u.wagon_pop, u.wagon_race], "formation": [u.formation, u.formation_dir.x, u.formation_dir.y], "found": [u.found_site.x, u.found_site.y],
+		"wagon": [u.wagon_pop, u.wagon_race], "spab": [u.spab, u.spab_day], "talent": [u.potential, u.basic_days], "formation": [u.formation, u.formation_dir.x, u.formation_dir.y], "found": [u.found_site.x, u.found_site.y],
 		"name": u.unit_name, "hero": u.is_hero, "life": u.life_frames, "dir": u.dir, "ver": u.weapon_version,
 		"home_town": _id(u.home_town), "home_firm": _id(u.home_firm), "inside": _id(u.inside_firm),
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
@@ -234,6 +235,10 @@ static func load_path(g: Game, path: String) -> String:
 	g.frame = int(d["frame"])
 	g.day = int(d["day"])
 	g.event_days = int(d.get("event_days", -1))
+	var qk: Dictionary = d.get("quake", {})
+	g.quake = {} if qk.is_empty() else {"x": int(qk["x"]), "y": int(qk["y"]), "radius": int(qk["radius"]), "days": int(qk["days"])}
+	g.day_to_quake = int(d.get("day_to_quake", -1))
+	g.tornado_count = int(d.get("tornado_count", 1))
 	g.contacts_ready = bool(d.get("contacts_ready", false))
 	g.fires.clear()
 	for f in d.get("fires", []):
@@ -390,6 +395,8 @@ static func load_path(g: Game, path: String) -> String:
 		f.propagate = int(fd.get("propagate", 1))
 		var ra: Array = fd.get("rally", [-1, -1])
 		f.rally = Vector2i(int(ra[0]), int(ra[1]))
+		for nid in fd.get("revealed", []):
+			f.revealed_to[int(nid)] = true
 		f.set_meta("save", fd)
 		by_id[f.obj_id] = f
 
@@ -407,6 +414,12 @@ static func load_path(g: Game, path: String) -> String:
 		var wg: Array = ud.get("wagon", [0, ""])
 		u.wagon_pop = int(wg[0])
 		u.wagon_race = str(wg[1])
+		var tl: Array = ud.get("talent", [0, 0])
+		u.potential = int(tl[0])
+		u.basic_days = int(tl[1])
+		var sa: Array = ud.get("spab", ["", -1000])
+		u.spab = str(sa[0])
+		u.spab_day = int(sa[1])
 		var fm: Array = ud.get("formation", [0, 0, 0])
 		u.formation = int(fm[0])
 		u.formation_dir = Vector2(float(fm[1]), float(fm[2]))

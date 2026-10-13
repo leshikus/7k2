@@ -31,7 +31,28 @@ const PROCESS_GOODS_INTERVAL := 3
 const EFFECTIVE_FIRM_TOWN_DISTANCE := 16
 const EFFECTIVE_FIRM_FIRM_DISTANCE := 16
 const MAX_COMBAT_TRAIN := 100
-const ATTACK_SLOW_DOWN := 3.0      # how many times all attack damage is reduced (gamedef.h)
+const ATTACK_SLOW_DOWN := 3.0
+const EFFECTIVE_LEADING_DISTANCE := 10.0
+const EFFECTIVE_DEFEND_DISTANCE := 10.0    # camps defend places this close (ounit.h)
+const GUARD_COUNT_MAX := 5                 # frames a raised shield stays up (osprite.h)
+const SPECIAL_ABILITY_DELAY := 15          # days between special abilities (oun_spab.cpp)
+const SPECIAL_ABILITY_DURATION := 10
+## Unit::use_special_ability: each infantry and special unit's power.
+const SPECIAL_ABILITY := {
+	"NO_INF": "mirage", "NO_SPU": "reflect", "VI_INF": "freeze", "VI_SPU": "mirage",
+	"CE_INF": "freeze", "CE_SPU": "mirage", "RO_INF": "reflect", "RO_SPU": "reflect",
+	"GR_INF": "reflect", "GR_SPU": "reflect", "CT_INF": "reflect", "CT_SPU": "freeze",
+	"CH_INF": "mirage", "CH_SPU": "reflect", "JA_INF": "freeze", "JA_SPU": "mirage",
+	"MO_INF": "freeze", "MO_SPU": "mirage", "EG_INF": "mirage", "EG_SPU": "mirage",
+	"PE_INF": "reflect", "PE_SPU": "mirage", "IN_INF": "mirage", "IN_SPU": "mirage",
+}  # a general leads men within this many cells (ounit.h)
+
+
+## AttackAttribute::effectiveness: how well an attack works on a target's
+## defence: ((sturdiness + explosiveness)/2 * target sturdiness
+## + (100 - target sturdiness) * heat + wood favour * is wood) / 10000 + 1.
+static func effectiveness(att: Array, defense: Array) -> float:
+	return ((att[0] + att[1]) / 2 * defense[0] + (100 - defense[0]) * att[2] + att[3] * defense[1]) / 10000.0 + 1.0      # how many times all attack damage is reduced (gamedef.h)
 const MAX_RAW_RESERVE_QTY := 20000
 const EXPLORE_RANGE := 10
 const TOWN_SIZE := 6
@@ -223,11 +244,17 @@ static func load_from_assets() -> void:
 				"pierce": ar["PIERCE_DMG"].to_int(), "bullet": ar["BUL_SPRITE"], "consume": ar["CONSUME_P"].to_int(),
 				"bullet_speed": maxi(4, ar["BUL_SPEED"].to_int()), "action": "A%d" % ar["ATTK_ID"].to_int(),
 				"radius": ar.get("BUL_RADIUS", "0").to_int(), "fire": ar.get("FL_RADIUS", "0").to_int(),
+				# AttackAttribute: sturdiness, explosiveness, heat, wood favour
+				"att": [ar.get("STURDINESS", "0").to_int(), ar.get("EXPLOSIVE", "0").to_int(), ar.get("HEAT", "0").to_int(), ar.get("WOOD_FAVOR", "0").to_int()],
 			})
+		# DefenseAttribute: sturdiness and whether it is made of wood
+		t["def"] = [u.get("STURDINESS", "0").to_int(), u.get("IS_WOOD", "0").to_int()]
+		t["guard_level"] = u.get("GUARDLEVEL", "0").to_int()      # UnitInfo::guard_combat_level
+		t["weapon_power"] = u.get("WEAPONPOW", "0").to_int()
 		unit_types[u["SPRITE"]] = t
 	for f in Assets.table("FIRM"):
 		firm_types[f["CODE"]] = {
-			"code": f["CODE"], "name": f["NAME"], "hp": maxi(100, f["HITPOINTS"].to_int() * 4),
+			"code": f["CODE"], "name": f["NAME"], "hp": maxi(100, f["HITPOINTS"].to_int()),
 			"cost": f["SETUP_COST"].to_int(), "year_cost": f["YEAR_COST"].to_int(),
 			"overseer": f["OVERTITLE"], "worker": f["WORKTITLE"],
 		}
@@ -238,7 +265,7 @@ static func load_from_assets() -> void:
 	for g in Assets.table("GOD"):
 		gods[g["RACE"]] = {"unit": g["UNIT"], "exist_pray": g["EXISTPRAY"].to_int(),
 			"power_pray": maxi(10, g["POWERPRAY"].to_int()), "can_cast": g["CANCAST"] == "1",
-			"cast_range": maxi(6, g["CASTRANGE"].to_int() * 3), "race": g["RACE"]}
+			"cast_range": maxi(1, g["CASTRANGE"].to_int()), "race": g["RACE"]}
 	# TOWNNAME is split into "@RACE" sections.
 	var tn_race := ""
 	for n in Assets.table("TOWNNAME"):
@@ -269,10 +296,11 @@ static func load_from_assets() -> void:
 const GOD_POWERS := {
 	"ROMAN": "Raise the leadership of nearby generals",
 	"GREEK": "Make nearby own units invulnerable for 30 days",
-	"CARTH": "Earthquake: shake enemy buildings and units",
-	"JAPANESE": "Freeze nearby enemy units for 10 days",
-	"MONGOL": "Turn nearby enemy units to your side",
-	"PERSIAN": "Reveal the surrounding land",
+	"CARTH": "Earthquake: everything within 32 cells is shaken for two days",
+	"JAPANESE": "Expose the enemy spies near by; mercenaries at inns ask 30% less and stay",
+	"MONGOL": "Enemy units turn to your side, the less loyal the likelier",
+	"PERSIAN": "Reveal what goes on inside the buildings near by",
+	"EGYPTIAN": "Ten more people in each of your towns near by",
 	"INDIAN": "Summon a tornado",
 }
 

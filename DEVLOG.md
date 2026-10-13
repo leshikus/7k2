@@ -688,6 +688,54 @@ New tests: `wagon_test`, `options_test`.
   factories selling across borders go through the same import accounting, and
   the trade ratings the computer weighs (NationBase::trade_rating) are taken
   from these yearly imports.
-- The original's PlayerProfile has functions to keep heroes and items between
-  games (add_hero, add_item), but nothing in the game calls them; they are not
-  reproduced.
+
+## Faithful combat, training, gods and nature (13 Oct 2026)
+
+A second pass over the battle code against ounit*.cpp, ofirm*.cpp, ogod*.cpp and
+oweather.cpp, checked by a new `fidelity_test` that pits the formulas against
+numbers worked out by hand from the original.
+
+- **Hit points** are the table's HIT_PT scaled by combat level / 100 (war
+  machines, caravans and gods count 100); items that raise hit points scale them.
+  Buildings have the table's HITPOINTS (no more multiplier); towns defend (80, 100).
+- **Damage** follows Unit::actual_damage: base + 0-2, piercing by a random share
+  of combat, heroes' bonus above 100, the general's leadership within 10 cells
+  (doubled for a Celtic general of a Celtic special unit), infantry technologies
+  for infantry only; then AttackAttribute::effectiveness against the target's
+  armour and the direction of the blow, and Place::being_attack_hit's rule
+  (damage less armour, never below 1 or 1/(armour−damage), a third of it a frame).
+  Killer Bees sting buildings five times as hard.
+- **Guarding**: units with a guard level parry blows from the front (arrows lose
+  10, 4 while attacking); Jaguar and Chinese special units shrug off some blows.
+  **Special abilities** of heroes and veterans (combat > 200) come every 15 days
+  by chance and last 10 (mirage 20): mirage arrows, reflecting missiles and
+  freezing enemies within 8 cells. Jaguar and Gorilla Fryhtans frighten units.
+- **Training** as FirmCamp: recruits get basic training to combat 20 (30 with a
+  Roman Greater Being) over their unit's build days; each month the general's
+  leadership and combat grow with his men, and the men grow toward his
+  leadership, by health and talent (Skill::skill_potential: one in fifteen 50-100,
+  one 25-50, one 10-25), with the Celtic and Egyptian gods' modifiers. Fryhtan
+  recruits from lairs start at 20.
+- **Camp defence** (Place::invoke_camp_defense): a town or building under attack
+  calls the forts and camps within 10 cells, which send men until their power is
+  two and a half times the attackers' (Unit::obj_power).
+- **Formations** search for an orientation that fits the ground (TRY_ORDER); a
+  troop that cannot form anywhere moves as a group. Members follow their general.
+- **Greater Beings' powers are aimed**: the god walks to within 3 cells of the
+  place clicked and casts on the area of his raw cast range: Roman +30
+  leadership to commanders, Greek 30 days' invulnerability, Mongol defections by
+  loyalty, Persian revealing what goes on inside buildings, Japanese exposing
+  spies and cheaper inns, Egyptian ten more people per town, Carthaginian
+  earthquake of radius 32 for two days, Indian tornado. Computer gods choose
+  their targets as UnitGod::think_*_god.
+- **Natural earthquakes and tornadoes** with random events on (Weather::
+  day_to_quake, has_tornado): quakes hurt buildings, walls, towns and units by
+  distance; tornadoes come in from the upwind edge in hot, windy weather.
+- **Hero roster**: the original's PlayerProfile keeps heroes and items
+  (add_hero, add_item, ProfileHero::create_unit) though no menu of its own uses
+  them; here a won game puts your surviving heroes and the items your men carry
+  on the profile's roster, and a new game can bring them along.
+- Saves keep talents, special abilities, what Persian gods revealed and the
+  state of quakes and tornadoes.
+
+New test: `fidelity_test`.
