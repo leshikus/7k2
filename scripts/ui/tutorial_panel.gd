@@ -52,7 +52,13 @@ func _ready() -> void:
 		if t:
 			show_target.emit(t.center_loc()))
 	var hide_btn := _btn(hb, "Hide", func(): visible = false)
-	hide_btn.tooltip_text = "Press T to show the tutorial again."
+	hide_btn.tooltip_text = "The Tutorial button at the top shows it again."
+
+
+## , and . turn the lesson's text back and forth (Tutor::prev/next_text_block).
+func turn_page(step: int) -> void:
+	tutorial.page = clampi(tutorial.page + step, 0, maxi(0, tutorial.pages().size() - 1))
+	_refresh(true)
 
 
 func _btn(parent: Control, text: String, cb: Callable) -> Button:

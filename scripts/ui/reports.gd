@@ -53,7 +53,9 @@ func _ready() -> void:
 
 
 func open() -> void:
-	tabs.set_tab_hidden(TABS.find("AI"), not GameOptions.get_opt("inside_info"))
+	tabs.set_tab_hidden(TABS.find("AI"), not GameOptions.get_opt("show_ai_info"))
+	# Reports background (Config::opaque_report): see-through or solid
+	self_modulate = Color(1, 1, 1, 1.0 if int(GameOptions.get_opt("opaque_report")) == 1 else 0.82)
 	visible = not visible
 	if visible:
 		refresh()
@@ -93,8 +95,8 @@ func refresh() -> void:
 ## Information): their war, feelings toward the other kingdoms, treaties,
 ## personality and recent diplomacy.
 func _ai() -> String:
-	if not GameOptions.get_opt("inside_info"):
-		return "Turn on Inside Information in the Options to see what the computer kingdoms think."
+	if not GameOptions.get_opt("show_ai_info"):
+		return "The computer kingdoms' information is hidden (the game menu's cheat shows it)."
 	var s := ""
 	for n in game.nations:
 		if not n.alive or n.ai == null:

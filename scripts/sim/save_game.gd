@@ -138,7 +138,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 		"known_gods": n.known_gods.keys(), "items_acquired": n.items_acquired.keys(),
-		"contact": n.contact.keys(), "trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
+		"contact": n.contact.keys(), "imports": [_int_keys_to_str(n.import_year), _int_keys_to_str(n.last_import_year)], "trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
 		"status_day": _int_keys_to_str(n.status_day), "war_count": _int_keys_to_str(n.war_count),
 		"never_until": n.never_until, "reject_day": n.reject_day, "sent_day": n.sent_day,
 		"prefs": n.prefs, "last_aid_day": n.last_aid_day,
@@ -278,6 +278,11 @@ static func load_path(g: Game, path: String) -> String:
 		n.last_expense_by = nd.get("last_expense_by", {})
 		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
 		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
+		var imp: Array = nd.get("imports", [{}, {}])
+		for k in imp[0]:
+			n.import_year[int(k)] = float(imp[0][k])
+		for k in imp[1]:
+			n.last_import_year[int(k)] = float(imp[1][k])
 		for k in nd.get("contact", []):
 			n.contact[int(k)] = true
 		for k in nd.get("trade_treaty", {}):

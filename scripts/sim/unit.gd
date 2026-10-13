@@ -557,7 +557,6 @@ func _idle() -> void:
 # ------------------------------------------------------------- caravans ---
 
 const CARAVAN_CARRY := 200.0      # MAX_CARAVAN_CARRY_QTY
-const TRADE_SHARE := 0.4          # share of the goods' value earned by each side of a foreign sale
 
 
 ## Caravans shuttle goods between their market and another one (ou_cara.cpp, simplified).
@@ -601,15 +600,9 @@ func _trade_at(m: Firm, next_stop: Firm) -> void:
 		var qty: float = minf(cargo[gtype], Firm.STOCK_CAP - float(m.goods.get(gtype, 0.0)))
 		if qty <= 0:
 			continue
+		# unloading is free: the goods were paid for where they were loaded
 		m.goods[gtype] = float(m.goods.get(gtype, 0.0)) + qty
 		cargo[gtype] -= qty
-		if m.nation_id != nation_id:
-			var value := qty * Defs.PRODUCT_PRICE * TRADE_SHARE
-			if n:
-				n.add_cash(value, "Exports")
-			var other := m.nation()
-			if other:
-				other.add_cash(value, "Exports")
 	cargo = _nonzero(cargo)
 	if next_stop == null or not is_instance_valid(next_stop):
 		return
@@ -623,6 +616,13 @@ func _trade_at(m: Firm, next_stop: Firm) -> void:
 		var there: float = next_stop.goods.get(gtype, 0.0)
 		if have > 60.0 and (there < 150.0 or not pick_up.is_empty()):
 			var take := minf(room, have - 30.0)
+			# UnitCaravan::market_load_goods_now: goods from another kingdom's
+			# market are bought, as far as the treasury goes
+			if m.nation_id != nation_id and n:
+				take = minf(take, maxf(0.0, n.cash) / Defs.PRODUCT_PRICE)
+				if take <= 0.0:
+					continue
+				n.import_goods(m.nation_id, take * Defs.PRODUCT_PRICE)
 			m.goods[gtype] = have - take
 			cargo[gtype] = float(cargo.get(gtype, 0.0)) + take
 			room -= take

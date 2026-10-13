@@ -38,6 +38,8 @@ var last_income_year := 0.0
 var last_expense_year := 0.0
 var known_gods := {}             # race -> true: Scrolls of Power held (GodInfo::nation_know_array)
 var items_acquired := {}         # item id -> true, for scenario goals
+var import_year := {}             # nation id -> goods bought from it this year (NationRelation::cur_year_import)
+var last_import_year := {}        # and last year
 var contact := {}                 # nation id -> true: the two know each other (NationRelation::has_contact)
 var trade_treaty := {}            # nation id -> true: caravans may trade there (NationRelation::trade_treaty)
 var ai_rel := {}                  # nation id -> 0..100: how the computer feels about it (ai_relation_level)
@@ -90,6 +92,8 @@ func add_cash(v: float, kind := "Other") -> void:
 
 
 func new_year() -> void:
+	last_import_year = import_year
+	import_year = {}
 	last_income_year = income_year
 	last_expense_year = expense_year
 	income_year = 0.0
@@ -98,6 +102,18 @@ func new_year() -> void:
 	last_expense_by = expense_by
 	income_by = {}
 	expense_by = {}
+
+
+## NationBase::import_goods: we pay for goods bought from another kingdom,
+## which earns it as exports; the amounts are kept for the trade ratings.
+func import_goods(from_id: int, amount: float) -> void:
+	if from_id == id or amount <= 0.0:
+		return
+	import_year[from_id] = float(import_year.get(from_id, 0.0)) + amount
+	add_cash(-amount, "Imports")
+	var other := Game.inst.nation(from_id) if Game.inst else null
+	if other:
+		other.add_cash(amount, "Exports")
 
 
 func change_reputation(v: float) -> void:

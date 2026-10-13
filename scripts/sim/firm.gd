@@ -510,11 +510,8 @@ func _factory() -> void:
 		if f.code == "MINE" and f.raw == raw and f.stock > 0 and not f.under_construction:
 			var qty := minf(f.stock, STOCK_CAP - raw_stock)
 			if f.nation_id != nation_id:
-				qty = minf(qty, n.cash / Defs.RAW_PRICE)
-				n.add_cash(-qty * Defs.RAW_PRICE, "Imports")
-				var other := f.nation()
-				if other:
-					other.add_cash(qty * Defs.RAW_PRICE, "Exports")
+				qty = minf(qty, maxf(0.0, n.cash) / Defs.RAW_PRICE)
+				n.import_goods(f.nation_id, qty * Defs.RAW_PRICE)
 			f.stock -= qty
 			raw_stock += qty
 	var rate := 1.0 + 0.25 * n.tech_level("MANUFACT")
@@ -532,10 +529,8 @@ func _market(day: int) -> void:
 				var qty := minf(f.stock, STOCK_CAP - cur)
 				if f.nation_id != nation_id:
 					var n := nation()
-					qty = minf(qty, n.cash / Defs.PRODUCT_PRICE)
-					n.add_cash(-qty * Defs.PRODUCT_PRICE, "Imports")
-					if f.nation():
-						f.nation().add_cash(qty * Defs.PRODUCT_PRICE, "Exports")
+					qty = minf(qty, maxf(0.0, n.cash) / Defs.PRODUCT_PRICE)
+					n.import_goods(f.nation_id, qty * Defs.PRODUCT_PRICE)
 				f.stock -= qty
 				goods[f.raw] = cur + qty
 	# Sell to linked towns of any nation: demand is proportional to their population.
@@ -877,6 +872,10 @@ func render(cv) -> void:
 		return
 	# Frame 1 is the whole building; later frames only hold the animated parts
 	# drawn on top of it (Firm::draw_frame in the original).
+	# Inside Information: the building's name over it (disp_extend_info)
+	var ext := int(GameOptions.get_opt("inside_info"))
+	if not under_construction and (ext == 2 or (ext == 1 and Game.inst.hovered == self)):
+		cv.draw_string(ThemeDB.fallback_font, Vector2(-80, -40), display_name(), HORIZONTAL_ALIGNMENT_CENTER, 160, 12, Color(1, 1, 0.85))
 	var bitmaps: Array = frames[0]["bitmaps"].duplicate()
 	var mod := Color.WHITE
 	if not under_construction and nation_id == Game.inst.player_id and SpecialFirms.hidden_from(self, -1):

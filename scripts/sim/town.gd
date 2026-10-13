@@ -744,6 +744,26 @@ func render(cv) -> void:
 	var lp := Vector2(-size.x / 2.0, -70)
 	cv.draw_rect(Rect2(lp + Vector2(-4, -12), Vector2(size.x + 8, 16)), Color(0, 0, 0, 0.55))
 	cv.draw_string(font, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col.lightened(0.4))
+	# Inside Information (ZoomMatrix::draw_objects_now: disp_extend_info): the
+	# town's race, loyalty or resistance, and its peasants and workers
+	var ext := int(GameOptions.get_opt("inside_info"))
+	if ext == 2 or (ext == 1 and Game.inst.hovered == self):
+		var lines: Array = ["%s %s" % [Defs.race_adj(race), "Slave Town" if tribute_to() > 0 else "Town"]]
+		if population > 0:
+			if nation_id > 0:
+				lines.append("Loyalty: %d -> %d" % [int(loyalty), int(target_loyalty)])
+			elif Game.inst.player_id > 0:
+				var pid := Game.inst.player_id
+				var tr := "" if not target_resistance.has(pid) or target_resistance[pid] < 0 or target_resistance[pid] > resistance_to(pid) else " -> %d" % int(target_resistance[pid])
+				lines.append("Resistance: %d%s" % [int(resistance_to(pid)), tr])
+		if nation_id == Game.inst.player_id or nation_id == 0:
+			lines.append("Peasants: %d  Workers: %d" % [jobless(), employed])
+		var y := -70.0 - 16.0 * lines.size()
+		for ln in lines:
+			var sz := font.get_string_size(ln, HORIZONTAL_ALIGNMENT_CENTER, -1, 12)
+			cv.draw_rect(Rect2(Vector2(-sz.x / 2.0 - 3, y - 11), Vector2(sz.x + 6, 14)), Color(0, 0, 0, 0.5))
+			cv.draw_string(font, Vector2(-sz.x / 2.0, y), ln, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 0.85))
+			y += 16.0
 
 
 func _race_id() -> int:

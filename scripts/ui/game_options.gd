@@ -11,8 +11,10 @@ const DEFAULTS := {
 	"music_volume": 100,     # wav_music_volume
 	"scroll_speed": 5,       # 1..10 (scroll_speed)
 	"show_unit_icons": 1,    # unit identities: 0 when pointed at, 1 always (show_all_unit_icon)
-	"inside_info": false,    # show the computer's information (show_ai_info)
-	"scroll_method": 0,      # 0 comfort, 1 speed
+	"inside_info": 0,        # town and building details on the map: 0 none, 1 under the cursor, 2 always (disp_extend_info)
+	"opaque_report": 0,      # reports background: 0 transparent, 1 opaque
+	"scroll_method": 0,      # 0 comfort (a step at a time), 1 speed (continuous)
+	"show_ai_info": false,   # the computer kingdoms' information (show_ai_info, a debugging switch)
 }
 
 static var _values := {}

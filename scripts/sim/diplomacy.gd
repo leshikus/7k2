@@ -137,14 +137,15 @@ static func trade_with_rating(g: Game, me: Nation, other: Nation) -> int:
 	return r
 
 
-## Nation::trade_rating: caravans running between the two kingdoms.
+## NationBase::trade_rating: 0..100, how much the trade with `other` matters:
+## the two kingdoms' trade over the year against 5000, or the imports each way
+## against our income and expenses.
 static func trade_rating(g: Game, me: Nation, other: Nation) -> int:
-	var c := 0
-	for u in g.units:
-		if u.is_caravan and not u.dead and u.caravan_dest and is_instance_valid(u.caravan_dest) \
-				and ((u.nation_id == me.id and u.caravan_dest.nation_id == other.id) or (u.nation_id == other.id and u.caravan_dest.nation_id == me.id)):
-			c += 1
-	return mini(100, c * 10)
+	var mine := float(me.last_import_year.get(other.id, 0.0)) + float(me.import_year.get(other.id, 0.0))
+	var theirs := float(other.last_import_year.get(me.id, 0.0)) + float(other.import_year.get(me.id, 0.0))
+	var r1 := int(100.0 * (mine + theirs) / 5000.0)
+	var r2 := int(50.0 * theirs / (me.last_income_year + 1.0) + 50.0 * mine / (me.last_expense_year + 1.0))
+	return mini(100, maxi(r1, r2))
 
 
 static func _alliance_rating(g: Game, me: Nation, other: Nation) -> int:

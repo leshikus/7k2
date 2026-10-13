@@ -234,6 +234,23 @@ func _run() -> void:
 	await _frames(2)
 	_check(not main.hud.reports.visible, "F3 again closes it")
 
+	# 7c. the original's letter keys find your buildings (Sys::detect_key)
+	var fk := InputEventKey.new()
+	fk.keycode = KEY_F
+	fk.pressed = true
+	Input.parse_input_event(fk)
+	await _frames(2)
+	var fsel: Array = main.game.selected
+	_check(fsel.size() == 1 and fsel[0] is Firm and fsel[0].code in ["FORT", "CAMP"] and fsel[0].nation_id == main.game.player_id, "F finds your fort")
+	var qk := InputEventKey.new()
+	qk.keycode = KEY_Q
+	qk.pressed = true
+	var mode0: int = main.hud.minimap.mode
+	Input.parse_input_event(qk)
+	await _frames(2)
+	_check(main.hud.minimap.mode != mode0, "Q changes the map mode")
+	main._set_selection([])
+
 	# 8. Ctrl+S quicksave, F9 quickload
 	var units_now: int = main.game.units.size()
 	var day_now: int = main.game.day

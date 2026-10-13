@@ -1141,7 +1141,7 @@ var fires := {}                     # cell -> [fire strength, flammability]
 func unit_paths(bit: int) -> Array:
 	var out: Array = []
 	var own := int(GameOptions.get_opt("show_unit_path")) & bit != 0
-	var inside := bool(GameOptions.get_opt("inside_info"))
+	var inside := bool(GameOptions.get_opt("show_ai_info"))
 	var warned := firms.any(func(f): return f.code == "BASE" and f.race == "JAPANESE" and f.nation_id == player_id and not f.dead and f.workers() > 0)
 	if not own and not warned:
 		return out

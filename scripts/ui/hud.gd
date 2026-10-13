@@ -50,6 +50,7 @@ var build_menu_open := false
 var _refresh_timer := 0.0
 var _last_sel_key := ""
 var _messages: Array = []
+var _top_buttons: HBoxContainer
 
 
 func setup(g: Game, cam: CameraRig) -> void:
@@ -142,6 +143,7 @@ func _build_ui() -> void:
 	spy_btn.text = "Spies"
 	spy_btn.pressed.connect(toggle_spies)
 	hb.add_child(spy_btn)
+	_top_buttons = hb
 	var rep_btn := Button.new()
 	rep_btn.text = "Reports"
 	rep_btn.tooltip_text = "Kingdoms F1, Towns F2, Economy F3, Trade F4, Military F5, Technology F6, Espionage F7, Ranking F8"
@@ -278,6 +280,9 @@ func _build_ui() -> void:
 		toggle_pause_menu()
 	var do_load := func(): load_requested.emit()
 	for item in [["Resume", toggle_pause_menu], ["Save game (Ctrl+S)", do_save], ["Load game (F9)", do_load], ["Options", toggle_options], ["Reveal map (cheat)", reveal],
+			["Computer's information (cheat)", func():
+				GameOptions.set_opt("show_ai_info", not GameOptions.get_opt("show_ai_info"))
+				game.notify("Computer's information %s." % ("shown" if GameOptions.get_opt("show_ai_info") else "hidden"), Vector2(-1, -1))],
 			["New game", func(): menu_new_game.emit()], ["Quit", func(): get_tree().quit()]]:
 		var b := Button.new()
 		b.text = item[0]
@@ -414,7 +419,9 @@ func toggle_options() -> void:
 		choice.call("Display news", "news", ["Major news", "All news"], [0, 1])
 		choice.call("Show unit identities", "show_unit_icons", ["When pointed at", "Always"], [0, 1])
 		choice.call("Show unit paths", "show_unit_path", ["No", "Main map", "World map", "Both"], [0, 1, 2, 3])
-		choice.call("Inside information", "inside_info", ["Off", "On"], [false, true])
+		choice.call("Inside information", "inside_info", ["None", "Cursor", "Always"], [0, 1, 2])
+		choice.call("Reports background", "opaque_report", ["Transparent", "Opaque"], [0, 1])
+		choice.call("Scrolling method", "scroll_method", ["Comfort", "Speed"], [0, 1])
 		slider.call("Scrolling speed", "scroll_speed", 1, 10)
 		var close := Button.new()
 		close.text = "Close"
@@ -693,6 +700,19 @@ func start_tutorial(t: Tutorial) -> void:
 	tutorial_panel.tutorial = t
 	ui_root.add_child(tutorial_panel)
 	tutorial_panel.show_target.connect(func(l): center_on.emit(l))
+	# a top bar button brings the hidden lesson box back
+	var tb := Button.new()
+	tb.text = "Tutorial"
+	tb.pressed.connect(func(): tutorial_panel.visible = not tutorial_panel.visible)
+	_top_buttons.add_child(tb)
+	_top_buttons.move_child(tb, 0)
+
+
+## x: clear the news messages (NewsArray::clear_news_disp).
+func clear_messages() -> void:
+	for c in log_box.get_children():
+		c.queue_free()
+	_messages.clear()
 
 
 ## A campaign battle: the end-of-battle panel leads back to the campaign.
@@ -941,7 +961,7 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 		if u.camouflage_days > 0:
 			s += "Camouflaged: unseen for %d days\n" % u.camouflage_days
 		s += "[color=#b0a890]Right-click a town, fort or camp to infiltrate it. A kingdom's place needs its colours, put on automatically when no enemy is near. In your own places spies hunt enemy spies.[/color]\n"
-	elif (u.nation_id == game.player_id or GameOptions.get_opt("inside_info")) and u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
+	elif (u.nation_id == game.player_id or GameOptions.get_opt("show_ai_info")) and u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
 		s += "Loyalty %d\n" % int(u.loyalty)
 	if u.item_id > 0:
 		s += "[color=#ffd860]%s[/color]: %s\n" % [Items.item_name(u.item_id), Items.description(u.item_id, u.item_para)]
@@ -1336,7 +1356,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		if rebuild:
 			_clear_actions()
 		return
-	if own or f.is_monster() or GameOptions.get_opt("inside_info"):
+	if own or f.is_monster() or GameOptions.get_opt("show_ai_info"):
 		match f.code:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:

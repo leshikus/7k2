@@ -2,6 +2,8 @@ extends Node
 ## Scene root: start menu, then the game with camera, HUD and player input.
 
 const EDGE_SCROLL := 6
+const LOC_PIXELS := 32.0          # a location's width on screen at normal zoom
+var _scroll_wait := 0.0
 const PAN_SPEED := 900.0
 const MODEL_LIBRARY := "res://scripts/models/model_library.gd"
 
@@ -712,13 +714,14 @@ func _process(delta: float) -> void:
 	if game == null or camera == null:
 		return
 	var v := Vector2.ZERO
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+	var ctrl := Input.is_key_pressed(KEY_CTRL)
+	if Input.is_key_pressed(KEY_LEFT):
 		v.x -= 1
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+	if Input.is_key_pressed(KEY_RIGHT):
 		v.x += 1
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+	if Input.is_key_pressed(KEY_UP) and not ctrl:
 		v.y -= 1
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+	if Input.is_key_pressed(KEY_DOWN) and not ctrl:
 		v.y += 1
 	var mp := get_viewport().get_mouse_position()
 	var vs := get_viewport().get_visible_rect().size
@@ -731,9 +734,18 @@ func _process(delta: float) -> void:
 			v.y -= 1
 		elif mp.y > vs.y - EDGE_SCROLL:
 			v.y += 1
-	if v != Vector2.ZERO:
-		# the Scrolling Speed option (1-10, 5 normal)
-		camera.pan(v * PAN_SPEED * delta * float(GameOptions.get_opt("scroll_speed")) / 5.0)
+	# World::detect_scroll: "Comfort" moves a location at a time, every
+	# 500/(speed+1) ms; "Speed" glides at speed/500 locations a millisecond
+	var spd := float(GameOptions.get_opt("scroll_speed"))
+	if v == Vector2.ZERO:
+		_scroll_wait = 0.0
+	elif int(GameOptions.get_opt("scroll_method")) == 0:
+		_scroll_wait -= delta
+		if _scroll_wait <= 0.0:
+			_scroll_wait = 0.5 / (spd + 1.0)
+			camera.pan(v.normalized() * LOC_PIXELS)
+	else:
+		camera.pan(v.normalized() * minf(spd / 0.5 * delta, 2.0) * LOC_PIXELS)
 	music.volume_db = -10.0 + linear_to_db(maxf(0.001, float(GameOptions.get_opt("music_volume")) / 100.0))
 	camera.clamp_to(game.world.w, game.world.h)
 	if Engine.get_process_frames() % 6 == 0:
@@ -1039,16 +1051,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				var gen := troop.filter(func(u): return u.rank >= Defs.Rank.GENERAL)
 				if not gen.is_empty():
 					Net.cmd(game, "form_troop", [troop, maxi(gen[0].formation, 2), Formations.NUMPAD[k.keycode]])
-			KEY_T:
-				if hud.tutorial_panel:
-					hud.tutorial_panel.visible = not hud.tutorial_panel.visible
 			KEY_SPACE, KEY_P:
 				hud._set_speed(0.0)
-			KEY_K:
-				_center_home()
-			KEY_S:
-				if k.ctrl_pressed:
-					save_game("quick")
 			KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F8:
 				# the original's report hotkeys (HELP.RES): Kingdoms F1, Towns F2,
 				# Economy F3, Trade F4, Military F5, Technology F6, Ranking F8
@@ -1071,35 +1075,139 @@ func _unhandled_input(event: InputEvent) -> void:
 				hud._set_speed(minf(4.0, game.speed * 2.0))
 			KEY_MINUS, KEY_KP_SUBTRACT:
 				hud._set_speed(maxf(1.0, game.speed / 2.0))
-			KEY_Q:
+			KEY_BRACKETLEFT:
 				camera.turn(-1)
-			KEY_E:
+			KEY_BRACKETRIGHT:
 				camera.turn(1)
-			KEY_R:
-				camera.tilt(5.0)
-			KEY_F:
-				camera.tilt(-5.0)
-			KEY_H:
-				_center_home()
-			KEY_N:
-				sfx.enabled = not sfx.enabled
-				game.notify("Sound effects %s." % ("on" if sfx.enabled else "off"), Vector2(-1, -1))
-			KEY_M:
-				_music_on = not _music_on
-				if _music_on:
-					_next_track()
-				else:
-					music.stop()
-			KEY_B:
-				if game.selected.any(func(o): return o is Unit and o.nation_id == game.player_id and o.is_human()):
-					hud.build_menu_open = true
+			KEY_UP:
+				if k.ctrl_pressed:
+					camera.tilt(5.0)
+			KEY_DOWN:
+				if k.ctrl_pressed:
+					camera.tilt(-5.0)
+			KEY_TAB:
+				# Tab: stop all selected units
+				for u in game.selected:
+					if u is Unit and u.nation_id == game.player_id:
+						Net.cmd(u, "stop")
+			KEY_COMMA, KEY_PERIOD:
+				# the tutorial's previous / next text block
+				if hud.tutorial_panel and hud.tutorial_panel.tutorial:
+					hud.tutorial_panel.turn_page(-1 if k.keycode == KEY_COMMA else 1)
+			KEY_PAGEUP, KEY_PAGEDOWN, KEY_HOME, KEY_END:
+				# World::disp_next: the previous / next object of the selected one's kind,
+				# of any kingdom (Page Up/Down) or of the same kingdom (Home/End)
+				if not game.config.has("tutorial") or k.keycode in [KEY_HOME, KEY_END]:
+					_disp_next(-1 if k.keycode in [KEY_PAGEUP, KEY_HOME] else 1, k.keycode in [KEY_HOME, KEY_END])
 			_:
+				if k.keycode == KEY_S and k.ctrl_pressed:
+					save_game("quick")
+				elif k.keycode >= KEY_A and k.keycode <= KEY_Z and not k.ctrl_pressed and not k.alt_pressed:
+					_letter_key(k.keycode, k.shift_pressed)
 				if k.keycode >= KEY_1 and k.keycode <= KEY_9:
 					var gi := k.keycode - KEY_1
 					if k.ctrl_pressed:
 						_groups[gi] = game.selected.filter(func(o): return o is Unit)
 					elif _groups.has(gi):
 						_set_selection(_groups[gi].filter(func(o): return is_instance_valid(o) and not o.dead))
+
+
+# --------------------------------------------------------------- hotkeys ---
+# Sys::detect_key: the letter keys find your buildings and units one after
+# another, as in the original.
+
+const LOCATE_FIRMS := {
+	KEY_D: ["BASE"], KEY_E: ["SPY"], KEY_F: ["FORT", "CAMP", "LAIR", "FORTRESS"],
+	KEY_H: ["STABLE", "BEE", "TERMITE"], KEY_I: ["INN", "ANIMAL"], KEY_M: ["MARKET"],
+	KEY_N: ["MAGIC", "LISHORR", "OFF_BLD1", "OFF_BLD2", "OFF_BLD3", "OFF_BLD4"],
+	KEY_T: ["RESEARCH"], KEY_U: ["MINE", "ALCHEMY"], KEY_V: ["WAR", "INCUBAT"], KEY_B: ["FACTORY"],
+}
+var _cycle := {}       # key -> index of the last object found
+
+
+func _letter_key(key: int, shift: bool) -> void:
+	var p := game.player()
+	var own := func(o): return is_instance_valid(o) and not o.dead and o.nation_id == p.id
+	match key:
+		KEY_A:
+			_locate(key, game.treasures.filter(func(t): return is_instance_valid(t) and game.is_loc_explored(t.cell)))
+		KEY_B:
+			# b: keep only the bees of the selection, or find a factory; B: drop the bees
+			var bees := game.selected.filter(func(u): return u is Unit and u.sprite_code == "BEE")
+			if shift:
+				_set_selection(game.selected.filter(func(u): return not (u is Unit and u.sprite_code == "BEE")))
+			elif not bees.is_empty() and bees.size() < game.selected.size():
+				_set_selection(bees)
+			else:
+				_locate(key, game.firms.filter(func(f): return own.call(f) and f.code in LOCATE_FIRMS[key]))
+		KEY_C:
+			_locate(key, game.units.filter(func(u): return own.call(u) and u.is_caravan))
+		KEY_G, KEY_K:
+			var rank := Defs.Rank.GENERAL if key == KEY_G else Defs.Rank.KING
+			_locate(key, game.units.filter(func(u): return own.call(u) and u.rank == rank))
+		KEY_J:
+			_locate(key, game.sites.filter(func(s): return game.is_loc_explored(Vector2i(s.x1, s.y1))))
+		KEY_L:
+			load_game.call_deferred("quick")
+		KEY_O:
+			hud.toggle_options()
+		KEY_Q:
+			hud.minimap.set_mode((hud.minimap.mode + 1) % 3)
+		KEY_R:
+			_locate(key, game.units.filter(func(u): return own.call(u) and u.has_meta("royal")))
+		KEY_S:
+			save_game("quick")
+		KEY_W:
+			_locate(key, game.units.filter(func(u): return own.call(u) and u.is_wagon()))
+		KEY_X:
+			hud.clear_messages()
+		KEY_Y:
+			_locate(key, game.units.filter(func(u): return own.call(u) and u.is_spy))
+		KEY_Z:
+			# find a Greater Being; with one selected, it casts its power
+			var sel = game.selected[0] if game.selected.size() == 1 else null
+			if sel is Unit and sel.is_god and sel.nation_id == p.id and sel.can_cast_power():
+				Net.cmd(sel, "cast_power")
+			else:
+				_locate(key, game.units.filter(func(u): return own.call(u) and u.is_god))
+		_:
+			if LOCATE_FIRMS.has(key):
+				_locate(key, game.firms.filter(func(f): return own.call(f) and f.code in LOCATE_FIRMS[key]))
+
+
+## Selects and centres on the next of `objs`, round and round.
+func _locate(key: int, objs: Array) -> void:
+	if objs.is_empty():
+		return
+	var i: int = (int(_cycle.get(key, -1)) + 1) % objs.size()
+	_cycle[key] = i
+	var o = objs[i]
+	var at: Vector2 = o.inside_firm.center_loc() if o is Unit and o.inside_firm else (Vector2(o.cell) + Vector2(0.5, 0.5) if o is Treasure else (Vector2(o.x1 + o.w / 2.0, o.y1 + o.h / 2.0) if o is Site else o.center_loc()))
+	camera.iso_pos = Iso.to_screen(at)
+	if o is GameObj and not (o is Unit and o.inside_firm):
+		_set_selection([o])
+
+
+## World::disp_next: step through the objects of the selected one's kind.
+func _disp_next(step: int, same_nation: bool) -> void:
+	if game.selected.is_empty():
+		return
+	var cur = game.selected[0]
+	var pool: Array = []
+	if cur is Unit:
+		pool = game.units.filter(func(u): return not u.dead and u.inside_firm == null and u.visible and u.sprite_code == cur.sprite_code)
+	elif cur is Firm:
+		pool = game.firms.filter(func(f): return not f.dead and f.visible and f.code == cur.code)
+	elif cur is Town:
+		pool = game.towns.filter(func(t): return not t.dead and t.visible)
+	if same_nation:
+		pool = pool.filter(func(o): return o.nation_id == cur.nation_id)
+	var i := pool.find(cur)
+	if pool.is_empty() or i < 0:
+		return
+	var nxt = pool[posmod(i + step, pool.size())]
+	_set_selection([nxt])
+	camera.iso_pos = Iso.to_screen(nxt.center_loc())
 
 
 func _center_home() -> void:

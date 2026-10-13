@@ -148,23 +148,26 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 |---|---|
 | Left click / drag | Select / box-select your units (Shift adds) |
 | Right click | Move, attack, garrison a camp, or resume construction |
-| Ctrl + right click | Attack a kingdom you are not at war with |
-| B | Build menu for the selected unit |
-| WASD / arrows / screen edge | Scroll |
-| Mouse wheel | Zoom |
-| Q / E | Turn the view a quarter turn |
-| R / F | Tilt the view (locked to the original angle while sprites are used) |
-| Space | Pause, `+` / `-` change speed |
-| Ctrl+1–9, 1–9 | Assign / recall unit groups |
-| H | Centre on your king |
-| N | Toggle sound effects |
-| Ctrl+S / F9 | Quicksave / quickload |
-| F1–F8 | Reports: Kingdoms, Towns, Economy, Trade, Military, Technology, Espionage, Ranking |
-| M | Toggle music |
-| Enter | Message to the other players (network game) |
-| T | Show or hide the tutorial box |
 | Shift + right click | Add a waypoint: the units go there after their current move |
-| P / K | Pause (as Space) / centre on your king (as H), the original's keys |
+| Ctrl + right click | Attack a kingdom you are not at war with |
+| Arrows / screen edge | Scroll (Options: speed, and Comfort or Speed scrolling) |
+| Mouse wheel | Zoom |
+| `[` / `]`, Ctrl+Up/Down | Turn the view a quarter turn / tilt it |
+| Space, P | Pause; `+` / `-` change speed |
+| Ctrl+1–9, 1–9 | Assign / recall unit groups |
+| Tab | Stop the selected units |
+| Number pad | Face a general's troop that way (formations) |
+| A, C, G, K, R, W, Y, Z | Find an artifact, a caravan, a general, the king, a royal, a wagon, a spy, a Greater Being (Z again: cast) |
+| B, D, E, F, H, I, M, N, T, U, V | Find a factory (B with bees selected: only the bees; Shift+B: drop them), Seat of Power, college, fort or lair, training ground, inn, market, offensive building, tower of science, mine, war factory |
+| J | Find a natural resource |
+| Page Up / Down, Home / End | The previous / next object of the selected kind, of any kingdom / of the same |
+| Q | Change the map mode |
+| O | Options |
+| S / Ctrl+S, L / F9 | Quicksave / quickload |
+| X | Clear the messages |
+| F1–F8 | Reports: Kingdoms, Towns, Economy, Trade, Military, Technology, Espionage, Ranking |
+| , / . | The tutorial's previous / next text |
+| Enter | Message to the other players (network game) |
 | Esc | Cancel / deselect / game menu |
 
 ## What is implemented
@@ -216,8 +219,10 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 ## Differences from the original
 
 Every module of the original game has a counterpart here (see DEVLOG.md for the
-review). Where this port's code is simpler than the original's, the code says so;
-the main one is that formations use simpler placement patterns than oformat.cpp.
+review). Formations follow the original's placement rules but turn the shape to the
+troop's facing instead of searching for an orientation that fits the ground.
+The original's player profiles carry code for keeping heroes and items between
+games that nothing in the original ever calls; it is not reproduced.
 Network play uses Godot's ENet instead of DirectPlay; IPX and modem play are gone.
 
 ## Project layout

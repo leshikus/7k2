@@ -121,8 +121,9 @@ func _ready() -> void:
 	for c in goals:
 		distinct[c] = true
 	check(gen.formation == 2 and distinct.size() == troop.size(), "Line: every man gets his own place")
-	var front := troop.slice(1).filter(func(u): return (u.path[-1] if not u.path.is_empty() else u.cell()).y > gen.cell().y)
-	check(front.size() >= 6, "in a rank in front of the general (%d of 8)" % front.size())
+	var gy := gen.cell().y
+	var on_line := troop.slice(1).filter(func(u): return absi((u.path[-1] if not u.path.is_empty() else u.cell()).y - gy) <= 1)
+	check(on_line.size() >= 7, "Line: one line through the general (%d of 8 beside him)" % on_line.size())
 	for i in 300:
 		g.sim_frame()
 	var dest := g.world.nearest_walkable(at + Vector2i(-25, -5))
@@ -133,7 +134,19 @@ func _ready() -> void:
 	check(spread.size() == troop.size(), "the men take their places at the destination")
 	gen.formation = 0
 	check(not g.move_troop(troop, dest), "without a formation the group moves as before")
-	check(Formations.slots(6, 12).size() == 12 and Formations.slots(3, 5).size() == 5, "every formation has a place for each man")
+	var men8: Array = troop.slice(1)
+	var every := true
+	for kind in range(1, Formations.NAMES.size()):
+		var offs := Formations.offsets(kind, men8)
+		var cells := {}
+		for m in men8:
+			cells[offs.get(m, Vector2(999, 999))] = true
+		if offs.size() != men8.size() or cells.size() != men8.size():
+			every = false
+			print("     ", Formations.NAMES[kind], ": ", offs.size(), " places, ", cells.size(), " distinct")
+	check(every, "every formation has its own place for each man")
+	var vg := Formations.offsets(Formations.VANGUARD, men8)
+	check(vg.values().all(func(o): return o.y >= -2.0) and vg.values().any(func(o): return o.y >= 1.0), "Vanguard: a wedge ahead of the general")
 
 	# ---- player profiles: each keeps its own saved games
 	var before := Profiles.current()

@@ -654,3 +654,40 @@ Closing the gaps listed above and the rest of a full review of `src/*.cpp`:
   tabs, the top bar and the map buttons.
 
 New tests: `wagon_test`, `options_test`.
+
+## Options, hotkeys, formations, trade (13 Oct 2026)
+
+- **Inside Information** is now what the original's option is
+  (Config::disp_extend_info: None / Cursor / Always): towns show their race,
+  loyalty and target or resistance, peasants and workers; buildings their name.
+  The computer kingdoms' details, their units' paths and the AI report page
+  belong to the original's debugging switch (show_ai_info), here a cheat in the
+  game menu.
+- **Reports background** (opaque_report: transparent or opaque) and **scrolling
+  method** (World::detect_scroll: Comfort steps a location every
+  500/(speed+1) ms, Speed glides at speed/500 locations a millisecond).
+- **Hotkeys** of Sys::detect_key: the letters find your buildings and units in
+  turn (A artifact, B factory or bees, C caravan, D Seat of Power, E college,
+  F fort/camp/lair/fortress, G general, H training ground, I inn, J resource,
+  K king, M market, N offensive building, R royal, T tower, U mine, V war
+  factory, W wagon, Y spy, Z Greater Being and its power), O options, Q map
+  mode, S/L save and load, X clear messages, Tab stop, `,` `.` tutorial pages,
+  Page Up/Down and Home/End step through objects of the selected kind.
+  Scrolling is by arrows and the screen edge, as the original; the view turns
+  with `[` `]` and tilts with Ctrl+Up/Down; the tutorial box has a top bar button.
+- **Formations** now follow oformat.cpp's rules for each shape: the line
+  through the general with men alternating right and left by reach; staggered
+  ranks with ranged men in pairs at every fourth place; the circle's four
+  ranged corners and its ring radius; the vanguard's and arc's split of close
+  and ranged men (no more ranged than close + 4, at most five), the wedge tip
+  two to four places ahead and the arcs' radii and 2.5-radian span; the
+  square's min(4, n/5+2) files; the sandwich's zig-zag front and ranged rear.
+- **Trade** as the original: a caravan buys the goods it loads at another
+  kingdom's market (UnitCaravan::market_load_goods_now, NationBase::import_goods:
+  imports for the buyer, exports for the seller); unloading is free; mines and
+  factories selling across borders go through the same import accounting, and
+  the trade ratings the computer weighs (NationBase::trade_rating) are taken
+  from these yearly imports.
+- The original's PlayerProfile has functions to keep heroes and items between
+  games (add_hero, add_item), but nothing in the game calls them; they are not
+  reproduced.
