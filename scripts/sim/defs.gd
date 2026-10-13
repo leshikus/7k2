@@ -111,6 +111,14 @@ const TECHS := [
 	{"code": "OFF_BLD4", "name": "Archimedetron", "max": 1, "cost": 100, "firm": "OFF_BLD4"},
 ]
 const WEAPONS := ["CATAPULT", "BALLISTA", "FLAMETHR", "CANNON", "EXPCART", "F_BALLIS"]
+## Mega weapons cannot be researched: their plans are taken from a fallen king
+## (TECH class MEGA_WEP); a War Factory builds them once known.
+const MEGA_WEAPONS := ["M_CANNON", "M_F_BALL", "M_SAW"]
+const MEGA_TECHS := [
+	{"code": "M_CANNON", "name": "Mega Cannon", "max": 1, "cost": 500, "mega": true},
+	{"code": "M_F_BALL", "name": "Mega Unicorn", "max": 1, "cost": 500, "mega": true},
+	{"code": "M_SAW", "name": "Mega Saw", "max": 1, "cost": 500, "mega": true},
+]
 ## Offensive buildings a human kingdom builds once researched.
 const OFFENSIVE_FIRMS := ["OFF_BLD1", "OFF_BLD2", "OFF_BLD3", "OFF_BLD4"]
 
@@ -296,7 +304,10 @@ static func unit_sprite(race: String, kind: String) -> String:
 
 ## Whether a nation may research the next level of a technology now.
 static func can_research(n, t: Dictionary) -> bool:
-	if n.tech_level(t["code"]) >= t["max"]:
+	if n.tech_level(t["code"]) >= t["max"] or t.get("mega", false):
+		return false
+	# a campaign unveils technologies stage by stage (TechInfo::available_level)
+	if Game.inst and Game.inst.tech_available != null and n.tech_level(t["code"]) >= int(Game.inst.tech_available.get(t["code"], 0)):
 		return false
 	if t.has("race") and not Game.inst.nation_has_race_town(n.id, t["race"]):
 		return false
@@ -311,7 +322,7 @@ static func tech_def(code: String) -> Dictionary:
 	for t in research_techs():
 		if t["code"] == code:
 			return t
-	for t in FRYHTAN_TECHS:
+	for t in FRYHTAN_TECHS + MEGA_TECHS:
 		if t["code"] == code:
 			return t
 	return {}

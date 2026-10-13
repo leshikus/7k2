@@ -365,3 +365,56 @@ Ported from `of_lair.cpp`, `of_mtrn.cpp`, `of_anim.cpp`, `of_alch.cpp`,
   special building; without `--race` it shows the human offensive buildings.
 - New test `special_firms_test` (45 checks) and tool `tests/tools/fryhtan_watch`.
 
+## The campaign (13 Oct 2026)
+
+A port of `CampaignEastWest` (`ocampgn*.cpp`, `oc_east*.cpp`, `oc_easte.cpp`,
+`oc_pl*.cpp`, `ostate.cpp`), in `scripts/campaign/`.
+
+- **Texts** (`campaign_text.gd`): the install's `Campaign/EAST.STG`, `EAST.EVT` and
+  `EAST.PLT` are read as ResourceIdx files; letters split at `~` into the
+  heading, the letter and the replies; `%s`/`%d` are filled in.
+- **Provinces** (`state_map.gd`): twelve regions on a 100 × 100 map around random
+  capitals, with neighbours and border flags. The original weighs distances with
+  random strengths; additive weights keep each province in one piece.
+- **Story** (`campaign.gd`): nations (Western Empire, Eastern Empire, two or three
+  Fryhtan kingdoms named from MNAMEA/B/C, later a new kingdom and rebels), all 23
+  events and the result handling of all 28 stages, following the original
+  branch by branch: Fryhtan takeovers, betrayal of a province, peace offers,
+  the hero who takes the throne, Fryhtan civil wars and joint attacks, offers of
+  help from the East, surrender of a Fryhtan kingdom (its troops may fight for
+  you, then may revolt), the new kingdom, independent provinces, ultimate
+  victory. A lost battle that the original replays restores the random state
+  first. Technologies are unveiled per stage (`unveil_new_tech`); the king and
+  up to four royal generals carry their names and skills between battles.
+  Random points that come to nothing are run again, as in the original; after
+  40 fruitless runs the campaign moves on by force.
+- **Battles** (`campaign_battle.gd`): every stage's map is built with ports of
+  `create_nation_town`, `create_monster_lair`, `create_slave_town`,
+  `create_economic_firm`, `create_military_firm`, `create_troop`, `create_lair`,
+  `create_monster_special_firm`, `create_offensive_structure`,
+  `create_rebel_nation` and the resource levels and campaign "situations". Stage
+  hooks run each day: rebellions, generals defecting to found kingdoms, Fryhtan
+  reinforcements at the map edge and into lairs, armies without a base marching
+  on your towns, the hero of stage 6 (losing him loses the battle). The 16
+  plots (A1–A7, C1–C4, D1–D5) are ported; AI diplomacy messages are replaced by
+  their outcome (an alliance offered, a kingdom surrendering).
+- **Goals**: "defeat all but one ally" in every battle, plus the stage's own:
+  Fryhtan battling score, military and economic score, destroy a kingdom, take
+  the plans of a mega weapon, total score, ten generals of leadership 90,
+  population. Goals now report which condition ended the game.
+- **Mega weapons**: Mega Cannon, Mega Unicorn and Mega Saw are not researchable;
+  a fallen king drops their plans, and a War Factory builds them once known.
+- **Fryhtan battling score** also grows by 0.1 per blow struck at a Fryhtan
+  (`BaseObj::being_attack_hit`), as campaign goals expect.
+- **Screen** (`ui/campaign_screen.gd`): the province map in the kingdoms'
+  colours (click to choose a province to attack), reports and letters with
+  reply buttons, the battle briefing, and the end-of-battle panel leading back.
+  A campaign battle can be saved and loaded like any game. The campaign itself
+  is saved to `user://saves/campaign.json` after every step; "Continue the
+  campaign" appears on the start screen.
+- Simplified: wagons of settlers arrive as villagers; armies are not formed
+  into teams; the province attack animation is an arrow on the map.
+- `--campaign` opens a new campaign; `--campaign --campaign-battle` goes
+  straight to its first battle. New test `campaign_test`: every stage's battle
+  built and run for 40 days, the event chain to the end, save and load.
+

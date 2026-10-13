@@ -22,6 +22,8 @@ var require_all := false
 var win: Array = []
 var lose: Array = []
 var result_text := ""
+var won_id := -1        # the condition that won or lost the game (result_win/lose_condition_id)
+var lost_id := -1
 
 
 ## Built by ScenarioLoader, which resolves the scenario's record numbers.
@@ -63,6 +65,7 @@ func check(g: Game) -> String:
 	for c in lose:
 		if c["supported"] and _true(c, g, p):
 			result_text = _result(c, p, false)
+			lost_id = c["id"]
 			return "lost"
 	var any := false
 	var all := true
@@ -75,13 +78,16 @@ func check(g: Game) -> String:
 		all = all and t
 		if t and not require_all:
 			result_text = _result(c, p, true)
+			won_id = c["id"]
 			return "won"
 	if require_all and all and win.any(func(c): return c["supported"]):
 		result_text = _result(win[0], p, true)
+		won_id = win[0]["id"]
 		return "won"
 	var dl := deadline_day()
 	if dl > 0 and g.day >= dl:
 		result_text = "Time is up: the scenario's goals were not met in time."
+		lost_id = NATION_SURVIVE
 		return "lost"
 	return ""
 
@@ -126,7 +132,7 @@ func _true(c: Dictionary, g: Game, n: Nation) -> bool:
 				if n.relation(o.id) != Defs.Relation.ALLIANCE:
 					return false
 				allies += 1
-			return allies == 1
+			return allies <= 1      # every rival gone, but for one ally at most
 		REACH_POPULATION:
 			return score(g, n, 1) >= c["p2"]
 		REACH_FRYHTAN:

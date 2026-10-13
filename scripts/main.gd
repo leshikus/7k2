@@ -55,6 +55,24 @@ func _ready() -> void:
 			if a.begins_with("--race="):
 				race = a.substr(7)       # a Fryhtan species (GITH, PLANT ...) leads a Fryhtan kingdom
 		_start({"seed": 7, "size": 100, "race": race, "ai_count": 3, "cash": 3000})
+	# --campaign [--race=X]: a new campaign; --campaign-battle goes straight to its first battle
+	if "--campaign" in args and Assets.ready_ok:
+		Defs.load_from_assets()
+		var crace := "NORMAN"
+		for a in args:
+			if a.begins_with("--race="):
+				crace = a.substr(7)
+		campaign = Campaign.new()
+		campaign.init_new(crace, 3, 77)
+		if "--campaign-battle" in args:
+			while campaign.event_id != 0 and not campaign.finished:
+				campaign.ui = _AutoUI.new()
+				await campaign.process_event()
+			campaign.ui = _AutoUI.new()
+			await campaign.stage_prelude()
+			_start_campaign_battle()
+		else:
+			_show_campaign()
 	# --scenario=<file name> [--spectate]: start a premade scenario
 	for a in args:
 		if a.begins_with("--scenario=") and Assets.ready_ok:
@@ -369,14 +387,76 @@ func _take_shot() -> void:
 
 func _show_menu() -> void:
 	_teardown()
+	campaign = null
 	menu = MainMenu.new()
 	add_child(menu)
 	menu.start_game.connect(_start)
 	menu.load_game.connect(func(slot): load_game.call_deferred(slot))
+	menu.start_campaign.connect(func(race, diff):
+		campaign = Campaign.new()
+		campaign.init_new(race, diff, randi())
+		campaign.save()
+		_show_campaign())
+	menu.continue_campaign.connect(func():
+		campaign = Campaign.load_saved()
+		if campaign:
+			_show_campaign()
+		else:
+			menu.status.text = "The saved campaign could not be read.")
+
+
+# ------------------------------------------------------------ campaign ---
+
+var campaign: Campaign = null
+var campaign_screen: CampaignScreen = null
+
+
+## The strategic screen; with `result` it first applies a finished battle.
+func _show_campaign(result: Dictionary = {}) -> void:
+	_teardown()
+	campaign_screen = CampaignScreen.new()
+	campaign_screen.campaign = campaign
+	add_child(campaign_screen)
+	campaign_screen.start_battle.connect(_start_campaign_battle, CONNECT_DEFERRED)
+	campaign_screen.back_to_menu.connect(_show_menu, CONNECT_DEFERRED)
+	if result.is_empty():
+		campaign_screen.run()
+	else:
+		campaign_screen.after_battle(result["won"], result["win_id"], result["lose_id"], result["years"])
+
+
+func _start_campaign_battle() -> void:
+	var cb := CampaignBattle.create(campaign)
+	_start({"campaign_battle": cb, "seed": campaign.rng.randi()})
+	game.config.erase("campaign_battle")
+	game.config["campaign"] = true
+	_attach_campaign()
+	var goals := game.goals.win.map(func(c): return c["text"])
+	game.notify("%s. Your goal%s: %s." % [campaign.stage_name(), "s" if game.goals.require_all and goals.size() > 1 else "",
+		(" and " if game.goals.require_all else " or ").join(goals)], Vector2(-1, -1))
+
+
+## A campaign battle's end leads back to the strategic screen.
+func _attach_campaign() -> void:
+	if game.campaign_battle == null:
+		return
+	if campaign == null:
+		campaign = game.campaign_battle.c
+	game.game_over.connect(func(victory: bool, _text: String):
+		var won := victory
+		var info: Dictionary = game.campaign_battle.result_info()
+		campaign.stage_vars["hero_alive"] = info["hero_alive"]
+		campaign.stage_vars["kill_monster_score"] = info["kill_monster_score"]
+		var result := {"won": won, "win_id": game.goals.won_id if game.goals else -1,
+			"lose_id": game.goals.lost_id if game.goals else Goals.DEFEAT_OWN_KINGDOM, "years": game.day / 365 + 1}
+		if won:
+			campaign.update_royals(game)
+		hud.set_campaign_continue(campaign.end_text(won, result["win_id"], result["lose_id"]),
+			func(): _show_campaign.call_deferred(result)), CONNECT_DEFERRED)
 
 
 func _teardown() -> void:
-	for n in [hud, game, camera, view3d, overlay_layer, select_layer, menu]:
+	for n in [hud, game, camera, view3d, overlay_layer, select_layer, menu, campaign_screen]:
 		if n and is_instance_valid(n):
 			n.queue_free()
 	hud = null
@@ -385,6 +465,7 @@ func _teardown() -> void:
 	view3d = null
 	overlay_layer = null
 	menu = null
+	campaign_screen = null
 	ghost = null
 	build_code = ""
 
@@ -421,6 +502,7 @@ func load_game(slot: String) -> bool:
 		menu.status.text = err
 		return false
 	_attach_game()
+	_attach_campaign()
 	game.notify("Game loaded (%s)." % game.date_string(), Vector2(-1, -1))
 	return true
 
@@ -1068,3 +1150,14 @@ func _bench(seconds: float) -> void:
 		Performance.get_monitor(Performance.OBJECT_NODE_COUNT)])
 	get_tree().quit()
 
+
+## Answers the campaign's questions with the first reply (for --campaign-battle).
+class _AutoUI:
+	func narrative(_t: String) -> void:
+		pass
+	func letter(_t: String) -> int:
+		return 1
+	func attack(_a: int, _b: int, _r: int, _a2: int) -> void:
+		pass
+	func pick_state(c: Array) -> int:
+		return c[0]

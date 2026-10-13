@@ -81,6 +81,14 @@ func take_damage(amount: float, attacker: GameObj) -> void:
 		return
 	amount = maxf(1.0, amount * 20.0 / (20.0 + armor() * 2.0))
 	hp -= amount
+	# BaseObj::being_attack_hit: every blow struck at a Fryhtan adds to the
+	# attacking kingdom's Fryhtan battling score
+	if attacker and is_instance_valid(attacker) and attacker.nation_id > 0 and attacker.nation_id != nation_id:
+		var vn := nation()
+		if is_monster() or (vn and vn.is_fryhtan):
+			var an := attacker.nation()
+			if an and not an.is_fryhtan:
+				an.kill_monster_score += 0.1
 	last_attacker = attacker
 	last_attacked_frame = Game.inst.frame
 	on_attacked(attacker)

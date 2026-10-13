@@ -57,6 +57,9 @@ static func save(g: Game, slot: String) -> bool:
 		"goals": g.goals.to_dict(_id) if g.goals else null,
 		"treasures": g.treasures.map(func(t): return [t.kind, t.object_id, t.para, t.cell.x, t.cell.y, t.recno]),
 		"taken_sites": g.taken_sites,
+		"year0": g.year0,
+		"tech_available": g.tech_available,
+		"campaign_battle": g.campaign_battle.to_dict(_id) if g.campaign_battle else null,
 	}
 	var f := FileAccess.open(path_for(slot), FileAccess.WRITE)
 	if f == null:
@@ -380,6 +383,12 @@ static func load_into(g: Game, slot: String) -> String:
 		g.taken_sites[int(k)] = int(d["taken_sites"][k])
 	if d.get("goals") is Dictionary:
 		g.goals = Goals.from_dict(d["goals"], by_id)
+	g.year0 = int(d.get("year0", Game.START_YEAR))
+	g.tech_available = d.get("tech_available")
+	if d.get("campaign_battle") is Dictionary:
+		var camp := Campaign.load_saved()
+		if camp:
+			g.campaign_battle = CampaignBattle.restore(camp, d["campaign_battle"], g, by_id)
 	for n in g.nations:
 		var k = by_id.get(int(n.get_meta("king_id", 0)))
 		n.king = k if k is Unit else null

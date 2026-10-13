@@ -46,6 +46,10 @@ var fog_view: FogView
 var _ground_dirty := true
 
 const START_YEAR := 1000
+var year0 := START_YEAR              # the year the game starts in (a campaign battle's year)
+## Campaign: technologies unveiled so far (code -> highest level); null elsewhere.
+var tech_available = null
+var campaign_battle = null           # CampaignBattle building and running this game
 
 
 func _init() -> void:
@@ -68,6 +72,22 @@ func start(cfg: Dictionary) -> void:
 	Defs.load_from_assets()
 	config = cfg.duplicate()
 	rng.seed = cfg.get("seed", randi())
+	if cfg.get("campaign_battle") != null:
+		var cb = cfg["campaign_battle"]
+		var csize: int = cb.WORLD
+		world = WorldMap.new(csize, csize)
+		world.generate(rng)
+		setup_layers()
+		reveal_all = cfg.get("reveal", false)
+		Assets.load_rocks()
+		campaign_battle = cb
+		cb.build(self)
+		_generate_rocks(csize)
+		_generate_trees(csize)
+		update_links()
+		_update_fog()
+		_ground_dirty = true
+		return
 	if cfg.get("scenario", "") != "":
 		var sf := ScenarioFile.new()
 		if sf.load_file(cfg["scenario"]):
@@ -1018,6 +1038,24 @@ func _drop_scroll(n: Nation, at: Vector2i) -> void:
 	spawn_treasure(Treasure.Kind.SCROLL, ri + 1, 0, c)
 
 
+## Unit::die: a fallen king drops the plans of a mega weapon his kingdom holds.
+func _drop_mega_plans(n: Nation, at: Vector2i) -> void:
+	var techs := Assets.table("TECH")
+	for code in Defs.MEGA_WEAPONS:
+		if n.tech_level(code) <= 0:
+			continue
+		var row := -1
+		for i in techs.size():
+			if techs[i]["TECH"] == code:
+				row = i + 1
+				break
+		var c := _free_treasure_cell(at)
+		if row > 0 and c.x >= 0:
+			n.tech.erase(code)
+			spawn_treasure(Treasure.Kind.BLUEPRINT, row, 0, c)
+		return
+
+
 func _free_treasure_cell(at: Vector2i) -> Vector2i:
 	for r in 4:
 		for y in range(at.y - r, at.y + r + 1):
@@ -1302,6 +1340,8 @@ func next_day() -> void:
 			n.last_expense_year = n.expense_year
 			n.income_year = 0.0
 			n.expense_year = 0.0
+	if campaign_battle != null:
+		campaign_battle.next_day()
 	_check_homeless()
 	_items_next_day()
 	if day % 5 == 0:
@@ -1324,7 +1364,7 @@ func nation_has_race_town(nid: int, r: String) -> bool:
 
 
 func date_string() -> String:
-	var y := START_YEAR + day / 365
+	var y := year0 + day / 365
 	var doy := day % 365
 	var months := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 	var m := mini(11, doy / 31)
@@ -1491,6 +1531,7 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 		n.king = null
 		n.change_reputation(-10.0)
 		_drop_scroll(n, u.cell())
+		_drop_mega_plans(n, u.cell())
 		var heir := _best_heir(n)
 		if heir:
 			heir.rank = Defs.Rank.KING

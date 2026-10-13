@@ -64,6 +64,15 @@ const DESC := 15
 
 ## Items used from the unit panel; the magic para says what they are aimed at
 ## (0 itself, 1 a unit, 2 a town, 3 a place).
+## Items the campaign hands out (ITEM_LEADER, ITEM_REGENERATE, ITEM_UNIT_CHANGE_NATION ...).
+const LEADER_ITEM := 5
+const REGEN_ITEM := 7
+const UNIT_CHANGE_ITEM := 25
+const TOWN_CHANGE_ITEM := 26
+const TOWN_FREE_ITEM := 27
+const TELEPORT_ITEM := 28
+const INVISIBLE_ITEM := 29
+
 const MANUAL_TARGET := {13: "self", 25: "unit", 26: "town", 27: "town", 28: "place"}
 
 
@@ -188,3 +197,11 @@ static func can_pick(u: Unit) -> bool:
 ## The Fryhtan species a Bane item is aimed at (para 1..7 = MONSTER table rows).
 static func bane_target(para: int) -> String:
 	return Defs.monsters[para - 1]["unit"] if para >= 1 and para <= Defs.monsters.size() else ""
+
+
+## The Bane item that hurts a Fryhtan species more (ITEM_MONSTER1_BOOK + id).
+static func bane_for(species: String) -> int:
+	for id in range(18, 25):
+		if bane_target(TABLE[id][INIT]) == species:
+			return id
+	return 0

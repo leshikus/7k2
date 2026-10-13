@@ -4,6 +4,8 @@ extends Control
 
 signal start_game(cfg: Dictionary)
 signal load_game(slot: String)
+signal start_campaign(race: String, difficulty: int)
+signal continue_campaign
 
 const RACE_IMAGES := {
 	"NORMAN": "Norman.jpg", "VIKING": "Viking.jpg", "CELTIC": "Celtic.jpg", "ROMAN": "Roman.jpg",
@@ -133,6 +135,32 @@ func _ready() -> void:
 	scn_text.custom_minimum_size = Vector2(520, 0)
 	scn_text.add_theme_font_size_override("font_size", 12)
 	setup_box.add_child(scn_text)
+	# the campaign: the Fryhtan Wars
+	var ch := HBoxContainer.new()
+	setup_box.add_child(ch)
+	var cl := Label.new()
+	cl.text = "Campaign"
+	ch.add_child(cl)
+	var diff := OptionButton.new()
+	for k in ["Difficulty 1 (easiest)", "Difficulty 2", "Difficulty 3", "Difficulty 4", "Difficulty 5 (hardest)"]:
+		diff.add_item(k)
+	diff.select(2)
+	diff.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ch.add_child(diff)
+	var cb := Button.new()
+	cb.text = "New campaign"
+	cb.tooltip_text = "The Fryhtan Wars: lead the Western Empire of your nationality through a campaign of battles."
+	cb.pressed.connect(func():
+		if _is_fryhtan_pick():
+			status.text = "A campaign is led by a human nationality."
+			return
+		start_campaign.emit(_race_code(), diff.selected + 1))
+	ch.add_child(cb)
+	if Campaign.exists():
+		var cc := Button.new()
+		cc.text = "Continue the campaign"
+		cc.pressed.connect(func(): continue_campaign.emit())
+		setup_box.add_child(cc)
 	for slot in [["quick", "Load saved game"], ["autosave", "Continue from autosave"]]:
 		if SaveGame.exists(slot[0]):
 			var lb := Button.new()

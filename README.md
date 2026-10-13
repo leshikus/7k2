@@ -74,6 +74,16 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   minerals converted), Vapngart (living war machines), Mage Tor (damage buildings,
   freeze, wound, teleport), and the Fortress four Grokkens turn into. Buy
   independent lairs next to your own.
+* **The campaign — the Fryhtan Wars.** Lead the Western Empire of your nationality
+  through the original campaign (difficulty 1–5). A map of twelve provinces is shared
+  with the Eastern Empire and two or three Fryhtan kingdoms. Reports and letters,
+  some asking for your decision, move provinces between kingdoms and lead to 28 kinds
+  of battle, each on a map of its own: Fryhtan invasions, a hero's debut, joint
+  attacks with Fryhtan or human allies, the hunt for a mega weapon, uprisings,
+  training leaders, growing population, and the last battle against the East. Battles
+  get random twists (rebels who join you, Viking Seats of Power, hidden spies,
+  invisible Fryhtans …). Technologies are unveiled stage by stage, and your king and
+  royal generals carry on from battle to battle. Texts come from your install.
 * **Diplomacy:** declare war or propose peace. Attacking a kingdom you are not at
   war with requires Ctrl+right-click and starts a war.
 
@@ -142,7 +152,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 
 ## Not yet implemented
 
-The campaign and multiplayer. Balance values are adapted where this simplified simulation
+Multiplayer. Balance values are adapted where this simplified simulation
 differs from the original (noted in the code).
 
 ## Project layout

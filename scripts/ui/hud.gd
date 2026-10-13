@@ -34,6 +34,7 @@ var diplo_list: VBoxContainer
 var overlay: PanelContainer
 var overlay_label: Label
 var overlay_image: TextureRect
+var overlay_new_btn: Button
 var pause_menu: PanelContainer
 var tooltip_label: Label
 var build_menu_open := false
@@ -256,11 +257,14 @@ func _build_ui() -> void:
 	overlay_label = Label.new()
 	overlay_label.add_theme_font_size_override("font_size", 20)
 	overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	overlay_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	overlay_label.custom_minimum_size = Vector2(480, 0)
 	ov.add_child(overlay_label)
 	var ob := Button.new()
 	ob.text = "New game"
 	ob.pressed.connect(func(): menu_new_game.emit())
 	ov.add_child(ob)
+	overlay_new_btn = ob
 	var oq := Button.new()
 	oq.text = "Quit"
 	oq.pressed.connect(func(): get_tree().quit())
@@ -445,6 +449,15 @@ func _on_game_over(victory: bool, text: String) -> void:
 	overlay.visible = true
 	overlay_label.text = text
 	overlay_image.texture = Assets.image("Huwin01.jpg" if victory else "Losegame.jpg")
+
+
+## A campaign battle: the end-of-battle panel leads back to the campaign.
+func set_campaign_continue(text: String, on_continue: Callable) -> void:
+	overlay_label.text = text
+	for c in overlay_new_btn.pressed.get_connections():
+		overlay_new_btn.pressed.disconnect(c["callable"])
+	overlay_new_btn.text = "Continue the campaign"
+	overlay_new_btn.pressed.connect(on_continue)
 
 
 # --------------------------------------------------------------- refresh ---
