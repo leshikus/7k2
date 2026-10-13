@@ -54,6 +54,12 @@ var campaign_battle = null           # CampaignBattle building and running this 
 ## never change the game shared in lockstep (Net).
 var fx_rng := RandomNumberGenerator.new()
 var peace_offers := {}               # nation -> {nation that offered peace: true}
+var fast_build := false              # tutorial lessons: building and training ten times faster (config.fast_build)
+
+
+## How much faster the player's construction and training go.
+func work_speed(nid: int) -> float:
+	return 10.0 if fast_build and nid == player_id else 1.0
 
 
 func _init() -> void:

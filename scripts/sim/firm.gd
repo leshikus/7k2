@@ -345,7 +345,7 @@ func next_day(day: int) -> void:
 		return
 	if under_construction:
 		if builder != null and is_instance_valid(builder) and not builder.dead:
-			progress += 100.0 / 30.0      # about 30 days to build
+			progress += 100.0 / 30.0 * Game.inst.work_speed(nation_id)      # about 30 days to build
 			hp = maxf(hp, max_hp * progress / 100.0)
 			if progress >= 100.0:
 				_complete()
@@ -434,7 +434,7 @@ func _train() -> void:
 	var lead := overseer.lead_skill()
 	var cap := minf(Defs.MAX_COMBAT_TRAIN, 30.0 + lead * 0.7)
 	# FirmCamp::train_unit: The Art of Training speeds it up
-	var rate := 0.2 * (1.0 + lead / 100.0) * (100.0 + overseer.item_ability(Items.Ability.TRAIN)) / 100.0
+	var rate := 0.2 * (1.0 + lead / 100.0) * (100.0 + overseer.item_ability(Items.Ability.TRAIN)) / 100.0 * Game.inst.work_speed(nation_id)
 	for s in soldiers:
 		if s.combat < cap:
 			s.combat = minf(cap, s.combat + rate)
@@ -577,7 +577,7 @@ func _research() -> void:
 		research_tech = ""
 		return
 	var t := Defs.tech_def(research_tech)
-	research_points += 3.0 * productivity() / 100.0
+	research_points += 3.0 * productivity() / 100.0 * Game.inst.work_speed(nation_id)
 	var cost := research_cost(t, n.tech_level(research_tech))
 	n.research_progress[research_tech] = research_points / cost
 	if research_points >= cost:
@@ -607,7 +607,7 @@ func _war_factory() -> void:
 		n.add_cash(-cost, "Weapons")
 		weapon_progress = 0.01
 	var days := float(Defs.unit_types.get(weapon, {}).get("build_days", 60))
-	weapon_progress += 100.0 / days * productivity() / 100.0 * (1.0 + 0.25 * n.tech_level("WAR_PROD"))
+	weapon_progress += 100.0 / days * productivity() / 100.0 * (1.0 + 0.25 * n.tech_level("WAR_PROD")) * Game.inst.work_speed(nation_id)
 	if weapon_progress >= 100.0:
 		weapon_progress = 0.0
 		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
@@ -647,7 +647,7 @@ func _train_special() -> void:
 		n.add_cash(-cost, "Training")
 		weapon_progress = 0.01
 	var days := float(Defs.unit_types.get(weapon, {}).get("build_days", 30))
-	weapon_progress += 100.0 / days
+	weapon_progress += 100.0 / days * Game.inst.work_speed(nation_id)
 	if weapon_progress >= 100.0:
 		weapon_progress = 0.0
 		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
@@ -666,7 +666,7 @@ func _train_special() -> void:
 func _train_spies() -> void:
 	if weapon_queue <= 0:
 		return
-	weapon_progress += 5.0
+	weapon_progress += 5.0 * Game.inst.work_speed(nation_id)
 	if weapon_progress >= 100.0:
 		weapon_progress = 0.0
 		var u := Game.inst.spy_spawn(self)

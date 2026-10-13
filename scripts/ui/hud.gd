@@ -37,6 +37,8 @@ var overlay_image: TextureRect
 var overlay_new_btn: Button
 var chat_edit: LineEdit
 var reports: ReportsWindow
+var tutorial_panel: TutorialPanel
+var ui_root: Control
 var pause_menu: PanelContainer
 var tooltip_label: Label
 var build_menu_open := false
@@ -95,6 +97,7 @@ static func make_theme() -> Theme:
 
 func _build_ui() -> void:
 	var root := Control.new()
+	ui_root = root
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = make_theme()
@@ -419,6 +422,8 @@ func _fill_spies() -> void:
 
 func toggle_diplomacy() -> void:
 	diplo.visible = not diplo.visible
+	if diplo.visible and tutorial_panel and tutorial_panel.tutorial:
+		tutorial_panel.tutorial.press("<diplomacy>")
 	if diplo.visible:
 		_fill_diplomacy()
 
@@ -509,6 +514,14 @@ Total score %d × difficulty %d%% = final score %d" % [total, rating, final_scor
 	if place > 0:
 		overlay_label.text += "
 You enter the Hall of Fame in place %d!" % place
+
+
+## A lesson of the learning campaign: its box over the map.
+func start_tutorial(t: Tutorial) -> void:
+	tutorial_panel = TutorialPanel.new()
+	tutorial_panel.tutorial = t
+	ui_root.add_child(tutorial_panel)
+	tutorial_panel.show_target.connect(func(l): center_on.emit(l))
 
 
 ## A campaign battle: the end-of-battle panel leads back to the campaign.
@@ -695,6 +708,8 @@ func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_c
 	b.clip_text = true
 	b.custom_minimum_size = Vector2(130, 28)
 	b.pressed.connect(func():
+		if tutorial_panel and tutorial_panel.tutorial:
+			tutorial_panel.tutorial.press(text)
 		cb.call()
 		refresh_selection(true))
 	if tip != "":
@@ -776,6 +791,10 @@ func _unit_actions(sel: Array) -> void:
 	_add_action("Stop", func():
 		for u in own:
 			_do(u, "stop"))
+	if own.any(func(u): return not u.is_civilian() and not u.is_caravan and not u.is_god and not u.is_spy):
+		_add_action("Return", func():
+			for u in own:
+				_do(u, "return_to_base"), true, "Back into the nearest of your forts, camps or lairs that has room.")
 	if own.any(func(u): return u.is_human()) or game.player().is_fryhtan:
 		_add_action("Build...", func(): build_menu_open = true, true, "Choose a building to construct. The nearest selected unit will build it.")
 	if own.any(func(u): return u.sprite_code == Defs.FORTRESS_BUILDER) and game.player().tech_level("FORTRESS") > 0:

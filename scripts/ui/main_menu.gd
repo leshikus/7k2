@@ -205,6 +205,28 @@ func _ready() -> void:
 		if Net.online():
 			Net.set_race(_race_code()))
 	_refresh_lobby()
+	# the learning campaigns: the original's tutorial lessons
+	var th := HBoxContainer.new()
+	setup_box.add_child(th)
+	var tl := Label.new()
+	tl.text = "Tutorial"
+	th.add_child(tl)
+	var tut_opt := OptionButton.new()
+	for l in Tutorial.LESSONS:
+		tut_opt.add_item(l["name"])
+	tut_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tut_opt.item_selected.connect(func(i): scn_text.text = Tutorial.description(Tutorial.LESSONS[i]))
+	th.add_child(tut_opt)
+	var tb := Button.new()
+	tb.text = "Learn"
+	tb.pressed.connect(func():
+		var l: Dictionary = Tutorial.LESSONS[tut_opt.selected]
+		var path := Tutorial.map_path(l)
+		if path == "":
+			status.text = "The lesson's map is missing from the Tutorial folder of your install."
+			return
+		start_game.emit({"scenario": path, "seed": 1, "tutorial": l["id"]}))
+	th.add_child(tb)
 	# the campaign: the Fryhtan Wars
 	var ch := HBoxContainer.new()
 	setup_box.add_child(ch)

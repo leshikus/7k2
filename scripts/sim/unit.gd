@@ -300,6 +300,30 @@ func demote() -> void:
 		rank = Defs.Rank.SOLDIER
 
 
+## "Return": back into the nearest building of the kingdom that has room for
+## him (a fort or camp, a lair or Fortress for Fryhtans).
+func return_to_base() -> bool:
+	var best: Firm = null
+	var bd := INF
+	for f in Game.inst.firms:
+		if f.nation_id != nation_id or f.dead or f.under_construction:
+			continue
+		if not (f.is_military() or f.code == "FORTRESS") or f.soldiers.size() >= f.capacity():
+			continue
+		if f.code in ["CAMP", "FORT"] and (not is_human() or is_civilian()):
+			continue
+		if f.code in ["LAIR", "FORTRESS"] and is_human() and Defs.unit_types.get(sprite_code, {}).get("class", "") == "HUMAN":
+			continue
+		var dd := distance_to(f)
+		if dd < bd:
+			bd = dd
+			best = f
+	if best == null:
+		return false
+	order_enter(best)
+	return true
+
+
 func can_settle() -> bool:
 	return Game.inst.towns.any(func(t): return t.nation_id == nation_id and t.race == race and not t.dead)
 

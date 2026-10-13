@@ -74,6 +74,13 @@ func _ready() -> void:
 			_start_campaign_battle()
 		else:
 			_show_campaign()
+	# --tutorial=<lesson id>: start a lesson of the learning campaign
+	for a in args:
+		if a.begins_with("--tutorial=") and Assets.ready_ok:
+			Defs.load_from_assets()
+			var l := Tutorial.lesson_by_id(a.substr(11).to_int())
+			if not l.is_empty():
+				_start({"scenario": Tutorial.map_path(l), "seed": 1, "tutorial": l["id"]})
 	# --scenario=<file name> [--spectate]: start a premade scenario
 	for a in args:
 		if a.begins_with("--scenario=") and Assets.ready_ok:
@@ -494,6 +501,11 @@ func _start(cfg: Dictionary) -> void:
 	_attach_game()
 	if cfg.get("autoplay", false):
 		game.notify("AI against AI: every kingdom is computer-controlled. Sit back and watch.", Vector2(-1, -1))
+	elif cfg.has("tutorial"):
+		var tut := Tutorial.new()
+		tut.setup(game, int(cfg["tutorial"]))
+		hud.start_tutorial(tut)
+		game.fast_build = int(cfg["tutorial"]) in [1, 2, 4, 9]      # Tutor::set_fast_build
 	elif cfg.has("mp"):
 		var others := game.nations.filter(func(n): return n.is_player and n.id != game.player_id).map(func(n): return n.name)
 		game.notify("A network game with %s. Press Enter to send a message." % ", ".join(others), Vector2(-1, -1))
@@ -938,6 +950,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		match k.keycode:
 			KEY_ENTER, KEY_KP_ENTER:
 				hud.open_chat()
+			KEY_T:
+				if hud.tutorial_panel:
+					hud.tutorial_panel.visible = not hud.tutorial_panel.visible
 			KEY_SPACE:
 				hud._set_speed(0.0)
 			KEY_F5:

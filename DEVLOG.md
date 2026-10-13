@@ -479,3 +479,35 @@ Lockstep multiplayer as the original plays it (`remote.cpp`), in
 - `--autostart --demo=reports --report=N` opens a report page after 120 days.
   New test `reports_test`.
 
+## Tutorial (13 Oct 2026)
+
+The learning campaigns of `otutor.cpp` / `otutor3.cpp`, in `scripts/tutorial/`.
+
+- The eight lessons that ship with the game (TUT_LIST.RES): Human Training
+  One, Two and Three with their practice games, and Fryhtan Training One with
+  its game. The other four entries have no map in the install.
+- **Maps**: the `.tut` files in the install's Tutorial folder are saved games
+  in the scenario format; `ScenarioFile` and `ScenarioLoader` load them
+  unchanged.
+- **Texts**: TUT_TEXT.RES holds each lesson's blocks. Each block has an
+  optional `Button :` line and a `Title: * NN` line naming its objective. The
+  B-entries hold the hints the original pinned to objects on the map; they are
+  shown under the text here.
+- **Objectives**: the conditions of `update_tutorial_objective_finish_count`
+  are ported as a table per lesson. A step can wait for: selecting the lesson's
+  fort, town or lair (named by the map's goals, in their original order);
+  pressing a button (the original's button codes mapped to this interface's
+  actions); a building finished; an attack on a town; units heading home; a
+  spy in a selected town or camp; the diplomacy window; one of the map's goals;
+  or Continue. Steps that rely on parts of the original's interface this port
+  lacks (trade treaties, cloning a caravan, the blessing icon) wait for
+  Continue instead.
+- **Box** (`ui/tutorial_panel.gd`): the step's pages with ◀ ▶, the hints,
+  Continue when the step waits for it, "Show me" to look at the step's object,
+  Hide (T toggles it). Lessons 1, 2, 4 and 9 build and train ten times faster,
+  as the original's `set_fast_build`.
+- A **Return** action sends selected soldiers or Fryhtans back into the nearest
+  fort, camp or lair with room (the original's RETCAMP / F_RETCMP).
+- Start screen: Tutorial list with the lesson's description, and "Learn".
+  `--tutorial=N` starts lesson N. New test `tutorial_test`.
+

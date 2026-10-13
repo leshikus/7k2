@@ -84,6 +84,12 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   get random twists (rebels who join you, Viking Seats of Power, hidden spies,
   invisible Fryhtans …). Technologies are unveiled stage by stage, and your king and
   royal generals carry on from battle to battle. Texts come from your install.
+* **Tutorial**: the original's eight learning campaigns (Human Training One to
+  Three and their practice games, Fryhtan Training One and its game), on their maps
+  from your install. They are taught step by step with the original texts: each step
+  waits until you do what it asks (select your fort, fill it, send your soldiers out,
+  build a mine, hire a caravan, train a spy …) or press Continue. T shows or hides
+  the lesson's box.
 * **Reports** (top bar): rankings of the kingdoms by population, military, economy,
   reputation and Fryhtans slain; your towns; income and expenses by kind for this
   year and last; your forts and armies; technologies; markets and caravans; and the
@@ -121,6 +127,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | F5 / F9 | Quicksave / quickload |
 | M | Toggle music |
 | Enter | Message to the other players (network game) |
+| T | Show or hide the tutorial box |
 | Esc | Cancel / deselect / game menu |
 
 ## What is implemented
@@ -185,6 +192,7 @@ scripts/view/     terrain shader, fog, ground layer, trees, placement preview
 scripts/ui/       start menu, HUD, minimap, selection box, campaign screen
 scripts/campaign/ the Fryhtan Wars campaign: story, provinces, battles, texts
 scripts/net/      net.gd (autoload): lobby and lockstep network play
+scripts/tutorial/ tutorial.gd: the learning campaigns' lessons and objectives
 scripts/models/   model_library.gd (3D models for View3D), unit_models.gd (clips, weapons)
 assets/models/    generated low-poly glTF models and their credits
 tools/blender/    headless Blender scripts that build assets/models from CC0 packs

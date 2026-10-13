@@ -19,8 +19,14 @@ static func _dir() -> String:
 static func _load(file: String) -> Dictionary:
 	if _files.has(file):
 		return _files[file]
+	var out := load_res(SK2Files.find_file(_dir(), file))
+	_files[file] = out
+	return out
+
+
+## Any ResourceIdx text file: name -> text.
+static func load_res(path: String) -> Dictionary:
 	var out := {}
-	var path := SK2Files.find_file(_dir(), file)
 	var d := FileAccess.get_file_as_bytes(path) if path != "" else PackedByteArray()
 	if d.size() > 2:
 		var n := d.decode_u16(0)
@@ -41,7 +47,6 @@ static func _load(file: String) -> Dictionary:
 			var b: int = mini(entries[i + 1][1], d.size())
 			if a < b:
 				out[entries[i][0]] = _decode(d.slice(a, b))
-	_files[file] = out
 	return out
 
 
