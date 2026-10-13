@@ -260,6 +260,16 @@ func _ready() -> void:
 			var sl: String = slot[0]
 			lb.pressed.connect(func(): load_game.emit(sl))
 			setup_box.add_child(lb)
+	var ed := Button.new()
+	ed.text = "Scenario editor"
+	ed.tooltip_text = "Make a scenario on a new map with the settings above: place towns, buildings, armies and treasure, set up the kingdoms and their goals."
+	ed.pressed.connect(func():
+		var sizes := [90, 120, 160]
+		start_game.emit({"editor": true, "seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
+			"size": sizes[size_opt.selected], "race": _race_code(), "kingdom_name": name_edit.text, "ai_count": int(ai_spin.value),
+			"cash": [1500, 3000, 6000][cash_opt.selected], "indep_towns": 0 if towns_opt.selected == 0 else maxi(3, int(sizes[size_opt.selected] * sizes[size_opt.selected] / 1000.0)),
+			"lairs": 0 if lairs_opt.selected == 0 else 2, "fryhtan_count": fryhtan_opt.selected, "reveal": true}))
+	vb.add_child(ed)
 	var hall := Button.new()
 	hall.text = "Hall of Fame"
 	hall.pressed.connect(_show_hall)

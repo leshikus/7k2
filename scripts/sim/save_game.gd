@@ -27,6 +27,40 @@ static func describe(slot: String) -> String:
 
 static func save(g: Game, slot: String) -> bool:
 	DirAccess.make_dir_recursive_absolute(DIR)
+	return save_path(g, path_for(slot))
+
+
+## Scenarios made in the editor (ScenarioEditorWindow), saved like games.
+const SCENARIO_DIR := "user://scenarios"
+
+
+static func save_scenario(g: Game, name: String, text: String) -> String:
+	DirAccess.make_dir_recursive_absolute(SCENARIO_DIR)
+	var safe := ""
+	for ch in name.strip_edges():
+		safe += ch if ch.is_valid_identifier() or ch.is_valid_int() or ch in [" ", "-"] else "_"
+	if safe.strip_edges() == "":
+		safe = "My scenario"
+	var path := "%s/%s.json" % [SCENARIO_DIR, safe.strip_edges()]
+	return path if save_path(g, path, {"scenario_name": name, "scenario_text": text}) else ""
+
+
+static func list_scenarios() -> Array:
+	var out: Array = []
+	var dir := DirAccess.open(SCENARIO_DIR)
+	if dir == null:
+		return out
+	for f in dir.get_files():
+		if f.get_extension() != "json":
+			continue
+		var path := SCENARIO_DIR.path_join(f)
+		var d := _read(path)
+		out.append({"path": ProjectSettings.globalize_path(path), "name": d.get("scenario_name", f.get_basename()),
+			"text": d.get("scenario_text", ""), "difficulty": 0, "source": "yours"})
+	return out
+
+
+static func save_path(g: Game, path: String, extra := {}) -> bool:
 	var d := {
 		"version": VERSION,
 		"kingdom": g.player().name,
@@ -61,7 +95,8 @@ static func save(g: Game, slot: String) -> bool:
 		"tech_available": g.tech_available,
 		"campaign_battle": g.campaign_battle.to_dict(_id) if g.campaign_battle else null,
 	}
-	var f := FileAccess.open(path_for(slot), FileAccess.WRITE)
+	d.merge(extra)
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		return false
 	f.store_string(JSON.stringify(d, "", false, true))   # full float precision
@@ -168,7 +203,11 @@ static func _read(path: String) -> Dictionary:
 ## Rebuilds the saved game into `g` (a fresh Game already in the scene tree).
 ## Returns "" on success or an error message.
 static func load_into(g: Game, slot: String) -> String:
-	var d := _read(path_for(slot))
+	return load_path(g, path_for(slot))
+
+
+static func load_path(g: Game, path: String) -> String:
+	var d := _read(path)
 	if d.is_empty():
 		return "Save file not found or unreadable."
 	if int(d.get("version", 0)) != VERSION:

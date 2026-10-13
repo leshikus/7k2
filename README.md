@@ -90,6 +90,14 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   waits until you do what it asks (select your fort, fill it, send your soldiers out,
   build a mine, hire a caravan, train a spy …) or press Continue. T shows or hides
   the lesson's box.
+* **Scenario editor** (start screen): on a new map with the chosen settings, time
+  stands still while you place towns, buildings, armies, generals, kings, spies,
+  heroes, Greater Beings, Fryhtans and their buildings, trees, rocks, lakes,
+  deposits, treasure, items and Scrolls of Power. You can edit or remove the selected
+  object (owner, population, loyalty, resistance, walls, combat, leadership, rank,
+  item), set up the kingdoms (yours, names, gold, food, life points, reputation,
+  technologies, new kingdoms), diplomacy, and victory and defeat goals. Saved
+  scenarios appear in the start screen's scenario list.
 * **Reports** (top bar): rankings of the kingdoms by population, military, economy,
   reputation and Fryhtans slain; your towns; income and expenses by kind for this
   year and last; your forts and armies; technologies; markets and caravans; and the

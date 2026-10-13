@@ -511,3 +511,20 @@ The learning campaigns of `otutor.cpp` / `otutor3.cpp`, in `scripts/tutorial/`.
 - Start screen: Tutorial list with the lesson's description, and "Learn".
   `--tutorial=N` starts lesson N. New test `tutorial_test`.
 
+## Scenario editor (13 Oct 2026)
+
+After `oseditor.cpp` / `osedit_*.cpp` (`ui/scenario_editor.gd`): an editor mode
+of the game in which the simulation does not run. Its pages:
+- **Place**: for each kingdom, the independents and wild Fryhtans, or nature.
+- **Selected**: edit or remove the selected object.
+- **Kingdoms**: the player's kingdom, names, treasury, technologies, new
+  kingdoms.
+- **Diplomacy**: the relations between kingdoms.
+- **Goals**: 19 kinds of victory and defeat conditions, by number, kingdom or
+  selected object, with time limits and "all goals".
+- **Scenario**: name, briefing, save, save and play.
+
+Scenarios are saved as saved games with a name and briefing in
+`user://scenarios/`. They are listed with the premade scenarios and start on
+day 0 with fresh fog. `--editor` opens it. New test `editor_test`.
+

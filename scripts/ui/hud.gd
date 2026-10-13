@@ -39,6 +39,7 @@ var chat_edit: LineEdit
 var reports: ReportsWindow
 var tutorial_panel: TutorialPanel
 var ui_root: Control
+var editor: ScenarioEditorWindow
 var pause_menu: PanelContainer
 var tooltip_label: Label
 var build_menu_open := false
@@ -311,7 +312,7 @@ func open_chat() -> void:
 
 ## True when the mouse is over an interface element (the map should ignore it).
 func is_over_ui(p: Vector2) -> bool:
-	for c in [panel, diplo, pause_menu, overlay, spies_panel, reports]:
+	for c in [panel, diplo, pause_menu, overlay, spies_panel, reports, editor, tutorial_panel, chat_edit]:
 		if c == null:
 			continue
 		if c.visible and c.get_global_rect().has_point(p):
@@ -514,6 +515,14 @@ Total score %d × difficulty %d%% = final score %d" % [total, rating, final_scor
 	if place > 0:
 		overlay_label.text += "
 You enter the Hall of Fame in place %d!" % place
+
+
+## The scenario editor's window.
+func open_editor() -> ScenarioEditorWindow:
+	editor = ScenarioEditorWindow.new()
+	editor.game = game
+	ui_root.add_child(editor)
+	return editor
 
 
 ## A lesson of the learning campaign: its box over the map.

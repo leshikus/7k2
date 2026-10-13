@@ -21,6 +21,7 @@ var rain_player: AudioStreamPlayer
 
 var build_code := ""
 var build_race := ""
+var _editor_tool := {}         # scenario editor: what a left click places
 var _spell_firm: Firm = null   # spell building waiting for its target click
 var _spell_code := ""
 var _spell_unit: Unit = null    # teleport: the unit picked by the first click
@@ -74,6 +75,10 @@ func _ready() -> void:
 			_start_campaign_battle()
 		else:
 			_show_campaign()
+	# --editor: the scenario editor on a new map
+	if "--editor" in args and Assets.ready_ok:
+		Defs.load_from_assets()
+		_start({"editor": true, "seed": 7, "size": 100, "race": "NORMAN", "ai_count": 2, "fryhtan_count": 1, "indep_towns": 6, "lairs": 2, "reveal": true})
 	# --tutorial=<lesson id>: start a lesson of the learning campaign
 	for a in args:
 		if a.begins_with("--tutorial=") and Assets.ready_ok:
@@ -501,6 +506,13 @@ func _start(cfg: Dictionary) -> void:
 	_attach_game()
 	if cfg.get("autoplay", false):
 		game.notify("AI against AI: every kingdom is computer-controlled. Sit back and watch.", Vector2(-1, -1))
+	elif cfg.get("editor", false):
+		game.reveal_all = true
+		game._update_fog()
+		var ed := hud.open_editor()
+		ed.tool_selected.connect(func(t): _editor_tool = t)
+		ed.play_requested.connect(func(path): _start.call_deferred({"scenario": path, "seed": randi()}))
+		game.notify("Scenario editor: time stands still while you shape the land.", Vector2(-1, -1))
 	elif cfg.has("tutorial"):
 		var tut := Tutorial.new()
 		tut.setup(game, int(cfg["tutorial"]))
@@ -912,6 +924,11 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _spell_firm != null:
 						_cast_on_click()
 						return
+					if not _editor_tool.is_empty() and hud.editor:
+						var l := _mouse_loc()
+						if not hud.editor.place(_editor_tool, Vector2i(floori(l.x), floori(l.y))):
+							game.notify("Cannot place it there.", Vector2(-1, -1))
+						return
 					_left_down = true
 					_drag_from = mb.position
 					_dragging = false
@@ -936,6 +953,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_item_user = null
 					elif _spell_firm != null:
 						_spell_firm = null
+					elif not _editor_tool.is_empty():
+						_editor_tool = {}
 					else:
 						_command(mb.ctrl_pressed)
 	elif event is InputEventMouseMotion and _orbiting:

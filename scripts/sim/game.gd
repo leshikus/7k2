@@ -98,6 +98,18 @@ func start(cfg: Dictionary) -> void:
 		_update_fog()
 		_ground_dirty = true
 		return
+	if str(cfg.get("scenario", "")).get_extension() == "json":
+		# a scenario made in the editor: a saved game that starts afresh
+		var err := SaveGame.load_path(self, cfg["scenario"])
+		if err != "":
+			push_error(err)
+		config = cfg.duplicate()
+		day = 0
+		frame = 0
+		reveal_all = cfg.get("reveal", false)
+		fog.fill(0)
+		_update_fog()
+		return
 	if cfg.get("scenario", "") != "":
 		var sf := ScenarioFile.new()
 		if sf.load_file(cfg["scenario"]):
@@ -1272,7 +1284,7 @@ func object_at_screen(p: Vector2) -> GameObj:
 
 func _process(delta: float) -> void:
 	# a network game runs on even after this player's end, in step with the others
-	if world == null or paused or (over and not Net.active):
+	if world == null or paused or (over and not Net.active) or config.get("editor", false):
 		return
 	_accum += delta * speed * Defs.SIM_FPS
 	var steps := 0

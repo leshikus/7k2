@@ -57,6 +57,7 @@ static func list_premade() -> Array:
 	extra.sort_custom(func(a, b): return a["name"].to_lower() < b["name"].to_lower())
 	out.sort_custom(func(a, b): return a["name"] < b["name"])
 	out.append_array(extra)
+	out.append_array(SaveGame.list_scenarios())
 	return out
 
 
