@@ -1027,8 +1027,9 @@ func find_trade_partner(home: Firm, nid: int) -> Firm:
 	return best
 
 
+## Caravans with a stop at this market.
 func caravans_of(market: Firm) -> int:
-	return units.filter(func(u): return u.is_caravan and not u.dead and u.caravan_home == market).size()
+	return units.filter(func(u): return u.is_caravan and not u.dead and u.stops.any(func(s): return s.get("firm") == market)).size()
 
 
 # ------------------------------------------------------------ espionage ---
@@ -1936,11 +1937,18 @@ func next_day() -> void:
 	weather.next_day(rng)
 	if weather.is_lightning() and rng.randf() < 0.35:
 		_lightning_strike()
-	_allocate_workers()
+	_update_workers()
 	for t in towns.duplicate():
 		t.next_day(day)
+		if t.jobless() == 0 and day % 30 == t.obj_id % 30:
+			_even_out_workers(t)
 	for f in firms.duplicate():
 		f.next_day(day)
+	_pay_units()
+	if day % 15 == 0:
+		Economy.distribute_demand(self)
+	if day % 30 == 0:
+		Economy.next_month(self)
 	for n in nations:
 		if not n.alive:
 			continue
@@ -1966,6 +1974,72 @@ func next_day() -> void:
 		_check_end()
 	_check_goals()
 	_update_fog()
+
+
+## Unit::pay_expense, FirmCamp::pay_expense / consume_food, Spy::pay_expense:
+## soldiers out in the field earn 10 a year and generals 50 (the king nothing),
+## and every human eats a unit of food a year; with no food their loyalty
+## falls a point every 5 days. Men in forts and camps eat there and are not
+## paid, but their commander is. War machines and caravans cost their yearly
+## upkeep; a war machine that cannot be paid falls apart. A spy costs 100 a
+## year and eats at home, but not while he lives at the enemy's.
+const SOLDIER_YEAR_SALARY := 10.0
+const GENERAL_YEAR_SALARY := 50.0
+const SPY_YEAR_SALARY := 100.0
+const NO_FOOD_LOYALTY_DECREASE_INTERVAL := 5
+
+
+func _pay_units() -> void:
+	for u in units.duplicate():
+		if u.dead or u.nation_id <= 0 or u.nation_id == GameObj.MONSTER_NATION:
+			continue
+		var n := nation(u.nation_id)
+		if n == null or n.is_fryhtan and not u.is_human():
+			continue
+		if u.is_spy:
+			if n.cash > 0.0:
+				n.add_cash(-SPY_YEAR_SALARY / 365.0, "Spies")
+			else:
+				u.loyalty = maxf(0.0, u.loyalty - 1.0)
+			var abroad: bool = u.spy_place != null and is_instance_valid(u.spy_place) and u.spy_place.nation_id != u.nation_id
+			if not abroad:
+				_feed(n, u)
+			continue
+		if u.is_human():
+			if u.rank == Defs.Rank.KING:
+				continue
+			var overseer: bool = u.inside_firm != null and u.inside_firm.overseer == u
+			if u.inside_firm == null or overseer:
+				if n.cash > 0.0:
+					if u.rank == Defs.Rank.GENERAL:
+						n.add_cash(-GENERAL_YEAR_SALARY / 365.0, "Generals")
+					elif u.rank == Defs.Rank.SOLDIER:
+						n.add_cash(-SOLDIER_YEAR_SALARY / 365.0, "Units")
+			_feed(n, u)
+			continue
+		if u.is_monster():
+			continue
+		var cost := float(u.utype.get("year_cost", 0)) / 365.0
+		if cost <= 0.0:
+			continue
+		if n.cash > 0.0:
+			n.add_cash(-cost, "Caravans" if u.is_caravan else "Weapons")
+		elif not u.is_caravan:
+			# Even unpaid caravans stay in service; a war machine wears out
+			u.hp -= 1.0
+			if u.hp <= 0.0:
+				u.hp = 0.0
+				if u.inside_firm:
+					kill_inside(u.inside_firm, u)
+				else:
+					u.die(null)
+
+
+func _feed(n: Nation, u: Unit) -> void:
+	if n.food > 0.0:
+		n.food -= float(Defs.UNIT_FOOD_YEAR_CONSUMPTION) / 365.0
+	elif day % NO_FOOD_LOYALTY_DECREASE_INTERVAL == 0:
+		u.loyalty = maxf(0.0, u.loyalty - 1.0)
 
 
 # -------------------------------------------------------- network play ---
@@ -2084,31 +2158,155 @@ func update_links() -> void:
 				f.linked_firms.append(g)
 
 
-## Work firms draw workers from linked towns of their own kingdom. Each town
-## shares its workforce evenly between its workplaces and keeps 30% of its
-## people as farmers so the kingdom does not starve (Town::process_food).
-func _allocate_workers() -> void:
+# ------------------------------------------------------------- links ---
+# Every link between a building and a town or another building can be switched
+# off at either end (linked_firm_enable_array / linked_town_enable_array: a link
+# works only when both ends have it on). link_state["a:b"] (a < b, object ids)
+# = [a's end on, b's end on].
+
+const INDEPENDENT_LINK_RESISTANCE := 50
+var link_state := {}
+
+
+func _link_key(x: GameObj, y: GameObj) -> Array:
+	return ["%d:%d" % [mini(x.obj_id, y.obj_id), maxi(x.obj_id, y.obj_id)], x.obj_id < y.obj_id]
+
+
+## Whether x's end of the link with y is on.
+func link_side(x: GameObj, y: GameObj) -> bool:
+	var k := _link_key(x, y)
+	var st: Array = link_state.get(k[0], _default_link(x, y) if k[1] else _default_link(y, x))
+	return st[0] if k[1] else st[1]
+
+
+func link_on(x: GameObj, y: GameObj) -> bool:
+	return link_side(x, y) and link_side(y, x)
+
+
+## Firm::toggle_firm_link / toggle_town_link: x switches its end; between
+## objects of one kingdom (or `both`), both ends.
+func set_link(x: GameObj, y: GameObj, on: bool, both := false) -> void:
+	var k := _link_key(x, y)
+	var st: Array = (link_state.get(k[0], _default_link(x, y) if k[1] else _default_link(y, x))).duplicate()
+	var both_ends := both or x.nation_id == y.nation_id
+	if k[1] or both_ends:
+		st[0] = on
+	if not k[1] or both_ends:
+		st[1] = on
+	link_state[k[0]] = st
+
+
+## Firm::setup_link: the ends' default state, [first, second] in id order.
+func _default_link(a: GameObj, b: GameObj) -> Array:
+	var f: Firm = a if a is Firm else b
+	var other: GameObj = b if a is Firm else a
+	var fon := true
+	var oon := true
+	if other is Town:
+		# an independent town only joins a foreign building's link when its
+		# resistance to that kingdom is low
+		if other.nation_id == 0 and (f.nation_id <= 0 or other.resistance_to(f.nation_id) > INDEPENDENT_LINK_RESISTANCE):
+			oon = false
+	elif other is Firm:
+		var on := f.nation_id == other.nation_id and _default_firm_link(f.code, other.code)
+		fon = on
+		oon = on
+	return [fon, oon] if a == f else [oon, fon]
+
+
+## FirmInfo::default_firm_link_status: mines do not feed markets unless told to.
+static func _default_firm_link(a: String, b: String) -> bool:
+	if a == "MINE":
+		return b != "MARKET"
+	if a == "MARKET":
+		return b == "FACTORY"
+	if a == "FACTORY":
+		return b == "MARKET" or b == "MINE"
+	return true
+
+
+## Whether a building may employ the people of a town (Firm::setup_link's
+## rules for work places): its own kingdom's, or an independent one over a
+## link both ends have on; a Seat of Power only its own race.
+func work_link_on(f: Firm, t: Town) -> bool:
+	if t.nation_id != 0 and t.nation_id != f.nation_id:
+		return false
+	if f.code == "BASE" and t.race != f.race:
+		return false
+	return link_on(f, t)
+
+
+## FirmInfo::is_linkable_to_firm: the trade links of mines, factories and markets.
+static func goods_linkable(a: String, b: String) -> bool:
+	var trade := ["MINE", "FACTORY", "MARKET"]
+	return a in trade and b in trade and a != b
+
+
+## Daily: towns count their workers; a town that has lost people takes some
+## back from the buildings (Town::unjob_town_people); workers whose town has
+## gone are lost.
+func _update_workers() -> void:
 	for t in towns:
 		t.employed = 0
 	for f in firms:
-		f.worker_from.clear()
+		for i in range(f.worker_towns.size() - 1, -1, -1):
+			var t = f.worker_towns[i]
+			if not is_instance_valid(t) or t.dead or f.dead:
+				f.worker_towns.remove_at(i)
+			else:
+				t.employed += 1
 	for t in towns:
-		if t.nation_id <= 0 or t.dead:
+		while t.employed > t.population and t.employed > 0:
+			_unjob(t)
+
+
+## Town::unjob_town_people: the worker most likely to quit is in a distant,
+## well-staffed or idle building.
+func _unjob(t: Town) -> void:
+	var best: Firm = null
+	var best_r := -1
+	for f in t.linked_firms + firms.filter(func(x): return t in x.worker_towns):
+		var idx: int = f.worker_towns.find(t)
+		if idx < 0:
 			continue
-		var n := nation(t.nation_id)
-		var fl: Array = t.linked_firms.filter(func(f): return not f.dead and not f.under_construction and f.is_work_firm() and f.nation_id == t.nation_id and (f.code != "BASE" or t.race == f.race))
-		if fl.is_empty():
+		var r := 100 - int(t.center_loc().distance_to(f.center_loc()))
+		r += f.workers() + 10 + 100 * f.workers() / maxi(1, f.needed_workers)
+		if f.productivity() <= 0.0:
+			r += 100
+		if r > best_r:
+			best_r = r
+			best = f
+	if best == null:
+		t.employed = mini(t.employed, t.population)
+		return
+	best.resign_worker(best.worker_towns.find(t))
+
+
+## Town::evenly_distribute_worker: with no jobless left, a worker moves from a
+## building above the town's average employment to one below it.
+func _even_out_workers(t: Town) -> void:
+	if t.jobless() > 0:
+		return
+	var wf: Array = t.linked_firms.filter(func(f): return f.is_work_firm() and f.needed_workers > 0 and not f.dead and work_link_on(f, t))
+	if wf.is_empty():
+		return
+	var total := 0
+	for f in wf:
+		total += 100 * f.workers() / f.needed_workers
+	var avg := total / wf.size()
+	for f in wf:
+		if 100 * f.workers() / f.needed_workers >= avg or f.workers() >= f.needed_workers:
 			continue
-		var avail := int(t.population * 0.7)
-		var progress := true
-		while avail > 0 and progress:
-			progress = false
-			for f in fl:
-				if avail > 0 and f.workers() < Defs.MAX_WORKER:
-					f.worker_from[t] = f.worker_from.get(t, 0) + 1
-					t.employed += 1
-					avail -= 1
-					progress = true
+		for o in wf:
+			if o == f or 100 * o.workers() / o.needed_workers <= avg:
+				continue
+			var k: int = o.worker_towns.find(t)
+			if k < 0:
+				continue
+			if 100 * (o.workers() - 1) / o.needed_workers >= avg or f.needed_workers < o.needed_workers:
+				o.worker_towns.remove_at(k)
+				f.worker_towns.append(t)
+				return
 
 
 # ------------------------------------------------------------------- fog ---
@@ -2299,6 +2497,7 @@ func _best_heir(n: Nation) -> Unit:
 
 func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 	deselect(f)
+	f.resign_all_workers()        # FirmWork::free_all_people: the workers go home
 	if Training.is_train_firm(f):
 		Training.free_all(f)
 	f.eject_all()
@@ -2337,6 +2536,13 @@ func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 
 
 func on_town_changed(t: Town, old_nation: int) -> void:
+	# Town::set_nation_unjob_worker: a kingdom's people work only for it
+	if t.nation_id != 0:
+		for f in firms:
+			if f.nation_id != t.nation_id:
+				for i in range(f.worker_towns.size() - 1, -1, -1):
+					if f.worker_towns[i] == t:
+						f.resign_worker(i)
 	if observer():
 		var tn := nation(t.nation_id)
 		notify("%s now belongs to the %s." % [t.town_name, tn.name] if tn else "%s has become independent." % t.town_name, t.center_loc(), true)

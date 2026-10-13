@@ -7,7 +7,7 @@ signal build_requested(code: String)
 signal item_target_requested(u: Unit)
 signal spell_target_requested(f: Firm, spell: String)
 signal rally_requested(f: Firm)
-signal caravan_route_requested(u: Unit)
+signal caravan_route_requested(u: Unit, stop: int)
 signal found_town_requested(u: Unit)
 signal cast_target_requested(u: Unit)
 
@@ -999,11 +999,16 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 	if u.is_wagon():
 		s += "Carrying %d %s settlers\n" % [u.wagon_pop, Defs.race_adj(u.wagon_race)]
 	if u.is_caravan:
-		var dest := u.caravan_dest.display_name() if u.caravan_dest and is_instance_valid(u.caravan_dest) else "looking for a market"
-		s += "Route: %s ↔ %s\n" % [u.caravan_home.display_name() if u.caravan_home and is_instance_valid(u.caravan_home) else "?", dest]
+		for i in Caravans.MAX_STOPS:
+			if i < u.stops.size():
+				var st: Dictionary = u.stops[i]
+				var pick: String = {"auto": "pick up automatically", "none": "pick up nothing"}.get(st["pick"], "pick up " + ", ".join(st["picks"].map(func(k): return Caravans.key_name(k))))
+				s += "%sStop %d: %s (%s)\n" % ["▶ " if i == u.dest_stop else "", i + 1, st["firm"].display_name(), pick]
+			else:
+				s += "Stop %d: none\n" % (i + 1)
 		var c := []
 		for k in u.cargo:
-			c.append("%d %s goods" % [int(u.cargo[k]), k])
+			c.append("%d %s" % [int(u.cargo[k]), Caravans.key_name(k)])
 		s += "Cargo: %s\n" % (", ".join(c) if not c.is_empty() else "empty")
 	var orders := {Unit.Order.IDLE: "Idle", Unit.Order.MOVE: "Moving", Unit.Order.ATTACK: "Attacking", Unit.Order.ENTER: "Going to building",
 		Unit.Order.BUILD: "Going to construct", Unit.Order.RETURN: "Returning home"}
@@ -1065,24 +1070,26 @@ func _unit_actions(sel: Array) -> void:
 		if u.is_spy:
 			_spy_unit_actions(u)
 		if u.is_caravan:
-			_add_action("Set destination", func(): caravan_route_requested.emit(u), true,
-				"Click a market of yours, or of a kingdom with a trade treaty, for this caravan to trade with.")
-			var dm := u.duplicate_market()
-			_add_action("Clone caravan (%d)" % int(Firm.CARAVAN_COST), func(): _do(u, "duplicate_caravan"), dm != null,
-				"Hire another caravan at its market with the same route and goods.")
-			var kinds: Array = []
-			for m in [u.caravan_home, u.caravan_dest]:
-				if m and is_instance_valid(m):
-					for k in m.goods:
-						if not k in kinds:
-							kinds.append(k)
-			for k in u.pick_up + u.cargo.keys():
-				if not k in kinds:
-					kinds.append(k)
-			for k in kinds:
-				var gk: String = k
-				_add_action(("☑ " if gk in u.pick_up else "☐ ") + gk, func(): _do(u, "toggle_pick_up", [gk]), true,
-					"Goods this caravan loads. With none ticked it carries whatever the other market lacks.")
+			for i in Caravans.MAX_STOPS:
+				var si: int = i
+				_add_action("Set stop %d" % (si + 1), func(): caravan_route_requested.emit(u, si), true,
+					"Click a market of yours or of a kingdom with a trade treaty, or a mine or factory of yours.",
+					func(): _do(u, "del_caravan_stop", [si]), "①" if si == 0 else "②")
+			_add_action("Clone caravan", func(): _do(u, "duplicate_caravan"), Caravans.duplicate_market(u) != null,
+				"Hire another caravan with the same stops and goods (your kingdom keeps one for every ten people).", Callable(), "🐫")
+			for i in u.stops.size():
+				var si: int = i
+				var st: Dictionary = u.stops[i]
+				if st["firm"].code == "MARKET":
+					_add_action("Stop %d: pick up automatically" % (si + 1) + (" ✓" if st["pick"] == "auto" else ""), func(): _do(u, "set_caravan_pick_up", [si, "auto"]), true,
+						"Load whatever is above 100 in stock there and was not just unloaded.", Callable(), "⟳")
+				_add_action("Stop %d: pick up nothing" % (si + 1) + (" ✓" if st["pick"] == "none" else ""), func(): _do(u, "set_caravan_pick_up", [si, "none"]), true, "", Callable(), "⦸")
+				var keys: Array = Caravans.goods_keys() if st["firm"].code == "MARKET" else ([("R:" if st["firm"].code == "MINE" else "P:") + st["firm"].raw] if st["firm"].raw != "" else [])
+				for k in keys:
+					var gk: String = k
+					var on: bool = st["pick"] == "sel" and gk in st["picks"]
+					_add_action("Stop %d: %s %s" % [si + 1, "☑" if on else "☐", Caravans.key_name(gk)], func(): _do(u, "set_caravan_pick_up", [si, gk]), true,
+						"Pick up %s at stop %d." % [Caravans.key_name(gk), si + 1], Callable(), ("☑" if on else "☐") + ("⛏" if gk.begins_with("R:") else "📦"))
 		if u.sprite_code == "EXPCART":
 			_add_action("Detonate", func(): _do(u, "explode"), true, "Blow the Porcupine up where it stands, hurting everything next to it.")
 		if u.is_god:
@@ -1406,15 +1413,20 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			"MINE":
 				s += "%s mine\nReserve %d\nStock %d\nMiners %d / %d\n" % [f.raw, int(f.reserve), int(f.stock), f.workers(), Defs.MAX_WORKER]
 			"FACTORY":
-				s += "Product: %s\nRaw stock %d\nGoods stock %d\nWorkers %d / %d\n" % [(f.raw + " goods") if f.raw != "" else "none (link a mine)", int(f.raw_stock), int(f.stock), f.workers(), Defs.MAX_WORKER]
+				s += "Product: %s\nRaw stock %d\nGoods stock %d\nMade last month %d\nWorkers %d / %d\n" % [(f.raw + " goods") if f.raw != "" else "none (link a mine)", int(f.raw_stock), int(f.stock), int(f.last_month_output), f.workers(), f.needed_workers]
 			"MARKET":
-				s += "Goods:\n"
-				for g in f.goods:
-					s += "  %s goods: %d\n" % [g, int(f.goods[g])]
-				if f.goods.is_empty():
-					s += "  none (link a factory)\n"
-				s += "Sales this game: %d gold\nCustomers: %s\n" % [int(f.market_sales), ", ".join(f.linked_towns.map(func(t): return t.town_name))]
-				s += "Caravans: %d / %d\n" % [game.caravans_of(f), Firm.MAX_CARAVANS]
+				s += "Goods (stock, monthly demand, sold last month):\n"
+				for r in Economy.raw_types():
+					var stg := float(f.goods.get(r, 0.0))
+					var dm := float(f.demand.get(r, 0.0))
+					if stg > 0.0 or dm > 0.0 or f.last_month_sales.has(r):
+						s += "  %s goods: %d, %d, %d\n" % [r, int(stg), int(dm), int(f.last_month_sales.get(r, 0.0))]
+				for r in f.raws:
+					if f.raws[r] > 0.5:
+						s += "  %s: %d\n" % [r, int(f.raws[r])]
+				s += "Sales this game: %d gold at %.1f each\nCustomers: %s\n" % [int(f.market_sales), Economy.consumer_price(f),
+					", ".join(f.linked_towns.filter(func(t): return game.link_on(f, t) and (t.nation_id == f.nation_id or t.nation_id == 0)).map(func(t): return t.town_name))]
+				s += "Caravans: %d (your kingdom may hire %d more)\n" % [game.caravans_of(f), Caravans.can_hire(f)]
 			"RESEARCH":
 				s += "Scientists %d / %d\n" % [f.workers(), Defs.MAX_WORKER]
 				if f.research_tech != "":
@@ -1528,9 +1540,8 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				_add_action("Send out brood", func(): _do(f, "release_all_soldiers"))
 			_occupant_buttons(f)
 		"MARKET":
-			var partner := game.find_trade_partner(f, f.nation_id)
-			var tip := "A caravan carries goods to %s." % (partner.display_name() + " of the " + (partner.nation().name if partner.nation() else "") if partner else "another market (none in reach yet: build one further away, or make peace with a neighbour)")
-			_add_action("Hire caravan (%d)" % int(Firm.CARAVAN_COST), func(): _do(f, "hire_caravan"), p.cash >= Firm.CARAVAN_COST and game.caravans_of(f) < Firm.MAX_CARAVANS, tip)
+			_add_action("Hire caravan", func(): _do(f, "hire_caravan"), Caravans.can_hire(f) > 0,
+				"A caravan starts with this market as its first stop; give it a second. Your kingdom keeps one for every ten people.")
 		"RESEARCH":
 			for t in Defs.research_techs():
 				if t.has("race") and not game.nation_has_race_town(p.id, t["race"]):
@@ -1599,10 +1610,41 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			if Wishes.can_wish(f):
 				_add_action("Special Blessing", func(): _do(f, "bless"), true,
 					"Prayer points are full: receive a random blessing from your Greater Being. Uses up all prayer points.")
+	if f.code == "FACTORY":
+		_add_action("Change product (%s)" % (f.raw if f.raw != "" else "none"), func(): _do(Economy, "change_production", [f]), true,
+			"Make goods of the next raw material; the stocks of the others are kept.", Callable(), "🔄")
+		_add_action("Switch product when out of material" + (" ✓" if f.auto_switch else ""), func(): _do(f, "set", ["auto_switch", not f.auto_switch]), true, "", Callable(), "⟳")
+	if f.is_work_firm():
+		_add_action("Workers wanted %d/%d: more" % [f.workers(), f.needed_workers], func(): _do(f, "set_needed_workers", [f.needed_workers + 1]),
+			f.needed_workers < Defs.MAX_WORKER, "How many people this building employs. Right-click: fewer.", func(): _do(f, "set_needed_workers", [f.needed_workers - 1]), "👷")
+	_link_actions(f)
 	if f.code in Firm.RALLY_FIRMS:
 		_add_action("Rally point" + (" ✓" if f.rally.x >= 0 else ""), func(): rally_requested.emit(f), true,
 			"Click: choose where the units made here gather. Right-click: clear it.", func(): _do(f, "clear_rally"))
 	_add_action("Demolish", func(): _do(f, "die", [null]), true, "Destroy this building. Units inside will leave.")
+
+
+## Firm::toggle_town_link / toggle_firm_link: the links this building can
+## switch at its end (lock icons on the original's link lines).
+func _link_actions(f: Firm) -> void:
+	for t in f.linked_towns:
+		var tt: Town = t
+		var togglable := false
+		if f.is_work_firm():
+			togglable = tt.nation_id == f.nation_id or (tt.nation_id == 0 and tt.resistance_to(f.nation_id) <= Game.INDEPENDENT_LINK_RESISTANCE)
+		if not togglable:
+			continue
+		var on := game.link_side(f, tt)
+		_add_action("Link to %s %s" % [tt.town_name, "on" if on else "off"] + ("" if game.link_on(f, tt) or not on else " (they refuse)"),
+			func(): _do(game, "set_link", [f, tt, not on]), true, "Whether this building employs people of %s." % tt.town_name, Callable(), "🔗" if on else "⛓")
+	for o in f.linked_firms:
+		var of: Firm = o
+		if of.dead or not Game.goods_linkable(f.code, of.code):
+			continue
+		var on2 := game.link_side(f, of)
+		_add_action("Link to %s %s" % [of.display_name(), "on" if on2 else "off"] + ("" if game.link_on(f, of) or not on2 else " (waiting for them)"),
+			func(): _do(game, "set_link", [f, of, not on2]), true, "Whether goods pass between this building and %s%s." % [of.display_name(), "" if of.nation_id == f.nation_id else " (another kingdom's: both must agree)"],
+			Callable(), "🔗" if on2 else "⛓")
 
 
 ## FirmTrain's panel: a button per trainee (left-click: he walks out, or quits

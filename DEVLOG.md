@@ -806,3 +806,49 @@ New test: `training_test`.
   in a frame, and a hit may kill one. The computer trains them when it can spend.
 
 New test: `setup_test`.
+
+## The economy as the original runs it (13 Oct 2026)
+
+- **Links with switches** (ofirmlnk.cpp): every link between a building and a
+  town or another building can be switched off at either end and works only
+  with both on. Mines feed factories and factories markets; a mine feeds a
+  market only when told to; links to another kingdom's buildings start off and
+  need both kingdoms; an independent town works for a foreign building only
+  while its resistance to that kingdom is 50 or less. The building panel lists
+  the switchable links.
+- **Workers** (of_work.cpp): a building hires one worker every five days from
+  the linked town with the most jobless people, up to the number it wants (10;
+  20 at Towers of Science and Seats of Power; adjustable), pays each 5 a year,
+  and keeps them; a shrinking town takes workers back from the building most
+  likely to let them go; once a month a town with no jobless evens out its
+  workers among its buildings; workers from an independent town wear down its
+  resistance. Only jobless peasants farm (and not while building walls); the
+  player's peasants reap 25/30 as much unless he chose a large treasure.
+- **Goods** (of_mine.cpp, of_fact.cpp, of_mark.cpp): every three days a mine
+  digs, a factory makes 20 x productivity a day's worth and each hands its
+  stock to the next linked building in turn that comes for it; markets keep a
+  place for each raw material and each kind of goods, take 50 at a time, pass
+  raw material on to factories, and sell goods by the towns' monthly demand
+  (half a unit a peasant, one a worker), shared out every 15 days among the
+  markets that supply the town, its own kingdom's first; the price is 4.5,
+  more with a large treasure, and the computer earns more when aggressive.
+  Factories keep the stocks of each product when switching and may switch by
+  themselves when out of material.
+- **Caravans** (ou_cara*.cpp): two stops - markets of its own kingdom or of a
+  treaty partner, its own mines and factories - each with automatic, no or
+  chosen pick-ups; it buys at foreign markets and unloads only at home, carries
+  up to 200 of each kind, waits inside a stop and dies with it; with one stop it
+  waits beside it. Hiring is free, one caravan for every ten people. The
+  computer hires them for trade routes, adjusts what they pick up and dismisses
+  idle ones.
+- **Upkeep** (Unit::pay_expense, FirmCamp::consume_food, Spy::pay_expense):
+  soldiers in the field earn 10 a year and generals 50 (commanders too),
+  spies 100, war machines and caravans their yearly cost (an unpaid war machine
+  falls apart); every human eats a unit of food a year, and with no food
+  loyalty falls a point every five days. Buildings of Fryhtan kingdoms are
+  paid for in gold like any other.
+- Research is the kingdom's (NationBase::research_tech_id): all Towers of
+  Science work on one technology, at the original rate, and the progress of
+  each technology is kept when switching.
+
+New test: `economy_test`.

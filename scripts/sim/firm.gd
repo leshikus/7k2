@@ -30,7 +30,8 @@ var builder: Unit = null
 
 var overseer: Unit = null
 var soldiers: Array[Unit] = []
-var worker_from := {}               # Town -> workers supplied this day
+var worker_towns: Array = []        # FirmWork::worker_array: each worker's home town
+var needed_workers := 10            # FirmWork::needed_worker_count (INIT_NEEDED_WORKER_COUNT; 20 at towers and Seats)
 var linked_towns: Array[Town] = []
 var linked_firms: Array[Firm] = []
 
@@ -42,6 +43,18 @@ var stock := 0.0
 var raw_stock := 0.0
 var goods := {}                     # market: product type -> stock
 var market_sales := 0.0             # market: income this year
+var raws := {}                      # market: raw material -> stock (its raw slots)
+var demand := {}                    # market: product -> the towns' monthly demand (MarketGoods::month_demand)
+var month_supply := {}              # market: product -> supplied this month
+var last_month_supply := {}
+var month_sales := {}               # market: product -> sold this month
+var last_month_sales := {}
+var month_output := 0.0             # mine/factory: produced this month
+var last_month_output := 0.0
+var backup := {}                    # factory: raw -> [raw stock, goods stock] of products not being made
+var auto_switch := false            # factory: FirmFactory::auto_switch_flag
+var next_output: Firm = null        # mine/factory/market: next_output_firm
+var _out_idx := -1
 ## A Tower of Science works on its kingdom's research (NationBase::research_tech_id):
 ## every tower adds to the same technology, whose progress is kept per tech.
 var research_tech: String:
@@ -89,6 +102,7 @@ var _defend_timer := 0
 
 
 func setup(firm_code: String, nation: int, build_race: String, at: Vector2i) -> void:
+	needed_workers = Defs.MAX_WORKER if firm_code in ["RESEARCH", "BASE"] else 10
 	code = firm_code
 	nation_id = nation
 	race = build_race
@@ -152,10 +166,69 @@ func capacity() -> int:
 
 
 func workers() -> int:
-	var n := 0
-	for t in worker_from:
-		n += worker_from[t]
-	return n
+	return worker_towns.size()
+
+
+## FirmWork::recruit_worker (every 5 days): one worker from the linked town with
+## the most (and the largest share of) jobless people, over an enabled link.
+func recruit_worker() -> void:
+	if workers() >= needed_workers:
+		return
+	var g := Game.inst
+	var best: Town = null
+	var best_r := 0
+	for t in linked_towns:
+		if t.dead or not g.work_link_on(self, t):
+			continue
+		var jl := t.jobless()
+		if jl <= 0:
+			continue
+		var r := 100 * jl / maxi(1, t.population) + jl * 2
+		if r > best_r:
+			best_r = r
+			best = t
+	if best:
+		worker_towns.append(best)
+		best.employed += 1
+
+
+const WORKER_YEAR_SALARY := 5.0
+const RESISTANCE_DECREASE_PER_WORKER := 0.2
+
+
+## FirmWork::next_day and pay_expense: hire every 5 days; every 15 days each
+## worker from an independent town wears down its resistance; wages daily.
+func _work_day(day: int) -> void:
+	if day % 5 == obj_id % 5:
+		recruit_worker()
+	if day % 15 == obj_id % 15 and nation_id > 0:
+		for t in worker_towns:
+			if is_instance_valid(t) and t.nation_id == 0:
+				t.resistance[nation_id] = maxf(0.0, t.resistance_to(nation_id) - RESISTANCE_DECREASE_PER_WORKER)
+	var n := nation()
+	if n and workers() > 0:
+		n.add_cash(-WORKER_YEAR_SALARY * workers() / 365.0, "Workers")
+
+
+## FirmWork::resign_worker / set_needed_worker_count
+func resign_worker(i: int) -> void:
+	if i < 0 or i >= worker_towns.size():
+		return
+	var t: Town = worker_towns[i]
+	worker_towns.remove_at(i)
+	if is_instance_valid(t):
+		t.employed = maxi(0, t.employed - 1)
+
+
+func resign_all_workers() -> void:
+	for i in range(worker_towns.size() - 1, -1, -1):
+		resign_worker(i)
+
+
+func set_needed_workers(v: int) -> void:
+	needed_workers = clampi(v, 0, Defs.MAX_WORKER)
+	while workers() > needed_workers:
+		resign_worker(workers() - 1)
 
 
 func productivity() -> float:
@@ -253,6 +326,10 @@ func release_unit(u: Unit, attack_target: GameObj = null) -> void:
 func change_nation(to_nation: int) -> void:
 	var old := nation_id
 	nation_id = to_nation
+	for i in range(worker_towns.size() - 1, -1, -1):
+		var wt: Town = worker_towns[i]
+		if not is_instance_valid(wt) or (wt.nation_id != 0 and wt.nation_id != to_nation):
+			resign_worker(i)
 	for u in Espionage.occupants(self):
 		u.nation_id = to_nation
 		if u.sleeper_for == to_nation:
@@ -471,6 +548,8 @@ func next_day(day: int) -> void:
 	if code == "FORT" and not under_construction:
 		_train_archer()
 		_pay_archers()
+	if is_work_firm() and not under_construction:
+		_work_day(day)
 	if under_construction:
 		if builder != null and is_instance_valid(builder) and not builder.dead:
 			progress += 100.0 / 30.0 * Game.inst.work_speed(nation_id)      # about 30 days to build
@@ -487,10 +566,8 @@ func next_day(day: int) -> void:
 			if rng.randf() < 0.7:
 				Game.inst.spawn_effect(3, Vector2(x1 + rng.randi_range(0, w - 1), y1 + rng.randi_range(0, h - 1)))
 	var n := nation()
-	if n and n.is_fryhtan:
-		n.live_points = maxf(0.0, n.live_points - float(ftype.get("year_cost", 0)) / 365.0 * 0.5)
 	var unpaid := false
-	if n and not n.is_fryhtan and ftype.get("year_cost", 0) > 0:
+	if n and ftype.get("year_cost", 0) > 0:
 		# Firm::pay_expense: a building the treasury cannot pay for decays instead
 		var cost := float(ftype["year_cost"]) / 365.0
 		if n.cash >= cost:
@@ -510,12 +587,12 @@ func next_day(day: int) -> void:
 			Espionage.think_desert(self, day)
 		"MINE":
 			if day % Defs.PROCESS_GOODS_INTERVAL == obj_id % Defs.PROCESS_GOODS_INTERVAL:
-				_produce_raw()
+				Economy.mine_day(self)
 		"FACTORY":
 			if day % Defs.PROCESS_GOODS_INTERVAL == obj_id % Defs.PROCESS_GOODS_INTERVAL:
-				_factory()
+				Economy.factory_day(self)
 		"MARKET":
-			_market(day)
+			Economy.market_day(self, day)
 		"RESEARCH":
 			_research()
 		"WAR":
@@ -616,95 +693,9 @@ func _defend() -> void:
 		out -= 1
 
 
-func _produce_raw() -> void:
-	if site == null or reserve <= 0.0 or stock >= STOCK_CAP:
-		return
-	var n := nation()
-	var yield_rate := 0.5 + (0.25 * n.tech_level("MINING") if n else 0.0)
-	var raw_qty := minf(100.0 * productivity() / 100.0, reserve)
-	var produce := minf(raw_qty * yield_rate, STOCK_CAP - stock)
-	reserve -= produce / yield_rate if yield_rate > 0 else produce
-	stock += produce
-	site.reserve = reserve
-	if reserve <= 0.0:
-		reserve = 0.0
-		if nation_id == Game.inst.player_id:
-			Game.inst.notify("A %s mine has run out of deposits." % raw, center_loc())
-
-
-func _factory() -> void:
-	var n := nation()
-	# Choose the product from the first linked mine if not yet set.
-	if raw == "":
-		for f in linked_firms:
-			if f.code == "MINE" and not f.under_construction and f.nation_id == nation_id:
-				raw = f.raw
-				break
-	if raw == "":
-		return
-	for f in linked_firms:
-		if f.code == "MINE" and f.raw == raw and f.stock > 0 and not f.under_construction:
-			var qty := minf(f.stock, STOCK_CAP - raw_stock)
-			if f.nation_id != nation_id:
-				qty = minf(qty, maxf(0.0, n.cash) / Defs.RAW_PRICE)
-				n.import_goods(f.nation_id, qty * Defs.RAW_PRICE)
-			f.stock -= qty
-			raw_stock += qty
-	var rate := 1.0 + 0.25 * n.tech_level("MANUFACT")
-	var produce := minf(20.0 * productivity() / 100.0 * Defs.PROCESS_GOODS_INTERVAL * rate, raw_stock)
-	produce = minf(produce, STOCK_CAP - stock)
-	raw_stock -= produce
-	stock += produce
-
-
-func _market(day: int) -> void:
-	if day % Defs.PROCESS_GOODS_INTERVAL == obj_id % Defs.PROCESS_GOODS_INTERVAL:
-		for f in linked_firms:
-			if f.code == "FACTORY" and f.raw != "" and f.stock > 0 and not f.under_construction:
-				var cur: float = goods.get(f.raw, 0.0)
-				var qty := minf(f.stock, STOCK_CAP - cur)
-				if f.nation_id != nation_id:
-					var n := nation()
-					qty = minf(qty, maxf(0.0, n.cash) / Defs.PRODUCT_PRICE)
-					n.import_goods(f.nation_id, qty * Defs.PRODUCT_PRICE)
-				f.stock -= qty
-				goods[f.raw] = cur + qty
-	# Sell to linked towns of any nation: demand is proportional to their population.
-	var pop := 0
-	for t in linked_towns:
-		pop += t.population
-	if pop == 0:
-		return
-	for g in goods:
-		var sale := minf(goods[g], pop * 1.0 / 30.0)
-		if sale <= 0:
-			continue
-		goods[g] -= sale
-		var income := sale * Defs.CONSUMER_PRICE
-		if Game.inst.blessed(nation_id, "CHINESE"):
-			income *= 1.3
-		market_sales += income
-		var n := nation()
-		if n:
-			n.add_cash(income, "Sale of goods")
-
-
-const CARAVAN_COST := 100.0
-const MAX_CARAVANS := 3
-
-
+## FirmMarket::hire_caravan (free; one for every ten of the kingdom's people).
 func hire_caravan() -> Unit:
-	var n := nation()
-	if code != "MARKET" or under_construction or n == null or not n.can_afford(CARAVAN_COST):
-		return null
-	if Game.inst.caravans_of(self) >= MAX_CARAVANS or not Assets.has_sprite("CARAVAN"):
-		return null
-	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
-	var u := Game.inst.spawn_unit("CARAVAN", nation_id, c, 10.0)
-	if u:
-		n.add_cash(-CARAVAN_COST, "Caravans")
-		u.caravan_home = self
-	return u
+	return Caravans.hire(self)
 
 
 func goods_types_available() -> Array:

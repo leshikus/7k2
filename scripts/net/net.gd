@@ -23,7 +23,7 @@ const DELAY_TURNS := 2
 const MAX_PLAYERS := 7
 const HASH_EVERY := 25
 ## Static classes a command may call (resolved by name on every machine).
-const STATIC_TARGETS := ["Espionage", "SpecialFirms", "Training"]
+const STATIC_TARGETS := ["Espionage", "SpecialFirms", "Training", "Economy"]
 
 var peer: ENetMultiplayerPeer = null
 var is_host := false
@@ -290,6 +290,7 @@ func _static(name: String) -> GDScript:
 		"Espionage": return Espionage
 		"SpecialFirms": return SpecialFirms
 		"Training": return Training
+		"Economy": return Economy
 	return null
 
 

@@ -26,7 +26,7 @@ const BUTTONS := {
 	"BUILD": ["Build..."], "PROMOTE": ["Promote to General"], "F_PATROL": ["Send out brood"],
 	"F_RETCMP": ["Return"], "F_PROMOT": ["Promote to General"], "F_GRANT": ["Take over"],
 	"HIRECARA": ["Hire caravan"], "S_TRAIN": ["Train "], "MAKEWEAP": ["Catapult", "Ballista", "Spitfire", "Cannon", "Porcupine", "Unicorn", "Mega"],
-	"GDINVOKE": ["Invoke Greater Being"], "BLESS": ["Special Blessing"], "CARACOPY": ["Clone caravan"], "GB-B1": ["Special Blessing"], "TRAIN-C": ["Train spy"], "TRAIN-I": ["Train spy"], "TRAIN-S": ["Train spy"],
+	"GDINVOKE": ["Invoke Greater Being"], "BLESS": ["Special Blessing"], "CARACOPY": ["Clone caravan"], "GB-B1": ["Special Blessing"], "TRAIN-C": ["Train "], "TRAIN-I": ["Train "], "TRAIN-S": ["Train "],
 	"SPYNOTI0": ["Disguise"], "SPYNOTI1": ["Disguise", "Camouflage"], "SPYMENU": ["Mission", "Bribe", "Offer", "Assassinate", "Steal", "Incident", "Secret", "Recall"],
 	"CHG-MISS": ["Mission"],
 }
@@ -364,7 +364,7 @@ func _eval(c: Array) -> bool:
 		"diplomacy":
 			return pressed.has("<diplomacy>")
 		"foreign_caravan":
-			return g.units.any(func(u): return u.is_caravan and u.nation_id == p.id and not u.dead and u.caravan_dest and is_instance_valid(u.caravan_dest) and u.caravan_dest.nation_id != p.id)
+			return g.units.any(func(u): return u.is_caravan and u.nation_id == p.id and not u.dead and u.stops.any(func(st): return st["firm"].nation_id != p.id))
 	return false
 
 

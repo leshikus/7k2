@@ -207,23 +207,27 @@ func _ready() -> void:
 	m2.goods["Iron"] = 200.0
 	m1.goods.clear()
 	var car := g.spawn_unit("CARAVAN", p.id, g.free_unit_cell(Vector2i(m2.x1, m2.y1 + m2.h + 1)), 10.0)
-	car.caravan_home = m1
-	car.caravan_dest = m2
-	car._trade_at(m2, m1)
-	var bought: float = car.cargo.get("Iron", 0.0)
-	check(bought > 0.0, "the caravan loads goods abroad (%d)" % bought)
+	car.set_caravan_stop(0, m1)
+	car.set_caravan_stop(1, m2)
+	# UnitCaravan::market_auto_load_goods at the foreign market: what is above 100
+	Caravans._market_auto_load(car, m2)
+	var bought: float = car.cargo.get("P:Iron", 0.0)
+	check(is_equal_approx(bought, 100.0), "the caravan loads what is above 100 abroad (%d)" % bought)
 	check(is_equal_approx(5000.0 - p.cash, bought * Defs.PRODUCT_PRICE) and is_equal_approx(foe.cash - 5000.0, bought * Defs.PRODUCT_PRICE),
 		"paying %d x %.1f, which the seller earns (import_goods)" % [bought, Defs.PRODUCT_PRICE])
 	check(is_equal_approx(float(p.import_year.get(foe.id, 0.0)), bought * Defs.PRODUCT_PRICE), "the purchase counts as imports from them")
 	var cash_before := p.cash
 	var foe_before := foe.cash
-	car._trade_at(m1, null)
+	Caravans._market_unload(car, m1)
 	check(is_equal_approx(p.cash, cash_before) and is_equal_approx(foe.cash, foe_before) and m1.goods.get("Iron", 0.0) >= bought - 0.01,
 		"unloading at home costs and earns nothing")
+	car.cargo["P:Iron"] = 50.0
+	Caravans._market_unload(car, m2)
+	check(is_equal_approx(car.cargo.get("P:Iron", 0.0), 50.0), "nothing is unloaded at another kingdom's market")
 	p.cash = 10.0
-	m2.goods["Iron"] = 200.0
+	m2.goods["Iron"] = 300.0
 	car.cargo.clear()
-	car._trade_at(m2, m1)
-	check(car.cargo.get("Iron", 0.0) <= 10.0 / Defs.PRODUCT_PRICE + 0.01, "a kingdom buys only what its treasury pays for")
+	Caravans._market_auto_load(car, m2)
+	check(car.cargo.get("P:Iron", 0.0) <= 10.0 / Defs.PRODUCT_PRICE + 0.01, "a kingdom buys only what its treasury pays for")
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit(0 if ok else 1)

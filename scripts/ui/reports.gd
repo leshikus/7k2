@@ -306,8 +306,8 @@ func _trade() -> String:
 			var cargo := []
 			for g in u.cargo:
 				cargo.append("%s %d" % [g, int(u.cargo[g])])
-			var dest: String = u.caravan_dest.display_name() + " of the " + u.caravan_dest.nation().name if u.caravan_dest and is_instance_valid(u.caravan_dest) and u.caravan_dest.nation() else "?"
-			s += "  to %s, carrying %s\n" % [dest, ", ".join(cargo) if not cargo.is_empty() else "nothing"]
+			var route: Array = u.stops.map(func(st): return st["firm"].display_name() + ("" if st["firm"].nation_id == p.id or st["firm"].nation() == null else " of the " + st["firm"].nation().name))
+			s += "  %s, carrying %s\n" % [" ↔ ".join(route) if not route.is_empty() else "no stops", ", ".join(cargo) if not cargo.is_empty() else "nothing"]
 	if not any:
 		s += "  none\n"
 	s += "\nExports this year: %d gold. Imports: %d gold." % [int(p.income_by.get("Exports", 0.0)), int(p.expense_by.get("Imports", 0.0))]

@@ -75,7 +75,7 @@ static func save_path(g: Game, path: String, extra := {}) -> bool:
 		"talks": g.talks,
 		"rebels": Rebels.to_save(g),
 		"event_days": g.event_days, "fog_of_war": g.fog_of_war, "std_raw_sites": g.std_raw_sites,
-		"nation_days": [g.last_new_nation_day, g.last_del_nation_day], "wanderers": g.race_wanderers,
+		"nation_days": [g.last_new_nation_day, g.last_del_nation_day], "wanderers": g.race_wanderers, "links": g.link_state,
 		"quake": g.quake, "day_to_quake": g.day_to_quake, "tornado_count": g.tornado_count,
 		"contacts_ready": g.contacts_ready,
 		"fires": g.fires.keys().map(func(p): return [p.x, p.y, g.fires[p][0], g.fires[p][1]]),
@@ -172,7 +172,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
-		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "archers": [f.archers, f.target_archers, f.archer_progress],
+		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress],
 	}
 
 
@@ -186,7 +186,8 @@ static func _unit(u: Unit) -> Dictionary:
 		"spy": u.is_spy, "spy_skill": u.spy_skill, "spy_place": _id(u.spy_place), "spy_action": u.spy_action, "hidden": u.has_meta("hidden"),
 		"cloak": u.cloak_id, "camo": [u.camouflage_days, u.camouflage_power], "sleeper": u.sleeper_for, "loyalty": u.loyalty,
 		"item": [u.item_id, u.item_para],
-		"caravan_home": _id(u.caravan_home), "caravan_dest": _id(u.caravan_dest), "caravan_leg": u.caravan_leg, "cargo": u.cargo, "pick_up": u.pick_up,
+		"stops": u.stops.map(func(st): return {"firm": _id(st["firm"]), "x": st["x"], "y": st["y"], "pick": st["pick"], "picks": st["picks"]}),
+		"caravan": [u.dest_stop, u.journey, u.wait, u.market_auto, u.last_load_day], "cargo": u.cargo,
 	}
 
 
@@ -240,6 +241,10 @@ static func load_path(g: Game, path: String) -> String:
 	var ndays: Array = d.get("nation_days", [-1000, -1000])
 	g.last_new_nation_day = int(ndays[0])
 	g.last_del_nation_day = int(ndays[1])
+	g.link_state = {}
+	var lk: Dictionary = d.get("links", {})
+	for k in lk:
+		g.link_state[k] = [bool(lk[k][0]), bool(lk[k][1])]
 	g.race_wanderers = {}
 	var wand: Dictionary = d.get("wanderers", {})
 	for k in wand:
@@ -408,6 +413,13 @@ static func load_path(g: Game, path: String) -> String:
 		f.propagate = int(fd.get("propagate", 1))
 		var ra: Array = fd.get("rally", [-1, -1])
 		f.rally = Vector2i(int(ra[0]), int(ra[1]))
+		f.needed_workers = int(fd.get("needed_workers", f.needed_workers))
+		f.raws = fd.get("raws", {})
+		f.demand = fd.get("demand", {})
+		f.backup = fd.get("backup", {})
+		f.auto_switch = bool(fd.get("auto_switch", false))
+		f._out_idx = int(fd.get("out_idx", -1))
+		f.set_meta("worker_ids", fd.get("workers", []))
 		var arc: Array = fd.get("archers", [0, 0, 0])
 		f.archers = int(arc[0])
 		f.target_archers = int(arc[1])
@@ -486,15 +498,18 @@ static func load_path(g: Game, path: String) -> String:
 		var sp = by_id.get(int(ud.get("spy_place", 0)))
 		if sp is GameObj and ud.get("hidden", false):
 			g.spy_enter(u, sp)
-		var ch = by_id.get(int(ud.get("caravan_home", 0)))
-		if ch is Firm:
-			u.caravan_home = ch
-		var cd = by_id.get(int(ud.get("caravan_dest", 0)))
-		if cd is Firm:
-			u.caravan_dest = cd
-		u.caravan_leg = int(ud.get("caravan_leg", 0))
+		u.stops = []
+		for st in ud.get("stops", []):
+			var sf = by_id.get(int(st["firm"]))
+			if sf is Firm:
+				u.stops.append({"firm": sf, "x": int(st["x"]), "y": int(st["y"]), "pick": st["pick"], "picks": st["picks"]})
+		var cv: Array = ud.get("caravan", [-1, "none", 0, true, 0])
+		u.dest_stop = int(cv[0])
+		u.journey = str(cv[1])
+		u.wait = int(cv[2])
+		u.market_auto = bool(cv[3])
+		u.last_load_day = int(cv[4])
 		u.cargo = ud.get("cargo", {})
-		u.pick_up = ud.get("pick_up", [])
 		var hf = by_id.get(int(ud.get("home_firm", 0)))
 		if hf is Firm:
 			u.home_firm = hf
@@ -521,6 +536,12 @@ static func load_path(g: Game, path: String) -> String:
 		if bu is Unit:
 			f.builder = bu
 			_put_inside(bu, f)
+		for wid in f.get_meta("worker_ids", []):
+			var wt = by_id.get(int(wid))
+			if wt is Town:
+				f.worker_towns.append(wt)
+		if f.has_meta("worker_ids"):
+			f.remove_meta("worker_ids")
 		for eid in fd.get("extra", []):
 			var eu = by_id.get(int(eid))
 			if eu is Unit:
@@ -563,6 +584,7 @@ static func load_path(g: Game, path: String) -> String:
 	g.rng.seed = int(d["rng_seed"])
 	g.rng.state = int(d["rng_state"])
 	g.update_links()
+	g._update_workers()
 	g._update_fog()
 	g._ground_dirty = true
 	return ""

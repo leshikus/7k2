@@ -38,6 +38,7 @@ var _shoot_timer := 0
 const MAX_WALL_PROGRESS := 1000.0
 const WALL_COST := [0, 500, 1000]
 const WALL_BUILDERS := 5
+var wall_busy := 0               # peasants at work on the wall today (Town::process_wall's man power)
 var last_rebel_day := -1000
 var under_construction := false  # built by a unit or wagon (Town::process_construction)
 var build_progress := 0.0
@@ -167,6 +168,7 @@ func wall_max_hp() -> float:
 
 ## Town::process_wall: jobless villagers raise the wall, then repair it.
 func _process_wall() -> void:
+	wall_busy = 0
 	if Game.inst.frame - last_attacked_frame < Defs.FRAMES_PER_DAY * 4:
 		return
 	if nation_id > 0 and Game.inst.blessed(nation_id, "GREEK"):
@@ -179,10 +181,12 @@ func _process_wall() -> void:
 	var man := mini(WALL_BUILDERS, jobless())
 	if wall_level > 0 and wall_hp < wall_max_hp():
 		if man > 0 and (n == null or n.cash > 0):
+			wall_busy = man
 			wall_hp = minf(wall_max_hp(), wall_hp + man)
 			if n:
 				n.add_cash(-float(WALL_COST[wall_level]) * man / wall_max_hp(), "Walls")
 	elif wall_level < target_wall_level and man > 0 and (n == null or n.cash > 0):
+		wall_busy = man
 		wall_progress += man * 10.0
 		if n:
 			n.add_cash(-float(WALL_COST[wall_level + 1]) * man * 10.0 / MAX_WALL_PROGRESS, "Walls")
@@ -375,7 +379,12 @@ func next_day(day: int) -> void:
 		var farm := 1.0 + 0.25 * n.tech_level("FARMING")
 		if Game.inst.blessed(nation_id, "CARTH"):
 			farm += 0.05 * Game.inst.prayer_count(nation_id)
-		n.food += jobless() * farm * Defs.PEASANT_FOOD_YEAR_PRODUCTION / 365.0
+		# Town::process_food: the peasants not building walls farm; the player
+		# reaps 25/30 as much unless he started with a large treasure
+		var per_year := float(Defs.PEASANT_FOOD_YEAR_PRODUCTION)
+		if not n.is_ai and int(Game.inst.config.get("treasure", GameSetup.MODERATE)) <= GameSetup.MODERATE and Game.inst.config.get("setup", false):
+			per_year = per_year * 25.0 / 30.0
+		n.food += maxi(0, jobless() - wall_busy) * farm * per_year / 365.0
 		n.food -= population * float(Defs.UNIT_FOOD_YEAR_CONSUMPTION) / 365.0
 		if day % 365 == 0 and day > 0:
 			n.add_cash(population * float(Defs.TAX_PER_UNIT), "Taxes")

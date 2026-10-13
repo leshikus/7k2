@@ -193,7 +193,9 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   incidents that start wars, read a kingdom's secret reports and camouflage
   themselves; your own spies at home hunt intruders. Eight spying technologies at the
   Tower of Science. Soldiers and generals have loyalty, and disloyal men desert.
-* Caravans trading goods between your markets and those of friendly kingdoms.
+* The economy of the original: link switches, workers hired and paid, mines,
+  factories and markets passing goods along, the towns' demand, caravans with two
+  stops and pick-up choices, and the upkeep of soldiers, generals, spies and machines.
 * Town walls and village archers.
 * Seasonal rain and thunderstorms that slow units and strike with lightning.
 * Mountains, boulders and lakes from the original rock set; trees that grow and

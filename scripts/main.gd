@@ -27,7 +27,8 @@ var _editor_tool := {}         # scenario editor: what a left click places
 var _rally_firm: Firm = null   # building waiting for its rally point click
 var _cast_god: Unit = null         # Greater Being waiting for the click on where to cast
 var _found_town_unit: Unit = null  # unit waiting for the click on its new town's site
-var _route_caravan: Unit = null  # caravan waiting for the click on its destination market
+var _route_caravan: Unit = null  # caravan waiting for the click on a stop
+var _route_stop := 0
 var _spell_firm: Firm = null   # spell building waiting for its target click
 var _spell_code := ""
 var _spell_unit: Unit = null    # teleport: the unit picked by the first click
@@ -678,7 +679,8 @@ func _attach_game() -> void:
 	hud.found_town_requested.connect(func(u):
 		_found_town_unit = u
 		game.notify("Click where the new town should stand; right-click to cancel.", Vector2(-1, -1)))
-	hud.caravan_route_requested.connect(func(u):
+	hud.caravan_route_requested.connect(func(u, i):
+		_route_stop = i
 		_route_caravan = u
 		game.notify("Click the market this caravan should trade with; right-click to cancel.", Vector2(-1, -1)))
 	hud.rally_requested.connect(func(f):
@@ -1030,8 +1032,11 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _route_caravan != null:
 						var mk = game.object_at_screen(_world_mouse())
 						if mk is Firm and is_instance_valid(_route_caravan) and not _route_caravan.dead:
-							Net.cmd(_route_caravan, "set_caravan_dest", [mk])
-							game.notify("Caravan route set to %s." % mk.display_name() if mk.code == "MARKET" else "A caravan trades only at markets.", Vector2(-1, -1))
+							if Caravans.can_set_stop(_route_caravan, mk):
+								Net.cmd(_route_caravan, "set_caravan_stop", [_route_stop, mk])
+								game.notify("Stop %d: %s." % [_route_stop + 1, mk.display_name()], Vector2(-1, -1))
+							else:
+								game.notify("A caravan stops at your markets, mines and factories, and at markets of kingdoms you have a trade treaty with.", Vector2(-1, -1))
 						_route_caravan = null
 						return
 					if _rally_firm != null:

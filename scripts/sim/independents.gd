@@ -15,6 +15,8 @@ static func next_day(g: Game) -> void:
 	for t in g.towns.duplicate():
 		if t.dead or t.nation_id != 0 or t.under_construction or t.population <= 0:
 			continue
+		if day % 15 == t.obj_id % 15:
+			think_set_link(g, t)
 		if day % 60 == t.obj_id % 60:
 			think_unit_join_nation(g, t)
 		if day % 90 == t.obj_id % 90:
@@ -27,6 +29,17 @@ static func next_day(g: Game) -> void:
 
 static func _setting(g: Game, key: String, fallback):
 	return g.config.get(key, GameSetup.defaults().get(key, fallback))
+
+
+## Town::think_independent_set_link: an independent town works for a foreign
+## building only while its resistance to that kingdom is low (not for camps).
+static func think_set_link(g: Game, t: Town) -> void:
+	for f in t.linked_firms:
+		if f.dead or Espionage.is_camp(f) or f.code == "LAIR":
+			continue
+		var on := f.nation_id <= 0 or t.resistance_to(f.nation_id) <= Game.INDEPENDENT_LINK_RESISTANCE
+		if g.link_side(t, f) != on:
+			g.set_link(t, f, on)
 
 
 ## Town::think_independent_build_wall

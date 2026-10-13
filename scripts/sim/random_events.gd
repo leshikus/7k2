@@ -187,13 +187,13 @@ static func execute(g: Game, id: String) -> String:
 				var workers: int = f.workers()
 				# FirmWork::kill_all_worker: the workers came from linked towns
 				var left := workers
-				for t in f.worker_from:
+				for t in f.worker_towns.duplicate():
 					if left <= 0:
 						break
-					if is_instance_valid(t) and not t.dead:
-						var k := mini(int(f.worker_from[t]), mini(left, t.population - 1))
-						t.population -= maxi(0, k)
-						left -= maxi(0, k)
+					if is_instance_valid(t) and not t.dead and t.population > 1:
+						t.population -= 1
+						left -= 1
+				f.worker_towns.clear()
 				var where: Vector2 = f.center_loc()
 				var nid: int = f.nation_id
 				var what: String = f.display_name()

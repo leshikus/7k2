@@ -53,10 +53,14 @@ var camouflage_days := 0         # camouflaged spy: unseen by other kingdoms whi
 var camouflage_power := 0        # recharges a day at a time (Spy::camouflage_power)
 var sleeper_for := 0             # a bribed general or soldier: the kingdom he secretly serves
 var loyalty := 70.0              # a soldier's or general's loyalty to his kingdom (Unit::loyalty)
-var caravan_home: Firm = null     # market the caravan was hired at
-var caravan_dest: Firm = null     # the other market on its route
-var caravan_leg := 0              # 0 heading to dest, 1 heading home
-var cargo := {}                   # goods type -> quantity
+var stops: Array = []             # caravan: up to two stops {firm, x, y, pick, picks} (UnitCaravan::stop_array)
+var dest_stop := -1               # caravan: the stop it is heading for (dest_stop_id)
+var journey := "none"             # caravan: none | on_way | surround | inside (journey_status)
+var wait := 0                     # caravan: frames to wait (wait_count)
+var market_auto := true           # caravan: markets pick up automatically (default_market_trade_mode)
+var last_load_day := 0            # caravan: last_load_goods_date
+var processed := {}               # caravan: what it unloaded at this stop (processed_*_qty_array)
+var cargo := {}                   # caravan: "R:<raw>" / "P:<raw>" -> quantity
 var wagon_pop := 0               # a wagon's settlers (UnitWagon::population)
 var wagon_race := ""             # and their race
 var found_site := Vector2i(-1, -1)   # where this unit goes to build a town (UNIT_SETTLE_TOWN)
@@ -69,8 +73,6 @@ var leader: Unit = null           # the general leading this man (Unit::leader_u
 var formation := 0               # a general's troop formation (TeamInfo::formation_id), 0 none
 var formation_dir := Vector2.ZERO   # its facing set with the number pad (formation_direction)
 var rebel_id := 0                # member of a rebel band (Unit::unit_mode REBEL)
-var pick_up: Array = []           # goods it loads; empty = what the next stop lacks (CaravanStop::pick_up_type)
-var _caravan_wait := 0
 var frozen_until := -1           # Amaterasu's freeze (frame)
 var waypoints: Array = []       # further places to go after this move (Shift+right-click)
 var weapon_version := 0          # war machine / Fryhtan unit: tech level it was built at (get_weapon_version)
@@ -482,7 +484,7 @@ func sim_frame() -> void:
 		match order:
 			Order.IDLE:
 				if is_caravan:
-					_caravan_think()
+					Caravans.think(self)
 				else:
 					_idle()
 			Order.MOVE:
@@ -578,117 +580,22 @@ func _idle() -> void:
 const CARAVAN_CARRY := 200.0      # MAX_CARAVAN_CARRY_QTY
 
 
-## Caravans shuttle goods between their market and another one (ou_cara.cpp, simplified).
-func _caravan_think() -> void:
-	if _caravan_wait > 0:
-		_caravan_wait -= 1
-		return
-	var g := Game.inst
-	if caravan_home == null or not is_instance_valid(caravan_home) or caravan_home.dead:
-		caravan_home = null
-		return
-	if caravan_dest == null or not is_instance_valid(caravan_dest) or caravan_dest.dead or not _can_trade_with(caravan_dest):
-		caravan_dest = g.find_trade_partner(caravan_home, nation_id)
-		caravan_leg = 0
-		if caravan_dest == null:
-			_caravan_wait = 60
-			return
-	var stop: Firm = caravan_dest if caravan_leg == 0 else caravan_home
-	if distance_to(stop) <= 1.0:
-		_trade_at(stop, caravan_home if caravan_leg == 0 else caravan_dest)
-		caravan_leg = 1 - caravan_leg
-		_caravan_wait = 40
-		return
-	order = Order.MOVE
-	_path_to(g.world.adjacent_to_rect(stop.footprint(), cell()))
-	if path.is_empty():
-		order = Order.IDLE
-		_caravan_wait = 60
+## Player commands (UnitCaravan::set_stop, set_stop_pick_up, del_stop,
+## duplicate_caravan); the logic is in Caravans.
+func set_caravan_stop(i: int, f: Firm) -> bool:
+	return Caravans.set_stop(self, i, f)
 
 
-func _can_trade_with(f: Firm) -> bool:
-	if f.nation_id == nation_id:
-		return true
-	return Diplomacy.has_trade(nation(), f.nation_id)
+func del_caravan_stop(i: int) -> void:
+	Caravans.del_stop(self, i)
 
 
-## Unload everything into `m`, then load what the next stop lacks.
-func _trade_at(m: Firm, next_stop: Firm) -> void:
-	var n := nation()
-	for gtype in cargo.keys():
-		var qty: float = minf(cargo[gtype], Firm.STOCK_CAP - float(m.goods.get(gtype, 0.0)))
-		if qty <= 0:
-			continue
-		# unloading is free: the goods were paid for where they were loaded
-		m.goods[gtype] = float(m.goods.get(gtype, 0.0)) + qty
-		cargo[gtype] -= qty
-	cargo = _nonzero(cargo)
-	if next_stop == null or not is_instance_valid(next_stop):
-		return
-	var room := CARAVAN_CARRY
-	for gtype in m.goods:
-		if room <= 0:
-			break
-		if not pick_up.is_empty() and not gtype in pick_up:
-			continue
-		var have: float = m.goods[gtype]
-		var there: float = next_stop.goods.get(gtype, 0.0)
-		if have > 60.0 and (there < 150.0 or not pick_up.is_empty()):
-			var take := minf(room, have - 30.0)
-			# UnitCaravan::market_load_goods_now: goods from another kingdom's
-			# market are bought, as far as the treasury goes
-			if m.nation_id != nation_id and n:
-				take = minf(take, maxf(0.0, n.cash) / Defs.PRODUCT_PRICE)
-				if take <= 0.0:
-					continue
-				n.import_goods(m.nation_id, take * Defs.PRODUCT_PRICE)
-			m.goods[gtype] = have - take
-			cargo[gtype] = float(cargo.get(gtype, 0.0)) + take
-			room -= take
+func set_caravan_pick_up(i: int, what: String) -> void:
+	Caravans.set_pick_up(self, i, what)
 
 
-## The player's choice of the caravan's other stop (UnitCaravan::set_stop): a
-## market of its own kingdom or of one with a trade treaty.
-func set_caravan_dest(m: Firm) -> bool:
-	if not is_caravan or m == null or m.dead or m.code != "MARKET" or m.under_construction or m == caravan_home:
-		return false
-	if not _can_trade_with(m):
-		return false
-	caravan_dest = m
-	caravan_leg = 0
-	_caravan_wait = 0
-	return true
-
-
-## Pick-up selection: toggles one kind of goods; none chosen = automatic.
-func toggle_pick_up(gtype: String) -> void:
-	if gtype in pick_up:
-		pick_up.erase(gtype)
-	else:
-		pick_up.append(gtype)
-
-
-## UnitCaravan::can_duplicate_caravan: its market (or a stop's) can hire one more.
-func duplicate_market() -> Firm:
-	for m in [caravan_home, caravan_dest]:
-		if m and is_instance_valid(m) and not m.dead and m.nation_id == nation_id and m.code == "MARKET" 				and Game.inst.caravans_of(m) < Firm.MAX_CARAVANS and nation() and nation().can_afford(Firm.CARAVAN_COST):
-			return m
-	return null
-
-
-## UnitCaravan::duplicate_caravan: a new caravan on the same route with the
-## same goods.
 func duplicate_caravan() -> Unit:
-	var m := duplicate_market()
-	if m == null:
-		return null
-	var c := m.hire_caravan()
-	if c:
-		var other: Firm = caravan_dest if m == caravan_home else caravan_home
-		if other and is_instance_valid(other):
-			c.set_caravan_dest(other)
-		c.pick_up = pick_up.duplicate()
-	return c
+	return Caravans.duplicate_of(self)
 
 
 static func _nonzero(d: Dictionary) -> Dictionary:
