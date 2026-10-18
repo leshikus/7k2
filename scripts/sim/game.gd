@@ -421,7 +421,7 @@ func _generate_starts(size: int) -> void:
 				var s := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), 20.0)
 				s.leadership = 20.0
 				fort.accept_unit(s)
-		var spot := world.adjacent_to_rect(town.footprint(), Vector2i(tpos.x + 3, tpos.y + 7))
+		var spot := exit_cell(town.footprint(), Vector2i(tpos.x + 3, tpos.y + 7))
 		if setup:
 			# create_one_human_asset: only a random start adds men outside, the
 			# fewer people the town has the more (soldiers 20-80, generals 30-100)
@@ -479,7 +479,7 @@ func _start_fryhtan(nat: Nation, at: Vector2i) -> void:
 		var u := spawn_unit(nat.monster_code, nat.id, Vector2i(at.x, at.y + lair.h + 1), 20.0)
 		if u:
 			lair.accept_unit(u)
-	var spot := world.adjacent_to_rect(lair.footprint(), Vector2i(at.x + 3, at.y + lair.h + 2))
+	var spot := exit_cell(lair.footprint(), Vector2i(at.x + 3, at.y + lair.h + 2))
 	for k in 2:
 		spawn_unit(nat.monster_code, nat.id, spot + Vector2i(k, 0), 40.0)
 
@@ -1075,7 +1075,7 @@ func spy_leave(u: Unit) -> void:
 	u.visible = true
 	if place and is_instance_valid(place):
 		u.cloak_id = place.nation_id if place.nation_id > 0 and place.nation_id != u.nation_id and nation(place.nation_id) and not nation(place.nation_id).is_fryhtan else 0
-		var c := world.adjacent_to_rect(place.footprint(), Vector2i(place.center_loc()))
+		var c := exit_cell(place.footprint(), Vector2i(place.center_loc()))
 		u.loc = Vector2(c)
 		u.position = Iso.to_screen(u.loc)
 	u.queue_redraw()
@@ -1694,6 +1694,31 @@ func remove_unit(u: Unit) -> void:
 
 
 ## Nearest walkable cell to `c` that no other unit stands on.
+## World::locate_space for a unit coming out of a building or town: the
+## empty walkable cell nearest `from`, in rings around the place; the cell is
+## counted as taken at once, so units let out together stand apart.
+func exit_cell(rect: Rect2i, from: Vector2i) -> Vector2i:
+	for r in range(1, 12):
+		var best := Vector2i(-1, -1)
+		var best_d := INF
+		var outer := rect.grow(r)
+		for y in range(outer.position.y, outer.end.y):
+			for x in range(outer.position.x, outer.end.x):
+				if x > outer.position.x and x < outer.end.x - 1 and y > outer.position.y and y < outer.end.y - 1:
+					continue        # only the ring
+				var p := Vector2i(x, y)
+				if not world.is_walkable(p) or unit_cells.get(p, 0) > 0:
+					continue
+				var d := Vector2(p - from).length_squared()
+				if d < best_d:
+					best_d = d
+					best = p
+		if best.x >= 0:
+			unit_cells[best] = unit_cells.get(best, 0) + 1
+			return best
+	return world.adjacent_to_rect(rect, from)
+
+
 func free_unit_cell(c: Vector2i) -> Vector2i:
 	for r in range(1, 4):
 		for dy in range(-r, r + 1):

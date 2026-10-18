@@ -44,10 +44,10 @@ func _summary(g: Game) -> Dictionary:
 	var towns := g.towns.map(func(t): return [t.obj_id, t.town_name, t.nation_id, t.x1, t.y1, t.population, int(t.loyalty), t.resistance.keys().size()])
 	towns.sort()
 	d["towns"] = towns
-	var firms := g.firms.map(func(f): return [f.obj_id, f.code, f.nation_id, f.x1, f.y1, f.under_construction, int(f.hp), f.overseer.obj_id if f.overseer else 0, f.soldiers.map(func(s): return s.obj_id), snappedf(f.stock, 0.001), f.research_tech])
+	var firms := g.firms.map(func(f): return [f.obj_id, f.code, f.nation_id, f.x1, f.y1, f.under_construction, roundi(f.hp), f.overseer.obj_id if f.overseer else 0, f.soldiers.map(func(s): return s.obj_id), snappedf(f.stock, 0.001), f.research_tech])
 	firms.sort()
 	d["firms"] = firms
-	var units := g.units.filter(func(u): return not u.dead).map(func(u): return [u.obj_id, u.sprite_code, u.nation_id, u.cell(), u.rank, int(u.combat), int(u.hp), u.inside_firm.obj_id if u.inside_firm else 0])
+	var units := g.units.filter(func(u): return not u.dead).map(func(u): return [u.obj_id, u.sprite_code, u.nation_id, u.cell(), u.rank, int(u.combat), roundi(u.hp), u.inside_firm.obj_id if u.inside_firm else 0])
 	units.sort()
 	d["units"] = units
 	d["trees"] = g._plants.size()

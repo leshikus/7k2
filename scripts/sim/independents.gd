@@ -75,7 +75,7 @@ static func think_unit_join_nation(g: Game, t: Town) -> void:
 	if best == null:
 		return
 	# Town::independent_unit_join_nation: he walks out and changes sides
-	var c := g.world.adjacent_to_rect(t.footprint(), Vector2i(t.x1 + 3, t.y1 + Defs.TOWN_SIZE))
+	var c := g.exit_cell(t.footprint(), Vector2i(t.x1 + 3, t.y1 + Defs.TOWN_SIZE))
 	var u := g.spawn_unit(Defs.unit_sprite(t.race, "CIV"), best.nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
 	if u == null:
 		return
@@ -119,7 +119,7 @@ static func can_form_new_ai_nation(g: Game) -> bool:
 ## town's loyalty 70-90; no surrender for two years; perhaps some extra cash,
 ## food or leaders.
 static func form_new_nation(g: Game, t: Town) -> int:
-	var c := g.world.adjacent_to_rect(t.footprint(), Vector2i(t.x1 + 3, t.y1 + Defs.TOWN_SIZE))
+	var c := g.exit_cell(t.footprint(), Vector2i(t.x1 + 3, t.y1 + Defs.TOWN_SIZE))
 	var n := g.add_nation(t.race)
 	var king := g.spawn_unit(Defs.unit_sprite(t.race, "INF"), n.id, c, float(70 + g.rng.randi() % 31))
 	if king == null:

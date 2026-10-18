@@ -56,7 +56,7 @@ static func hire(m: Firm) -> Unit:
 	if can_hire(m) <= 0 or not Assets.has_sprite("CARAVAN"):
 		return null
 	var g := Game.inst
-	var c := g.world.adjacent_to_rect(m.footprint(), m.door())
+	var c := g.exit_cell(m.footprint(), m.door())
 	var u := g.spawn_unit("CARAVAN", m.nation_id, c, 10.0)
 	if u:
 		u.loyalty = 100.0
@@ -310,7 +310,7 @@ static func _in_firm(u: Unit) -> void:
 		return
 	u.remove_meta("hidden")
 	u.visible = true
-	var c := Game.inst.world.adjacent_to_rect(f.footprint(), u.cell())
+	var c := Game.inst.exit_cell(f.footprint(), u.cell())
 	u.loc = Vector2(c)
 	u.position = Iso.to_screen(u.loc)
 	var nxt := (u.dest_stop + 1) % u.stops.size()

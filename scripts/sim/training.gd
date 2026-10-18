@@ -264,7 +264,7 @@ static func mobilize_all(f: Firm) -> Array:
 ## FirmTrain::create_trainee_unit
 static func _create_unit(f: Firm, rec: Dictionary) -> Unit:
 	var g := Game.inst
-	var c := g.world.adjacent_to_rect(f.footprint(), f.door())
+	var c := g.exit_cell(f.footprint(), f.door())
 	var spy = rec.get("spy")
 	var nid: int = f.nation_id if spy == null else int(spy["nation"])
 	var u := g.spawn_unit(rec["unit"], nid, c, maxf(1.0, rec["combat"]))

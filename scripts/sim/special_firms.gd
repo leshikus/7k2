@@ -165,7 +165,7 @@ static func _build_unit(f: Firm, weapon: bool) -> void:
 	if f.weapon_progress < 100.0:
 		return
 	f.weapon_progress = 0.0
-	var c := Game.inst.world.adjacent_to_rect(f.footprint(), f.door())
+	var c := Game.inst.exit_cell(f.footprint(), f.door())
 	var u := Game.inst.spawn_unit(f.weapon, f.nation_id, c, 20.0 if not weapon else 30.0)
 	f.send_to_rally(u)
 	if u:
@@ -216,7 +216,7 @@ static func hire_animal(f: Firm, i: int) -> Unit:
 		return null
 	var n := f.nation()
 	var a: Dictionary = f.animals[i]
-	var c := Game.inst.world.adjacent_to_rect(f.footprint(), f.door())
+	var c := Game.inst.exit_cell(f.footprint(), f.door())
 	var u := Game.inst.spawn_unit(a["unit"], f.nation_id, c, a["combat"])
 	if u == null:
 		return null
