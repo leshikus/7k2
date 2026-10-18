@@ -44,6 +44,7 @@ func _ready() -> void:
 	var spot := g.world.nearest_walkable(Vector2i(45, 45))
 	var u := g.spawn_unit(Defs.unit_sprite("NORMAN", "INF"), foe.id, spot, 20.0)
 	u.stop()
+	u.frozen_until = g.frame + 100000     # held there: a computer's unit would walk out (Unit::ai_escape_fire)
 	var hp0 := u.hp
 	g.set_fire(u.cell(), 1)
 	frames(g, Game.FIRE_SCAN * 5)

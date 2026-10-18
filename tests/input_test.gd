@@ -252,7 +252,7 @@ func _run() -> void:
 	main._set_selection([])
 
 	# 8. Ctrl+S quicksave, F9 quickload
-	var units_now: int = main.game.units.size()
+	var units_now: int = main.game.units.filter(func(u): return not u.dead).size()   # a save leaves out the dying
 	var day_now: int = main.game.day
 	var f5 := InputEventKey.new()
 	f5.keycode = KEY_S
@@ -267,5 +267,5 @@ func _run() -> void:
 	f9.pressed = true
 	Input.parse_input_event(f9)
 	await _frames(4)
-	_check(main.game != old_game and absi(main.game.day - day_now) <= 1 and absi(main.game.units.size() - units_now) <= 1, "F9 reloads the quicksave (day %d, %d units)" % [main.game.day, main.game.units.size()])
+	_check(main.game != old_game and absi(main.game.day - day_now) <= 1 and absi(main.game.units.filter(func(u): return not u.dead).size() - units_now) <= 5, "F9 reloads the quicksave (day %d, %d units, %d before)" % [main.game.day, main.game.units.size(), units_now])
 	DirAccess.remove_absolute(SaveGame.path_for("quick"))

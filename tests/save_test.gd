@@ -50,6 +50,8 @@ func _summary(g: Game) -> Dictionary:
 	var units := g.units.filter(func(u): return not u.dead).map(func(u): return [u.obj_id, u.sprite_code, u.nation_id, u.cell(), u.rank, int(u.combat), roundi(u.hp), u.inside_firm.obj_id if u.inside_firm else 0])
 	units.sort()
 	d["units"] = units
+	d["ai"] = g.nations.filter(func(n): return n.ai is NationAI).map(func(n): return [n.id, n.ai.actions.map(func(a): return [a["mode"], str(a["para"]), a["x"], a["y"], a["processing"], a["unit"].obj_id if a["unit"] else 0]), n.ai.attack_camps.size(), n.ai.capture_town.obj_id if n.ai.capture_town else 0, n.ai.secret_attack.keys(), n.prefs.get("peacefulness", -1), roundi(n.true_profit_365())])
+	d["firm_ai"] = g.firms.map(func(f): return [f.obj_id, f.should_close, f.setup_day, f.patrol_units.size(), f.is_attack_camp])
 	d["trees"] = g._plants.size()
 	d["fog"] = g.fog.count(1) + 1000 * g.fog.count(2)
 	d["sites"] = g.sites.map(func(s): return [s.x1, s.y1, roundi(s.reserve), s.mine.obj_id if s.mine else 0])

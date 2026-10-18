@@ -145,9 +145,12 @@ static func _nation(n: Nation) -> Dictionary:
 		"status_day": _int_keys_to_str(n.status_day), "war_count": _int_keys_to_str(n.war_count),
 		"never_until": n.never_until, "reject_day": n.reject_day, "sent_day": n.sent_day,
 		"prefs": n.prefs, "last_aid_day": n.last_aid_day,
+		"books": [n.fixed_expense_year, n.last_fixed_expense_year, n.cheat_year, n.last_cheat_year],
 	}
 	if n.ai:
 		d["ai"] = {"war_target": n.ai.war_target, "war_start_day": n.ai.war_start_day, "aggression": n.ai.aggression}
+		if n.ai is NationAI:
+			d["ai"]["plans"] = n.ai.to_dict()
 	return d
 
 
@@ -161,6 +164,7 @@ static func _town(t: Town) -> Dictionary:
 		"last_rebel_day": t.last_rebel_day,
 		"building": [t.under_construction, t.build_progress, t.builder_pop, t.builder_loyalty],
 		"wall_level": t.wall_level, "target_wall_level": t.target_wall_level, "wall_progress": t.wall_progress, "wall_hp": t.wall_hp,
+		"ai": [t.is_base_town, t.no_neighbor_space, t.setup_day],
 	}
 
 
@@ -174,6 +178,8 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
 		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "repair": f.repair, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress], "upgrade": [f.upgrading, f.upgrade_percent],
+		"ai": [f.should_close, f.no_neighbor_space, f.setup_day, f.patrol_units.map(func(u): return _id(u)), f.coming_units.map(func(u): return _id(u)),
+			f.ai_recruiting, _id(f.ai_capture_town), f.is_attack_camp, f.factory_count, f.last_import_day, f.no_town_since],
 	}
 
 
@@ -189,6 +195,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"item": [u.item_id, u.item_para],
 		"stops": u.stops.map(func(st): return {"firm": _id(st["firm"]), "x": st["x"], "y": st["y"], "pick": st["pick"], "picks": st["picks"]}),
 		"caravan": [u.dest_stop, u.journey, u.wait, u.market_auto, u.last_load_day], "cargo": u.cargo,
+		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action],
 	}
 
 
@@ -335,6 +342,13 @@ static func load_path(g: Game, path: String) -> String:
 			n.ai.war_target = int(ad.get("war_target", 0))
 			n.ai.war_start_day = int(ad.get("war_start_day", 0))
 			n.ai.aggression = float(ad.get("aggression", 1.0))
+			if ad.has("plans"):
+				n.set_meta("ai_plans", ad["plans"])
+		var books: Array = nd.get("books", [0.0, 0.0, 0.0, 0.0])
+		n.fixed_expense_year = float(books[0])
+		n.last_fixed_expense_year = float(books[1])
+		n.cheat_year = float(books[2])
+		n.last_cheat_year = float(books[3])
 		n.set_meta("king_id", int(nd["king"]))
 		g.nations.append(n)
 
@@ -386,6 +400,10 @@ static func load_path(g: Game, path: String) -> String:
 		t.target_wall_level = int(td.get("target_wall_level", 0))
 		t.wall_progress = float(td.get("wall_progress", 0.0))
 		t.wall_hp = float(td.get("wall_hp", 0.0))
+		var tai: Array = td.get("ai", [false, false, 0])
+		t.is_base_town = bool(tai[0])
+		t.no_neighbor_space = bool(tai[1])
+		t.setup_day = int(tai[2])
 		by_id[t.obj_id] = t
 
 	# firms
@@ -479,6 +497,10 @@ static func load_path(g: Game, path: String) -> String:
 		u.weapon_version = int(ud.get("ver", u.weapon_version))
 		u.life_frames = int(ud["life"])
 		u.dir = int(ud["dir"])
+		var uai: Array = ud.get("ai", [0, false, false])
+		u.ai_action_id = int(uai[0])
+		u.in_attack_mission = bool(uai[1])
+		u.ai_no_action = bool(uai[2])
 		u.set_meta("save", ud)
 		by_id[u.obj_id] = u
 
@@ -537,6 +559,26 @@ static func load_path(g: Game, path: String) -> String:
 		if ov is Unit:
 			f.overseer = ov
 			_put_inside(ov, f)
+		var fai: Array = fd.get("ai", [])
+		if fai.size() >= 11:
+			f.should_close = bool(fai[0])
+			f.no_neighbor_space = bool(fai[1])
+			f.setup_day = int(fai[2])
+			for i in fai[3]:
+				var pu = by_id.get(int(i))
+				if pu is Unit:
+					f.patrol_units.append(pu)
+			for i in fai[4]:
+				var cu = by_id.get(int(i))
+				if cu is Unit:
+					f.coming_units.append(cu)
+			f.ai_recruiting = bool(fai[5])
+			var cat = by_id.get(int(fai[6]))
+			f.ai_capture_town = cat if cat is Town else null
+			f.is_attack_camp = bool(fai[7])
+			f.factory_count = int(fai[8])
+			f.last_import_day = int(fai[9])
+			f.no_town_since = int(fai[10])
 		for sid in fd["soldiers"]:
 			var su = by_id.get(int(sid))
 			if su is Unit:
@@ -573,6 +615,10 @@ static func load_path(g: Game, path: String) -> String:
 		var k = by_id.get(int(n.get_meta("king_id", 0)))
 		n.king = k if k is Unit else null
 		n.remove_meta("king_id")
+		if n.has_meta("ai_plans") and n.ai is NationAI:
+			n.ai.from_dict(n.get_meta("ai_plans"), by_id)
+		if n.has_meta("ai_plans"):
+			n.remove_meta("ai_plans")
 
 	Assets.load_rocks()
 	for r in d.get("rocks", []):

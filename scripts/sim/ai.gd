@@ -30,11 +30,70 @@ var secret_attack := {}             # nation id -> true (NationRelation::ai_secr
 
 func _init(nation: Nation, game: Game) -> void:
 	super(nation, game)
-	init_personality()
+	# the personality is drawn on first use, so creating the kingdoms does not
+	# disturb the random numbers the map is generated with
 	# Nation::init: the computer grants gold before its people rebel
 	for t in g.towns:
 		if t.nation_id == n.id:
 			t.auto_grant_loyalty = Defs.REBEL_LOYALTY + 1
+
+
+# ---------------------------------------------------------------- saving ---
+
+static func _oid(o) -> int:
+	return o.obj_id if o != null and is_instance_valid(o) and not o.dead else 0
+
+
+func to_dict() -> Dictionary:
+	return {
+		"actions": actions.map(func(a):
+			var c: Dictionary = a.duplicate()
+			c["unit"] = _oid(a["unit"])
+			return c),
+		"last_action_id": last_action_id,
+		"capture": [_oid(capture_town), capture_plan_day, capture_start_day, capture_use_all],
+		"attack_camps": attack_camps.map(func(a): return [_oid(a["firm"]), a["combat"], a["distance"], a["patrol_day"]]),
+		"attack_targets": attack_targets.map(func(o): return _oid(o)),
+		"attack_nation": attack_target_nation, "lead_camp": _oid(lead_attack_camp),
+		"last_defend_day": last_defend_day, "secret_attack": secret_attack.keys(),
+	}
+
+
+func from_dict(d: Dictionary, by_id: Dictionary) -> void:
+	actions.clear()
+	for a in d.get("actions", []):
+		var c: Dictionary = a.duplicate()
+		for k in ["id", "mode", "x", "y", "rx", "ry", "retry", "instance", "processing", "processed", "add_day", "next_retry"]:
+			c[k] = int(c.get(k, 0))
+		if c["mode"] == SETTLE_TOWN or c["mode"] == SCOUT:
+			c["para"] = int(c["para"])
+		var u = by_id.get(int(a.get("unit", 0)))
+		c["unit"] = u if u is Unit else null
+		actions.append(c)
+	last_action_id = int(d.get("last_action_id", 0))
+	var cap: Array = d.get("capture", [0, 0, 0, false])
+	var ct = by_id.get(int(cap[0]))
+	capture_town = ct if ct is Town else null
+	capture_plan_day = int(cap[1])
+	capture_start_day = int(cap[2])
+	capture_use_all = bool(cap[3])
+	attack_camps.clear()
+	for a in d.get("attack_camps", []):
+		var f = by_id.get(int(a[0]))
+		if f is Firm:
+			attack_camps.append({"firm": f, "combat": int(a[1]), "distance": int(a[2]), "patrol_day": int(a[3])})
+	attack_targets.clear()
+	for i in d.get("attack_targets", []):
+		var o = by_id.get(int(i))
+		if o != null:
+			attack_targets.append(o)
+	attack_target_nation = int(d.get("attack_nation", -1))
+	var lc = by_id.get(int(d.get("lead_camp", 0)))
+	lead_attack_camp = lc if lc is Firm else null
+	last_defend_day = int(d.get("last_defend_day", -1000))
+	secret_attack.clear()
+	for k in d.get("secret_attack", []):
+		secret_attack[int(k)] = true
 
 
 ## Nation::init_personalty
@@ -59,6 +118,8 @@ func init_personality() -> void:
 
 
 func pref(k: String) -> int:
+	if not n.prefs.has("_set"):
+		init_personality()
 	return int(n.prefs.get(k, 50))
 
 

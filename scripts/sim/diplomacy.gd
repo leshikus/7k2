@@ -181,7 +181,13 @@ static func _enemy_military(g: Game, me: Nation) -> int:
 	return t
 
 
+const PREF_NAMES := {"allying": "allying_tendency", "cohesive": "territorial_cohesiveness", "courage": "military_courage",
+	"peace": "peacefulness", "retry": "diplomacy_retry", "trading": "trading_tendency"}
+
+
 static func _pref(n: Nation, k: String) -> int:
+	if n.ai is NationAI:
+		return n.ai.pref(PREF_NAMES.get(k, k))      # Nation::pref_*: the kingdom's personality
 	if not n.prefs.has(k):
 		n.prefs[k] = absi(hash([n.id, k])) % 101
 	return n.prefs[k]
