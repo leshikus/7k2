@@ -77,11 +77,7 @@ static func del_firm(ai: NationAI, f: Firm) -> void:
 	if f.dead:
 		return
 	if f.under_construction:
-		# Firm::cancel_construction: the setup cost comes back
-		var n := f.nation()
-		if n:
-			n.refund_expense(float(Defs.firm_types.get(f.code, {}).get("cost", 0)), "Construction")
-		f.die(null)
+		f.cancel_construction()
 	elif f.can_sell():
 		f.sell_firm()
 	else:

@@ -2597,6 +2597,14 @@ func on_object_attacked(victim: GameObj, attacker: GameObj) -> void:
 	call_for_help(victim, attacker)
 	if not (victim is Unit):
 		invoke_camp_defense(victim, attacker)
+	# the computer answers attacks on its places (Place::being_attack_hit) and leaders (Unit::ai_leader_being_attacked)
+	var vn := nation(victim.nation_id) if victim.nation_id > 0 else null
+	if vn and vn.ai is NationAI and attacker.nation_id != victim.nation_id and not victim.dead:
+		if victim is Unit:
+			if victim.is_human() and victim.rank >= Defs.Rank.GENERAL:
+				AIUnit.leader_attacked(vn.ai, victim, attacker)
+		else:
+			vn.ai.ai_defend(attacker)
 
 
 ## World::net_attacker_power_in_area: the power of the attacker's moving or
