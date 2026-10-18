@@ -182,7 +182,15 @@ func next_day(day: int) -> void:
 			AIFirm.process(self, f, day)
 	for u in g.units.duplicate():
 		if u.nation_id == n.id and not u.dead and u.inside_firm == null:
-			AIUnit.process(self, u, day)
+			if u.is_caravan:
+				Caravans.process_ai(u, day)          # UnitCaravan::process_ai
+			else:
+				AIUnit.process(self, u, day)
+	# FirmFort::think_train_archer
+	for f in my_firms("FORT"):
+		if not f.under_construction and f.target_archers == f.archers and f.archers < Firm.MAX_FORT_ARCHER:
+			if should_spend(pref("military_development") / 3, Firm.TRAIN_ARCHER_COST):
+				f.set_target_archers(-1)
 	Espionage.ai_think(n, g, war_target, day)
 	_use_gods()
 
