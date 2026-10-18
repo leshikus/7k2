@@ -227,8 +227,10 @@ func lead_skill() -> float:
 	return leadership + item_ability(Items.Ability.SKILL_LEVEL)
 
 
+## UnitInfo::is_human: a person - not a war machine, a Greater Being or a
+## Fryhtan (whose species stands in for its race).
 func is_human() -> bool:
-	return race != "" and not is_weapon and not is_god
+	return race != "" and not is_weapon and not is_god and not (utype.get("class", "") in SpecialFirms.FRYHTAN_CLASSES)
 
 
 ## Villagers (the *_CIV sprites) build, settle and spy but never garrison a fort.

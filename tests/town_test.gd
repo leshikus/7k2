@@ -184,6 +184,11 @@ func _ready() -> void:
 	g._update_workers()
 	var one := home.recruit_wagon()
 	_check(one != null and not one.is_wagon() and home.population == 0, "a lone villager walks instead")
+	# --- Fryhtans are not people: they cannot found towns
+	var fu := g.spawn_unit(fry.monster_code, p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(8, 8)), 30.0)
+	_check(fu != null and not fu.is_human() and not fu.can_found_town(), "a Fryhtan cannot build a town")
+	fu.die(null)
+
 	# --- selling: half the cost by hit points, only above 80%
 	var c0 := p.cash
 	mine.hp = mine.max_hp * 0.7
