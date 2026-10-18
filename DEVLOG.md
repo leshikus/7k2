@@ -886,3 +886,40 @@ New test: `economy_test`.
   of their own are now described.
 
 New tests: `town_test`, `scenarios_test`.
+
+
+## The original computer AI, and play fixes (18–19 Oct 2026)
+
+### The computer AI, ported
+The compact AI of our own design is replaced by a port of the original's:
+- `ai.gd` (NationAI): `oai_main` (personality, the main cycle at the pace of the
+  aggressiveness setting, cheats, yearly relation upkeep), `oai_act`/`oai_act2`
+  (the action queue: build, assign commander or soldiers, settle, scout, spy;
+  retries a week apart; actions dropped when the building type changed),
+  `oai_unit` (finding, hiring, recruiting units), `oai_seek`/`oai_buil` (mines,
+  best building places), `oai_mili`, `oai_eco` (the 365-day accounts without
+  the cheats, cost cutting), `oai_defe`.
+- `ai_town.gd` (otownai), `ai_firm.gd` (ofirmai, of_campa, of_forta, of_worka,
+  mines, factories, markets with caravan trade, towers, war factories, inns,
+  Seats of Power), `ai_unit.gd` (oun_ai), `ai_capture.gd` (oai_capt, oai_cap2,
+  spy assignment from oai_spy), `ai_attack.gd` (oai_attk), `ai_grand.gd`
+  (oai_gran, on_human), `fryhtan_ai.gd` + `ai_fryhtan.gd` (on_mons, of_laira,
+  of_lara2, the Fryhtan buildings' AIs).
+- The computer answers attacks on its places and leaders, and its plans are
+  saved with the game. Original quirks are kept where they shape play (e.g. a
+  fort's request for soldiers from elsewhere is dropped; the AI never builds a
+  Fortress; `good_relation_duration_rating` is never raised).
+
+### Player features and fixes
+- Sell building (half the cost by hit points, from 80% health), Cancel
+  construction (half back), camp-to-fort upgrade, unit and camp rewards
+  (30 gold, +10 loyalty).
+- Sortie modes (all / no commander / uninjured) on a right-click; one commander
+  per camp - a general entering takes command; camps and lairs hold 15.
+- Wagons as the original sends them; villagers throw stones and bricks; units
+  leaving a building stand apart instead of on one cell.
+- Fort occupants shown by their sprite; leadership shown for every soldier; a
+  tabbed start screen with one Start button; the placement preview in 3D;
+  scenario titles in capitals shown in title case; Fryhtans are not human (no
+  towns).
+

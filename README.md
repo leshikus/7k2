@@ -227,8 +227,12 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   or protect a named unit, conquer a town, reach a population, economy or military
   score, acquire a technology, an item or a scroll, ally with or defeat a kingdom,
   within a time limit.
-* Computer kingdoms that expand, build economies, research, recruit, raise armies,
-  clear lairs, declare war and make peace.
+* Computer kingdoms run by a port of the original's AI (`oai_*.cpp`, the
+  buildings' and units' AI files, `on_mons.cpp`, `of_laira.cpp`): a personality,
+  a main thought cycle paced by the aggressiveness setting, a queue of actions
+  carried out by its units, capture of villages and enemy towns, synchronised
+  attacks by several camps, grand plans and diplomacy; Fryhtan kingdoms raid for
+  life points, cow villages into tribute and buy wild lairs.
 
 ## Differences from the original
 
@@ -244,7 +248,9 @@ scripts/assets/   sk2_files.gd (format readers), assets.gd (autoload: install
                   detection, tables, decoded textures, audio)
 scripts/sim/      defs.gd (rules/constants), game.gd (world, time, links, fog,
                   events), unit.gd, firm.gd, town.gd, site.gd, bullet.gd,
-                  nation.gd, ai.gd, world_map.gd (grid, A*), iso.gd (projection)
+                  nation.gd, ai*.gd (the computer: kingdom, towns, buildings, units,
+                  capture, attack, grand plan, Fryhtans), world_map.gd (grid, A*),
+                  iso.gd (projection)
 scripts/view/     terrain shader, fog, ground layer, trees, placement preview
 scripts/ui/       start menu, HUD, minimap, selection box, campaign screen
 scripts/campaign/ the Fryhtan Wars campaign: story, provinces, battles, texts
