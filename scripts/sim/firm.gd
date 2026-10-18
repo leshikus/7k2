@@ -383,6 +383,38 @@ func send_to_rally(u: Unit) -> void:
 		u.order_move(rally)
 
 
+## FirmCamp::patrol: the sortie. ALL - the commander leads out every trained
+## soldier; NO_GENERAL - the soldiers go without him; NO_INJURED - only those
+## (commander too) within 25 hit points of full health. Men still in training
+## stay inside. The player's sortie is selected.
+enum { PATROL_ALL, PATROL_NO_GENERAL, PATROL_NO_INJURED }
+
+
+func patrol(kind: int) -> Array:
+	var out: Array = []
+	var general: Unit = null
+	if overseer and (kind == PATROL_ALL or (kind == PATROL_NO_INJURED and overseer.hp >= overseer.max_hp - 25.0)):
+		general = overseer
+		release_unit(general)
+		out.append(general)
+	for s in soldiers.duplicate():
+		if s.basic_days > 0:
+			continue
+		if kind == PATROL_NO_INJURED and s.hp < s.max_hp - 25.0:
+			continue
+		release_unit(s)
+		s.leader = general
+		out.append(s)
+	if nation_id == Game.inst.player_id and not out.is_empty():
+		for o in Game.inst.selected:
+			if is_instance_valid(o):
+				o.selected = false
+		Game.inst.selected = out.duplicate()
+		for u in out:
+			u.selected = true
+	return out
+
+
 func release_all_soldiers() -> void:
 	for s in soldiers.duplicate():
 		release_unit(s)
@@ -923,6 +955,29 @@ func on_attacked(attacker: GameObj) -> void:
 	if attacker and is_instance_valid(attacker) and not attacker.dead:
 		Game.inst.on_object_attacked(self, attacker)
 		_defend_timer = 0
+
+
+const CAN_SELL_HIT_POINTS_PERCENT := 80
+
+
+## Firm::can_sell: only a building in good repair can be sold.
+func can_sell() -> bool:
+	return not under_construction and int(hp) >= int(max_hp) * CAN_SELL_HIT_POINTS_PERCENT / 100
+
+
+## Firm::sell_firm: half the setup cost (and life points, for Fryhtans)
+## back, in proportion to the building's hit points.
+func sell_firm() -> void:
+	var n := nation()
+	if n == null or dead or not can_sell():
+		return
+	var ft: Dictionary = Defs.firm_types.get(code, {})
+	var k := float(int(hp)) / maxf(1.0, float(int(max_hp)))
+	n.add_cash(float(ft.get("cost", 0)) / 2.0 * k, "Sold buildings")
+	if n.is_fryhtan:
+		n.live_points += float(ft.get("live_cost", 0)) / 2.0 * k
+	Game.inst.play_sound("F", code, "SELL", center_loc())
+	die(null)
 
 
 func die(killer: GameObj) -> void:

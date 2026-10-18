@@ -33,7 +33,31 @@ var addr_edit: LineEdit
 var port_edit: LineEdit
 var mp_status: Label
 var mp_players: Label
-var mp_start: Button
+var mp_box: VBoxContainer
+var mode_tabs: TabBar
+var mode_note: Label
+var kingdom_box: GridContainer
+var map_box: VBoxContainer
+var scn_box: VBoxContainer
+var camp_box: VBoxContainer
+var camp_diff: OptionButton
+var camp_continue: CheckBox
+var tut_box: VBoxContainer
+var tut_opt: OptionButton
+var tut_text: Label
+var saved_box: VBoxContainer
+var saved_opt: OptionButton
+
+## The kinds of game, one tab each: [id, tab title, what it is]
+const MODES := [
+	["new", "New game", "A new world: choose your kingdom, the map and your opponents."],
+	["scenario", "Scenario", "A premade scenario with its own map, kingdoms and goals."],
+	["campaign", "Campaign", "The Fryhtan Wars: lead the Western Empire of your nationality through a campaign of battles."],
+	["tutorial", "Tutorial", "The original's lessons, one step at a time."],
+	["network", "Network", "Host or join a game over the network; once the others have joined, the host starts it with the settings below."],
+	["saved", "Saved game", "Carry on from a saved game."],
+	["editor", "Editor", "Make a scenario on a new map with these settings: place towns, buildings, armies and treasure, set up the kingdoms and their goals."],
+]
 
 
 func _ready() -> void:
@@ -105,57 +129,95 @@ func _ready() -> void:
 	vb.add_child(status)
 
 	setup_box = VBoxContainer.new()
+	setup_box.add_theme_constant_override("separation", 8)
 	vb.add_child(setup_box)
+	# what kind of game: one tab each, one Start button for all of them
+	mode_tabs = TabBar.new()
+	mode_tabs.clip_tabs = false
+	for m in MODES:
+		mode_tabs.add_tab(m[1])
+	mode_tabs.tab_changed.connect(func(_i): _show_mode())
+	setup_box.add_child(mode_tabs)
+	mode_note = Label.new()
+	mode_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mode_note.add_theme_font_size_override("font_size", 12)
+	mode_note.add_theme_color_override("font_color", Color(0.75, 0.7, 0.6))
+	setup_box.add_child(mode_note)
+
+	# your kingdom (new game, campaign, network game, editor)
+	kingdom_box = GridContainer.new()
+	kingdom_box.columns = 2
+	setup_box.add_child(kingdom_box)
+	name_edit = _row(kingdom_box, "Kingdom name", LineEdit.new())
+	race_opt = _row(kingdom_box, "Nationality", OptionButton.new())
+	race_opt.item_selected.connect(func(_i): _update_picture())
+
+	# the map and the opponents (new game, network game, editor)
+	map_box = VBoxContainer.new()
+	setup_box.add_child(map_box)
 	var grid := GridContainer.new()
 	grid.columns = 2
-	setup_box.add_child(grid)
-	name_edit = _row(grid, "Kingdom name", LineEdit.new())
-	race_opt = _row(grid, "Nationality", OptionButton.new())
-	race_opt.item_selected.connect(func(_i): _update_picture())
+	map_box.add_child(grid)
 	size_opt = _options(grid, "Map size", ["Small (120)", "Medium (160)", "Original (200)"], 2)
 	seed_edit = _row(grid, "Map seed", LineEdit.new())
 	seed_edit.text = str(randi() % 100000)
 	setup_pages = SetupPages.new()
-	setup_box.add_child(setup_pages)
+	map_box.add_child(setup_pages)
 	roster_check = CheckBox.new()
 	roster_check.text = "Bring the heroes and items of your profile"
 	roster_check.tooltip_text = "Heroes who survived your won games, and the items your men carried (PlayerProfile)."
 	setup_box.add_child(roster_check)
-	spectate_check = CheckBox.new()
-	spectate_check.text = "Watch AI vs AI (every kingdom is computer-controlled)"
-	setup_box.add_child(spectate_check)
-	start_btn = Button.new()
-	start_btn.text = "Start game"
-	start_btn.custom_minimum_size = Vector2(0, 40)
-	start_btn.pressed.connect(_start)
-	setup_box.add_child(start_btn)
-	# premade scenarios of the original game
-	var sh := HBoxContainer.new()
-	setup_box.add_child(sh)
-	var scn_label := Label.new()
-	scn_label.text = "Scenario"
-	sh.add_child(scn_label)
+
+	# premade scenarios
+	scn_box = VBoxContainer.new()
+	setup_box.add_child(scn_box)
 	scn_opt = OptionButton.new()
 	scn_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scn_opt.item_selected.connect(func(_i): _update_scenario())
-	sh.add_child(scn_opt)
-	var play := Button.new()
-	play.text = "Play scenario"
-	play.pressed.connect(_start_scenario)
-	sh.add_child(play)
+	scn_box.add_child(scn_opt)
 	scn_text = Label.new()
 	scn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	scn_text.custom_minimum_size = Vector2(520, 0)
 	scn_text.add_theme_font_size_override("font_size", 12)
-	setup_box.add_child(scn_text)
-	# a network game (Net): host or join, then the host starts with the settings above
-	var mp_box := VBoxContainer.new()
+	scn_box.add_child(scn_text)
+	spectate_check = CheckBox.new()
+	spectate_check.text = "Watch AI vs AI (every kingdom is computer-controlled)"
+	setup_box.add_child(spectate_check)
+
+	# the campaign: the Fryhtan Wars
+	camp_box = VBoxContainer.new()
+	setup_box.add_child(camp_box)
+	camp_diff = OptionButton.new()
+	for k in ["Difficulty 1 (easiest)", "Difficulty 2", "Difficulty 3", "Difficulty 4", "Difficulty 5 (hardest)"]:
+		camp_diff.add_item(k)
+	camp_diff.select(2)
+	camp_box.add_child(camp_diff)
+	camp_continue = CheckBox.new()
+	camp_continue.text = "Continue the campaign in progress"
+	camp_continue.visible = Campaign.exists()
+	camp_continue.button_pressed = Campaign.exists()
+	camp_continue.toggled.connect(func(_on): _show_mode())
+	camp_box.add_child(camp_continue)
+
+	# the learning campaigns: the original's tutorial lessons
+	tut_box = VBoxContainer.new()
+	setup_box.add_child(tut_box)
+	tut_opt = OptionButton.new()
+	for l in Tutorial.LESSONS:
+		tut_opt.add_item(l["name"])
+	tut_opt.item_selected.connect(func(_i): _show_mode())
+	tut_box.add_child(tut_opt)
+	tut_text = Label.new()
+	tut_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tut_text.custom_minimum_size = Vector2(520, 0)
+	tut_text.add_theme_font_size_override("font_size", 12)
+	tut_box.add_child(tut_text)
+
+	# a network game (Net): host or join; the host starts with the settings above
+	mp_box = VBoxContainer.new()
 	setup_box.add_child(mp_box)
 	var mh := HBoxContainer.new()
 	mp_box.add_child(mh)
-	var ml := Label.new()
-	ml.text = "Network game"
-	mh.add_child(ml)
 	addr_edit = LineEdit.new()
 	addr_edit.text = "127.0.0.1"
 	addr_edit.placeholder_text = "Host address"
@@ -170,21 +232,24 @@ func _ready() -> void:
 	hb.pressed.connect(func():
 		var err := Net.host(port_edit.text.to_int(), _player_name(), _race_code())
 		if err != "":
-			mp_status.text = err)
+			mp_status.text = err
+		_show_mode())
 	mh.add_child(hb)
 	var jb := Button.new()
 	jb.text = "Join"
 	jb.pressed.connect(func():
 		var err := Net.join(addr_edit.text.strip_edges(), port_edit.text.to_int(), _player_name(), _race_code())
 		if err != "":
-			mp_status.text = err)
+			mp_status.text = err
+		_show_mode())
 	mh.add_child(jb)
 	var lb2 := Button.new()
 	lb2.text = "Leave"
 	lb2.pressed.connect(func():
 		Net.leave()
 		mp_status.text = ""
-		mp_status.visible = false)
+		mp_status.visible = false
+		_show_mode())
 	mh.add_child(lb2)
 	mp_status = Label.new()
 	mp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -193,11 +258,6 @@ func _ready() -> void:
 	mp_players = Label.new()
 	mp_players.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mp_box.add_child(mp_players)
-	mp_start = Button.new()
-	mp_start.text = "Start the network game"
-	mp_start.visible = false
-	mp_start.pressed.connect(_start_network)
-	mp_box.add_child(mp_start)
 	mp_status.visible = false
 	mp_players.visible = false
 	Net.net_status.connect(func(t):
@@ -207,71 +267,25 @@ func _ready() -> void:
 	race_opt.item_selected.connect(func(_i):
 		if Net.online():
 			Net.set_race(_race_code()))
-	_refresh_lobby()
-	# the learning campaigns: the original's tutorial lessons
-	var th := HBoxContainer.new()
-	setup_box.add_child(th)
-	var tl := Label.new()
-	tl.text = "Tutorial"
-	th.add_child(tl)
-	var tut_opt := OptionButton.new()
-	for l in Tutorial.LESSONS:
-		tut_opt.add_item(l["name"])
-	tut_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tut_opt.item_selected.connect(func(i): scn_text.text = Tutorial.description(Tutorial.LESSONS[i]))
-	th.add_child(tut_opt)
-	var tb := Button.new()
-	tb.text = "Learn"
-	tb.pressed.connect(func():
-		var l: Dictionary = Tutorial.LESSONS[tut_opt.selected]
-		var path := Tutorial.map_path(l)
-		if path == "":
-			status.text = "The lesson's map is missing from the Tutorial folder of your install."
-			return
-		start_game.emit({"scenario": path, "seed": 1, "tutorial": l["id"]}))
-	th.add_child(tb)
-	# the campaign: the Fryhtan Wars
-	var ch := HBoxContainer.new()
-	setup_box.add_child(ch)
-	var cl := Label.new()
-	cl.text = "Campaign"
-	ch.add_child(cl)
-	var diff := OptionButton.new()
-	for k in ["Difficulty 1 (easiest)", "Difficulty 2", "Difficulty 3", "Difficulty 4", "Difficulty 5 (hardest)"]:
-		diff.add_item(k)
-	diff.select(2)
-	diff.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ch.add_child(diff)
-	var cb := Button.new()
-	cb.text = "New campaign"
-	cb.tooltip_text = "The Fryhtan Wars: lead the Western Empire of your nationality through a campaign of battles."
-	cb.pressed.connect(func():
-		if _is_fryhtan_pick():
-			status.text = "A campaign is led by a human nationality."
-			return
-		start_campaign.emit(_race_code(), diff.selected + 1))
-	ch.add_child(cb)
-	if Campaign.exists():
-		var cc := Button.new()
-		cc.text = "Continue the campaign"
-		cc.pressed.connect(func(): continue_campaign.emit())
-		setup_box.add_child(cc)
-	for slot in [["quick", "Load saved game"], ["autosave", "Continue from autosave"]]:
+
+	# saved games
+	saved_box = VBoxContainer.new()
+	setup_box.add_child(saved_box)
+	saved_opt = OptionButton.new()
+	saved_box.add_child(saved_opt)
+	for slot in [["quick", "Saved game"], ["autosave", "Autosave"]]:
 		if SaveGame.exists(slot[0]):
-			var lb := Button.new()
-			lb.text = "%s: %s" % [slot[1], SaveGame.describe(slot[0])]
-			var sl: String = slot[0]
-			lb.pressed.connect(func(): load_game.emit(sl))
-			setup_box.add_child(lb)
-	var ed := Button.new()
-	ed.text = "Scenario editor"
-	ed.tooltip_text = "Make a scenario on a new map with the settings above: place towns, buildings, armies and treasure, set up the kingdoms and their goals."
-	ed.pressed.connect(func():
-		var ecfg := GameSetup.to_config(setup_pages.setup, {"editor": true, "seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
-			"size": SIZES[size_opt.selected], "race": _race_code(), "kingdom_name": name_edit.text})
-		ecfg["reveal"] = true
-		start_game.emit(ecfg))
-	vb.add_child(ed)
+			saved_opt.add_item("%s: %s" % [slot[1], SaveGame.describe(slot[0])])
+			saved_opt.set_item_metadata(saved_opt.item_count - 1, slot[0])
+
+	start_btn = Button.new()
+	start_btn.text = "Start game"
+	start_btn.custom_minimum_size = Vector2(0, 44)
+	start_btn.add_theme_font_size_override("font_size", 18)
+	start_btn.pressed.connect(_start)
+	setup_box.add_child(start_btn)
+	_refresh_lobby()
+	_show_mode()
 	var cred := Button.new()
 	cred.text = "Credits"
 	cred.pressed.connect(_show_credits)
@@ -421,7 +435,7 @@ func _refresh_lobby() -> void:
 	if not Net.online() or Net.players.is_empty():
 		mp_players.text = ""
 		mp_players.visible = false
-		mp_start.visible = false
+		_show_mode()
 		return
 	mp_players.visible = true
 	var ids: Array = Net.players.keys()
@@ -437,8 +451,7 @@ func _refresh_lobby() -> void:
 	mp_players.text = "Players:
 " + "
 ".join(lines)
-	mp_start.visible = Net.is_host
-	mp_start.disabled = Net.players.size() < 2
+	_show_mode()
 
 
 func _start_network() -> void:
@@ -504,8 +517,9 @@ func _on_loaded() -> void:
 	scn_opt.clear()
 	for s in scenarios:
 		scn_opt.add_item("%s  (%s)" % [s["name"], ("difficulty %d" % s["difficulty"]) if s["source"] == "original" else s["source"]])
-	scn_opt.get_parent().visible = not scenarios.is_empty()
 	scn_text.text = ""
+	_update_scenario()
+	_show_mode()
 
 
 func _update_picture() -> void:
@@ -549,27 +563,99 @@ func _update_scenario() -> void:
 				return
 
 
-func _start_scenario() -> void:
-	if scn_opt.selected < 0 or scn_opt.selected >= scenarios.size():
+func _mode() -> String:
+	return MODES[mode_tabs.current_tab][0] if mode_tabs else "new"
+
+
+## Show the settings the chosen kind of game uses, and whether it can start.
+func _show_mode() -> void:
+	if mode_tabs == null or start_btn == null:
 		return
-	start_game.emit({
-		"scenario": scenarios[scn_opt.selected]["path"],
-		"seed": randi(),
-		"autoplay": spectate_check.button_pressed,
-		"reveal": spectate_check.button_pressed,
-	})
+	var m := _mode()
+	mode_note.text = MODES[mode_tabs.current_tab][2]
+	var continuing := m == "campaign" and camp_continue.button_pressed
+	kingdom_box.visible = m in ["new", "network", "editor"] or (m == "campaign" and not continuing)
+	map_box.visible = m in ["new", "network", "editor"]
+	roster_check.visible = m == "new"
+	spectate_check.visible = m in ["new", "scenario"]
+	scn_box.visible = m == "scenario"
+	camp_box.visible = m == "campaign"
+	camp_diff.visible = not continuing
+	tut_box.visible = m == "tutorial"
+	mp_box.visible = m == "network"
+	saved_box.visible = m == "saved"
+	if m == "tutorial" and tut_opt.selected >= 0:
+		tut_text.text = Tutorial.description(Tutorial.LESSONS[tut_opt.selected])
+	var ok := true
+	var why := ""
+	match m:
+		"scenario":
+			ok = not scenarios.is_empty()
+			why = "No scenarios were found."
+		"campaign":
+			ok = continuing or not _is_fryhtan_pick()
+			why = "A campaign is led by a human nationality."
+		"network":
+			ok = Net.online() and Net.is_host and Net.players.size() >= 2
+			why = "Host a game and wait for another player to join." if not Net.online() or Net.is_host else "The host starts the game."
+		"saved":
+			ok = saved_opt.item_count > 0
+			why = "There is no saved game."
+	start_btn.disabled = not ok
+	start_btn.tooltip_text = "" if ok else why
+	start_btn.text = "Open the editor" if m == "editor" else ("Continue" if m == "saved" or continuing else "Start game")
 
 
+func _seed() -> int:
+	return seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash()
+
+
+## The one Start button: begins the kind of game chosen on the tabs.
 func _start() -> void:
-	var cfg := GameSetup.to_config(setup_pages.setup, {
-		"seed": seed_edit.text.to_int() if seed_edit.text.is_valid_int() else seed_edit.text.hash(),
-		"size": SIZES[size_opt.selected],
-		"race": _race_code(),
-		"kingdom_name": name_edit.text,
-		"player_name": Profiles.current(),
-		"bring_roster": roster_check.button_pressed and Profiles.current() != "",
-		"autoplay": spectate_check.button_pressed,
-	})
-	if spectate_check.button_pressed:
-		cfg["reveal"] = true
-	start_game.emit(cfg)
+	match _mode():
+		"new":
+			var cfg := GameSetup.to_config(setup_pages.setup, {
+				"seed": _seed(),
+				"size": SIZES[size_opt.selected],
+				"race": _race_code(),
+				"kingdom_name": name_edit.text,
+				"player_name": Profiles.current(),
+				"bring_roster": roster_check.button_pressed and Profiles.current() != "",
+				"autoplay": spectate_check.button_pressed,
+			})
+			if spectate_check.button_pressed:
+				cfg["reveal"] = true
+			start_game.emit(cfg)
+		"scenario":
+			if scn_opt.selected < 0 or scn_opt.selected >= scenarios.size():
+				return
+			start_game.emit({
+				"scenario": scenarios[scn_opt.selected]["path"],
+				"seed": randi(),
+				"autoplay": spectate_check.button_pressed,
+				"reveal": spectate_check.button_pressed,
+			})
+		"campaign":
+			if camp_continue.button_pressed:
+				continue_campaign.emit()
+			elif _is_fryhtan_pick():
+				status.text = "A campaign is led by a human nationality."
+			else:
+				start_campaign.emit(_race_code(), camp_diff.selected + 1)
+		"tutorial":
+			var l: Dictionary = Tutorial.LESSONS[tut_opt.selected]
+			var path := Tutorial.map_path(l)
+			if path == "":
+				status.text = "The lesson's map is missing from the Tutorial folder of your install."
+				return
+			start_game.emit({"scenario": path, "seed": 1, "tutorial": l["id"]})
+		"network":
+			_start_network()
+		"saved":
+			if saved_opt.selected >= 0:
+				load_game.emit(saved_opt.get_item_metadata(saved_opt.selected))
+		"editor":
+			var ecfg := GameSetup.to_config(setup_pages.setup, {"editor": true, "seed": _seed(),
+				"size": SIZES[size_opt.selected], "race": _race_code(), "kingdom_name": name_edit.text})
+			ecfg["reveal"] = true
+			start_game.emit(ecfg)

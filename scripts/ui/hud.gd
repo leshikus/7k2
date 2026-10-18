@@ -1524,8 +1524,8 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					func(): _do(f, "set_target_archers", [-2]), "🏹")
 			_add_action("Eject all", func(): _do(f, "eject_all"))
 			_add_action("Fill from towns", func(): _fill_camp(f), true, "Villagers from your linked towns join this fort at once (towns need loyalty %d+)." % Defs.MIN_RECRUIT_LOYALTY)
-			if not f.soldiers.is_empty():
-				_add_action("Send out soldiers", func(): _do(f, "release_all_soldiers"))
+			# FirmCamp sortie: enabled with a commander or a trained soldier; right-click changes the kind
+			_sortie_button(f, "Send out soldiers")
 			_occupant_buttons(f)
 		"LAIR":
 			if f.is_fryhtan_lair():
@@ -1540,8 +1540,8 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				_add_action("Breed %s (%d gold, %d life)" % [ut.get("name", f.monster_code), int(ut.get("cost", 100)), int(ut.get("live_cost", 50))], func(): _do(f, "breed"),
 					f.soldiers.size() < f.capacity() and p.cash >= ut.get("cost", 100) and p.live_points >= ut.get("live_cost", 50),
 					"Breed a new Fryhtan in this lair. Life points come from slaying enemies.")
-			if not f.soldiers.is_empty():
-				_add_action("Send out brood", func(): _do(f, "release_all_soldiers"))
+			if f.is_fryhtan_lair():
+				_sortie_button(f, "Send out brood")
 			_occupant_buttons(f)
 		"MARKET":
 			_add_action("Hire caravan", func(): _do(f, "hire_caravan"), Caravans.can_hire(f) > 0,
@@ -1629,7 +1629,16 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 	if f.code in Firm.RALLY_FIRMS:
 		_add_action("Rally point" + (" ✓" if f.rally.x >= 0 else ""), func(): rally_requested.emit(f), true,
 			"Click: choose where the units made here gather. Right-click: clear it.", func(): _do(f, "clear_rally"))
-	_add_action("Demolish", func(): _do(f, "die", [null]), true, "Destroy this building. Units inside will leave.")
+	# Firm::disp_basic_info: Sell when it is in good repair, else Demolish
+	if f.can_sell():
+		var ft: Dictionary = Defs.firm_types.get(f.code, {})
+		var k := float(int(f.hp)) / maxf(1.0, float(int(f.max_hp)))
+		var lp := int(float(ft.get("live_cost", 0)) / 2.0 * k) if game.player().is_fryhtan else 0
+		_add_action("Sell building (%d%s)" % [int(float(ft.get("cost", 0)) / 2.0 * k), (" gold, %d life" % lp) if lp > 0 else ""],
+			func(): _do(f, "sell_firm"), true, "Sell this building for half its cost. Units inside will leave.")
+	else:
+		_add_action("Demolish", func(): _do(f, "die", [null]), true,
+			"Destroy this building. Units inside will leave." + ("" if f.under_construction else " Only a building above %d%% of its hit points can be sold." % Firm.CAN_SELL_HIT_POINTS_PERCENT))
 
 
 ## Firm::toggle_town_link / toggle_firm_link: the links this building can
@@ -1693,6 +1702,21 @@ func _train_actions(f: Firm) -> void:
 
 ## One button per occupant: left-click sends him out and selects him,
 ## right-click makes a soldier the commander (swapping with the current one).
+const PATROL_NAMES := ["all", "no leader", "no injured"]
+var patrol_state := Firm.PATROL_ALL      # of_campi.cpp's patrol_state: shared by all camps, kept while playing
+
+
+## FirmCamp sortie (of_campi.cpp button_patrol): enabled with a commander or
+## a trained soldier inside; right-click changes who goes.
+func _sortie_button(f: Firm, label: String) -> void:
+	if f.overseer == null and not f.soldiers.any(func(s): return s.basic_days <= 0):
+		return
+	var b := _add_action("%s: %s" % [label, PATROL_NAMES[patrol_state]], func(): _do(f, "patrol", [patrol_state]), true,
+		"Right-click: change who goes - all, led by the commander; the soldiers without their commander; or only the uninjured.",
+		func(): patrol_state = (patrol_state + 1) % 3)
+	b.text = "⚔ " + ["all", "no ★", "healthy"][patrol_state]
+
+
 func _occupant_buttons(f: Firm) -> void:
 	var occupants: Array = ([f.overseer] if f.overseer else []) + f.soldiers
 	for su in occupants:

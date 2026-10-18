@@ -99,6 +99,33 @@ func _ready() -> void:
 	var c1 := p.cash
 	_days(g, 3)
 	_check(fort.hp > fort.max_hp - 10.0 and p.cash < c1, "ordered, it is mended a point a day at its cost")
+	# --- the sortie: all, no leader, no injured; recruits in training stay
+	var camp: Firm = fort
+	camp.eject_all()
+	var gen := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, camp.door(), 60.0)
+	gen.rank = Defs.Rank.GENERAL
+	camp.accept_unit(gen)
+	var men: Array = []
+	for i in 4:
+		var s := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(camp.door()), 40.0)
+		camp.accept_unit(s)
+		s.basic_days = 0
+		men.append(s)
+	men[3].basic_days = 5
+	men[2].hp = men[2].max_hp - 30.0
+	var out1 := camp.patrol(Firm.PATROL_NO_GENERAL)
+	_check(camp.overseer == gen and out1.size() == 3 and not (men[3] in out1), "no leader: the trained soldiers go, the commander and the recruit stay")
+	for u in out1:
+		camp.accept_unit(u)
+		u.basic_days = 0
+	var out2 := camp.patrol(Firm.PATROL_NO_INJURED)
+	_check(gen in out2 and not (men[2] in out2) and out2.size() == 3, "no injured: the wounded man stays (%d out)" % out2.size())
+	_check(out2.all(func(u): return u == gen or u.leader == gen), "the commander leads his sortie")
+	for u in out2:
+		camp.accept_unit(u)
+	var out3 := camp.patrol(Firm.PATROL_ALL)
+	_check(gen in out3 and men[2] in out3 and not (men[3] in out3), "all: everyone trained goes out with the commander")
+
 	# --- a wagon takes the jobless first, then workers; one alone walks
 	var home: Town = g.towns.filter(func(x): return x.nation_id == p.id)[0]
 	var mine := g.spawn_firm("FACTORY", p.id, p.race, g._place_near(home.footprint(), 5, 5, 14), true)
@@ -121,5 +148,15 @@ func _ready() -> void:
 	g._update_workers()
 	var one := home.recruit_wagon()
 	_check(one != null and not one.is_wagon() and home.population == 0, "a lone villager walks instead")
+	# --- selling: half the cost by hit points, only above 80%
+	var c0 := p.cash
+	mine.hp = mine.max_hp * 0.7
+	_check(not mine.can_sell(), "a building below 80% of its hit points cannot be sold")
+	mine.hp = mine.max_hp
+	mine.sell_firm()
+	_check(mine.dead and is_equal_approx(p.cash - c0, float(Defs.firm_types["FACTORY"]["cost"]) / 2.0), "sold for half its cost (%d)" % int(p.cash - c0))
+	_check(ScenarioFile.fix_caps("FRY IN BOOTS") == "Fry in Boots" and ScenarioFile.fix_caps("GAUL: SECOND TIME LUCKY") == "Gaul: Second Time Lucky"
+		and ScenarioFile.fix_caps("ALEXANDER THE NOT SO GREAT (by Nick)") == "Alexander the Not So Great (by Nick)" and ScenarioFile.fix_caps("I Spy: DarkManX") == "I Spy: DarkManX",
+		"scenario names in capitals are shown in title case")
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit(0 if fails == 0 else 2)

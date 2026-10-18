@@ -118,6 +118,13 @@ func _ready() -> void:
 			_shot_after = a.substr(13).to_float()
 		elif a.begins_with("--shot-speed=") and game:
 			game.speed = a.substr(13).to_float()
+		elif a.begins_with("--build=") and game:
+			# placement preview with the cursor in the middle of the screen, for screenshots
+			_begin_build(a.substr(8))
+			var home: Array = game.towns.filter(func(t): return t.nation_id == game.player_id)
+			if not home.is_empty():
+				_shot_mouse = home[0].center_loc() + Vector2(9, 3)
+				camera.focus_on(_shot_mouse)
 		elif a.begins_with("--demo=") and game:
 			_demo(a.substr(7))
 		elif a.begins_with("--yaw=") and camera:
@@ -904,7 +911,12 @@ func _cast_on_click() -> void:
 	hud.refresh_selection(true)
 
 
+var _shot_mouse := Vector2(-1, -1)     # --build: where the placement preview stands
+
+
 func _mouse_loc() -> Vector2:
+	if _shot_mouse.x >= 0:
+		return _shot_mouse
 	return Iso.to_loc(_world_mouse())
 
 

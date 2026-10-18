@@ -13,7 +13,7 @@ const CODES := {
 	"Send out brood": "F_PATROL", "Fill from towns": "TRAIN", "Hire caravan": "HIRECARA",
 	"Clone caravan": "CARACOPY", "Set destination": "CSETSTOP", "Invoke Greater Being": "GDINVOKE",
 	"Special Blessing": "BLESS", "Collect tax": "COLLTAX", "Grant gold": "GRANT",
-	"Recruit peasant": "RECRUIT", "Demolish": "DESTFIRM", "Rally point": "RALLY",
+	"Recruit peasant": "RECRUIT", "Demolish": "DESTFIRM", "Sell building": "SELLFIRM", "Rally point": "RALLY",
 	"Build a town": "SETTLE", "Send out wagon": "WAGON", "Bribe": "BRIBE", "Assassinate": "ASSASSIN",
 	"Steal tech": "STEAL_T", "Incident": "INCIDENT", "Secret report": "VSECRET",
 	"Capture": "CAPTURE", "Mission": "CHG-MISS", "Recall spy": "MOBILSPY", "Take over": "F_GRANT",

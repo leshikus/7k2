@@ -91,8 +91,33 @@ static func _list_dir(dir_path: String, source: String) -> Array:
 					elif in_body and s != "":
 						body.append(s)
 				info["text"] = " ".join(body)
+		info["name"] = fix_caps(info["name"])
 		out.append(info)
 	return out
+
+
+const SMALL_WORDS := ["a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to"]
+
+
+## A title typed all in capitals ("FRY IN BOOTS") in title case ("Fry in
+## Boots"); the "(by ...)" credit after it is left as written.
+static func fix_caps(name: String) -> String:
+	var cut := name.find("(")
+	var title := name if cut < 0 else name.substr(0, cut)
+	if title.to_upper() != title or title.to_lower() == title:
+		return name
+	var words := title.split(" ")
+	var first := true
+	for i in words.size():
+		var w := words[i].to_lower()
+		if w == "":
+			continue
+		var bare := w.rstrip(":?!.,")
+		if not (bare in SMALL_WORDS) or first or words[i - 1].ends_with(":"):
+			w = w.left(1).to_upper() + w.substr(1)
+		words[i] = w
+		first = false
+	return " ".join(words) + ("" if cut < 0 else name.substr(cut))
 
 
 # ------------------------------------------------------------- parsing ---

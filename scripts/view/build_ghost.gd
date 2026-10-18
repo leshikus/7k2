@@ -21,6 +21,8 @@ func set_state(b: Dictionary, p: Vector2i, valid: bool, col: Color) -> void:
 	h = b.get("loc_h", 3)
 	ok = valid
 	color = col
+	# anchored at its centre like a building, so the 3D view places its card there
+	position = Iso.to_screen(Vector2(pos) + Vector2(w, h) * 0.5)
 	queue_redraw()
 
 
@@ -32,9 +34,10 @@ func render(cv) -> void:
 	if build.is_empty():
 		return
 	var tint := Color(0.4, 1.0, 0.4, 0.55) if ok else Color(1.0, 0.3, 0.3, 0.55)
+	var o := -position
 	var pts := PackedVector2Array([
-		Iso.to_screen(Vector2(pos.x, pos.y)), Iso.to_screen(Vector2(pos.x + w, pos.y)),
-		Iso.to_screen(Vector2(pos.x + w, pos.y + h)), Iso.to_screen(Vector2(pos.x, pos.y + h))])
+		o + Iso.to_screen(Vector2(pos.x, pos.y)), o + Iso.to_screen(Vector2(pos.x + w, pos.y)),
+		o + Iso.to_screen(Vector2(pos.x + w, pos.y + h)), o + Iso.to_screen(Vector2(pos.x, pos.y + h))])
 	cv.draw_colored_polygon(pts, Color(tint.r, tint.g, tint.b, 0.25))
 	pts.append(pts[0])
 	cv.draw_polyline(pts, tint, 2.0)
@@ -42,17 +45,17 @@ func render(cv) -> void:
 	var g := Game.inst
 	if g:
 		var c := Vector2(pos) + Vector2(w, h) * 0.5
-		var sc := Iso.to_screen(c)
+		var sc := Vector2.ZERO
 		for t in g.towns:
 			if Game._center_dist(c, t.center_loc()) <= Defs.EFFECTIVE_FIRM_TOWN_DISTANCE and t.visible:
-				cv.draw_line(sc, Iso.to_screen(t.center_loc()), Color(1, 0.9, 0.3, 0.8), 2.0)
+				cv.draw_line(sc, o + Iso.to_screen(t.center_loc()), Color(1, 0.9, 0.3, 0.8), 2.0)
 		for f in g.firms:
 			if f.nation_id == g.player_id and Game._center_dist(c, f.center_loc()) <= Defs.EFFECTIVE_FIRM_FIRM_DISTANCE:
-				cv.draw_line(sc, Iso.to_screen(f.center_loc()), Color(0.5, 0.8, 1.0, 0.8), 2.0)
+				cv.draw_line(sc, o + Iso.to_screen(f.center_loc()), Color(0.5, 0.8, 1.0, 0.8), 2.0)
 	var frames: Array = build.get("frames", [])
 	if frames.is_empty():
 		return
-	var origin := Iso.to_screen(Vector2(pos))
+	var origin := o + Iso.to_screen(Vector2(pos))
 	for rec in frames[0]["bitmaps"]:
 		var b := Assets.firm_bitmap(build, rec, color)
 		if not b.is_empty() and b[2] != 4:
