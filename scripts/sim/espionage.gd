@@ -398,6 +398,7 @@ static func betray(g: Game, u: Unit, to: int) -> void:
 	var old := u.nation_id
 	var team: Array = g.units.filter(func(m): return m.leader == u and not m.dead and m.inside_firm == null)
 	if u.inside_firm != null:
+		AIFirm.firm_captured(u.inside_firm, to)       # FirmCamp: the whole camp goes over
 		u.inside_firm.change_nation(to)
 		g.update_links()
 	else:
@@ -497,6 +498,7 @@ static func capture(f: Firm, nation_id: int) -> bool:
 	var gen := f.overseer
 	var rep := g.nation(nation_id).reputation if g.nation(nation_id) else 0.0
 	var old := f.nation_id
+	AIFirm.firm_captured(f, nation_id)
 	var leaving: Array = []
 	for s in f.soldiers:
 		if s.sleeper_for == nation_id:
@@ -719,74 +721,3 @@ static func secret_report(g: Game, nation_id: int) -> String:
 			rel.append("%s: %s" % [o.name, Defs.RELATION_NAMES[n.relation(o.id)]])
 	s += "Relations: %s\n" % ", ".join(rel)
 	return s
-
-
-# ------------------------------------------------------------------- AI ---
-
-## Spy::process_ai for a computer kingdom (ospy2.cpp, condensed): spies in the
-## field go into the camps and towns of the kingdom it fights (or guard home),
-## and spies inside a camp think about bribing, assassinating, stealing and
-## staging incidents once a month.
-static func ai_think(n: Nation, g: Game, war_target: int, day: int) -> void:
-	var mine := g.units.filter(func(u): return u.is_spy and u.nation_id == n.id and not u.dead)
-	var guarded := mine.any(func(u): return u.has_meta("hidden") and u.spy_place and u.spy_place.nation_id == n.id)
-	for sp in mine:
-		if sp.has_meta("hidden"):
-			if day % 30 == sp.obj_id % 30 and is_camp(sp.spy_place) and sp.spy_place.nation_id != n.id:
-				_ai_camp_spy(n, g, sp, sp.spy_place)
-			continue
-		if sp.order != Unit.Order.IDLE:
-			continue
-		var target: GameObj = null
-		if not guarded:
-			var home := g.towns.filter(func(t): return t.nation_id == n.id and not t.dead)
-			if not home.is_empty():
-				target = home[0]
-				guarded = true
-		elif war_target > 0:
-			var camps := g.firms.filter(func(f): return is_camp(f) and f.nation_id == war_target and not f.under_construction and f.overseer != null)
-			var towns := g.towns.filter(func(t): return t.nation_id == war_target and not t.dead)
-			var pool: Array = camps if not camps.is_empty() and g.rng.randi() % 2 == 0 else towns
-			if not pool.is_empty():
-				target = pool[g.rng.randi() % pool.size()]
-		else:
-			# at peace: wear down the resistance of the nearest independent village
-			var best_d := 40.0
-			for t in g.towns:
-				if t.dead or t.nation_id != 0 or spies_in(t).any(func(x): return x.nation_id == n.id):
-					continue
-				var d := t.center_loc().distance_to(sp.center_loc())
-				if d < best_d:
-					best_d = d
-					target = t
-		if target:
-			sp.order_infiltrate(target)
-
-
-static func _ai_camp_spy(n: Nation, g: Game, sp: Unit, f: Firm) -> void:
-	# Spy::think_bribe: the general, when it is worth the money
-	var o := f.overseer
-	if o and can_bribe(f, o, n.id) and sp.spy_skill >= maxf(MIN_BRIBE_SKILL, minf(50.0, o.lead_skill())):
-		var base := bribe_chance(sp, f, o, 0)
-		var amount := clampi(MAX_BRIBE_AMOUNT * (100 - base) / 100, 100, MAX_BRIBE_AMOUNT)
-		if n.cash > amount + 1500.0 and bribe_chance(sp, f, o, amount) > 50:
-			if bribe(sp, f, o, amount) and can_capture(f, n.id):
-				capture(f, n.id)
-			return
-	# Spy::think_assassinate
-	if can_assassinate(sp, f):
-		var r := assassinate_rating(sp, f)
-		if r[0] - r[1] + g.rng.randi() % 30 > 100:
-			assassinate(sp, f)
-			return
-	# Spy::think_steal_tech
-	if can_steal_tech(sp, f) and steal_rating(sp, f) > 50:
-		var theirs := g.nation(f.nation_id)
-		if Defs.TECHS.any(func(t): return theirs.tech_level(t["code"]) > n.tech_level(t["code"])):
-			steal_tech(sp, f)
-			return
-	# Spy::think_create_incident: set the enemy against a strong neighbour
-	if can_create_incident(sp, f) and g.rng.randi() % 4 == 0:
-		var others := incident_choices(sp, f).filter(func(id): return g.nation(id).relation(f.nation_id) != Defs.Relation.WAR)
-		if not others.is_empty() and steal_rating(sp, f, others[0]) > 50:
-			create_incident(sp, f, others[0])

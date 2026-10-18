@@ -251,7 +251,7 @@ func next_day(day: int) -> void:
 				Caravans.process_ai(u, day)          # UnitCaravan::process_ai
 			else:
 				AIUnit.process(self, u, day)
-	Espionage.ai_think(n, g, war_target, day)
+	AISpy.process_all(self, day)          # Spy::process_ai
 	_use_gods()
 
 
@@ -876,12 +876,58 @@ func find_best_place(code: String, ref: GameObj, distance := IDEAL_INTER_PLACE_S
 func think_build_firm() -> void:
 	if not _should_build_mine():
 		return
+	_think_attack_units_standing_on_mine()
+	if _think_build_mine():
+		return
+	_think_destroy_raw_site_guard()
+
+
+## Nation::think_attack_units_standing_on_mine: idle units of a kingdom no
+## better than neutral blocking a deposit are attacked with every camp.
+func _think_attack_units_standing_on_mine() -> bool:
+	for s in g.sites:
+		if s.mine != null or g.world.can_place(s.x1, s.y1, s.w, s.h):
+			continue
+		for u in g.units:
+			if u.dead or u.inside_firm != null or u.attacking or u.order != Unit.Order.IDLE or u.nation_id == n.id:
+				continue
+			if not s.footprint().has_point(u.cell()):
+				continue
+			if u.nation_id > 0 and relation(u.nation_id) <= Defs.Relation.NEUTRAL:
+				AIAttack.attack_target(self, u, int(u.obj_power()), false, null, true)
+				return true
+	return false
+
+
+## Nation::think_destroy_raw_site_guard: an idle unit of an unfriendly
+## kingdom guarding a free deposit where we have a base is driven off.
+func _think_destroy_raw_site_guard() -> bool:
+	if not n.is_fryhtan and not my_towns().any(func(t): return t.is_base_town):
+		return false
+	for s in g.sites:
+		if s.mine != null:
+			continue
+		for u in g.units:
+			if u.dead or u.inside_firm != null or u.order != Unit.Order.IDLE or u.attacking or u.nation_id == n.id or u.nation_id <= 0:
+				continue
+			if not s.footprint().has_point(u.cell()) or relation(u.nation_id) >= Defs.Relation.PEACE:
+				continue
+			var m := AICapture.mobile_defense_combat_level(self, s.center_loc(), u.nation_id, true)
+			if m[1] == -1:
+				continue
+			if AIAttack.attack_target(self, u, m[0], false, null, true):
+				return true
+	return false
+
+
+## Nation::think_build_mine
+func _think_build_mine() -> bool:
 	var s := _seek_mine()
 	if s == null:
-		return
+		return false
 	var mined := my_firms("MINE").filter(func(f): return f.raw == s.raw).size()
 	if mined > 0 and not should_spend(20):
-		return
+		return false
 	if not g.config.get("explore", true) and g.config.get("setup", false):
 		var ok := false
 		for t in my_towns():
@@ -889,8 +935,8 @@ func think_build_firm() -> void:
 				ok = true
 				break
 		if not ok:
-			return
-	add_action(Vector2i(s.x1, s.y1), Vector2i(s.x1, s.y1), BUILD_FIRM, "MINE")
+			return false
+	return not add_action(Vector2i(s.x1, s.y1), Vector2i(s.x1, s.y1), BUILD_FIRM, "MINE").is_empty()
 
 
 ## Nation::ai_should_build_mine

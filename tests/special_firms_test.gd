@@ -172,9 +172,12 @@ func _ready() -> void:
 	var arch_at := open_spot(g, Vector2i(hf.center_loc()) + Vector2i(12, 0), 5, 5)
 	var arch := g.spawn_firm("OFF_BLD4", human.id, human.race, arch_at, true)
 	var victims: Array = []
-	for k in 3:
-		var v := g.spawn_unit("GITH", p.id, Vector2i(arch.x1 + arch.w + 2, arch.y1 + k), 20.0)
+	# FirmMagic::think_cast_to_top: it fires when enough enemies are attacking it
+	for k in 20:
+		var v := g.spawn_unit("GITH", p.id, g.free_unit_cell(Vector2i(arch.x1 + arch.w + 1 + k % 3, arch.y1 + k / 3)), 20.0)
 		v.frozen_until = g.frame + 100000
+		v.order = Unit.Order.ATTACK
+		v.target = arch
 		victims.append(v)
 	cash0 = human.cash
 	SpecialFirms.next_day(arch, g.day)

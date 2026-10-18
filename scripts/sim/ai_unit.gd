@@ -35,7 +35,9 @@ static func process(ai: NationAI, u: Unit, day: int) -> void:
 		u.stop()
 		return
 	if u.order != Unit.Order.IDLE:
-		think_stop_chase(ai, u)
+		if think_stop_chase(ai, u):
+			return
+		think_aggressive_switch(ai, u, day)
 		return
 	if _escape_fire(ai, u):
 		return
@@ -558,3 +560,34 @@ static func think_use_item(ai: NationAI, u: Unit) -> bool:
 	if on and not should_on and t[Items.PARA] == Items.Para.CHARGE_TIMED:
 		u.item_para = -u.item_para        # Item::turn_off
 	return false
+
+
+## Unit::think_aggressive_action / think_aggressive_attack for a computer's
+## unit attacking a place that cannot shoot back: every third day it looks for
+## enemy units close by (further when a town's defenders are out) and fights
+## them first, going back to the place afterwards.
+static func think_aggressive_switch(ai: NationAI, u: Unit, day: int) -> void:
+	if u.order != Unit.Order.ATTACK or not u.can_attack() or (day + u.obj_id) % 3 != 0:
+		return
+	var t := u.target
+	if t == null or not is_instance_valid(t) or t.dead or t is Unit:
+		return
+	if (t is Firm and (Firm.TOWER_FIRMS.has(t.code) or (t.code == "FORT" and t.archers > 0))):
+		return
+	var ext := 8 if t is Town and not t.defenders.is_empty() else 0
+	var scan := 8.0 + ext + 4
+	var best: Unit = null
+	var best_d := INF
+	for e in ai.g.units_near(u.center_loc(), scan):
+		if e.dead or e.inside_firm != null or e.nation_id == u.nation_id or e.has_meta("hidden") or not ai.g.is_hostile(u, e):
+			continue
+		if e.hidden_from(u.nation_id):
+			continue
+		var d := _dist(e.center_loc(), u.center_loc())
+		if d <= scan and d < best_d:
+			best_d = d
+			best = e
+	if best:
+		u.order_attack(best)
+		u.resume_target = t
+

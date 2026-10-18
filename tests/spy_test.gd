@@ -255,8 +255,8 @@ func _ready() -> void:
 	mole.spy_skill = 60.0
 	g.spy_enter(mole, myfort)
 	foe.cash = 20000.0
-	for i in 31:
-		Espionage.ai_think(foe, g, 1, i)
+	for i in 61:
+		AISpy.process(foe.ai, mole, i)
 		if myfort.nation_id == 2 or mole.dead:
 			break
 	_check(myfort.nation_id == 2 or mole.dead or mygen.dead, "the computer's spy bribes our disloyal general and takes the fort (owner %d)" % myfort.nation_id)

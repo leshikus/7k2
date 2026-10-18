@@ -593,48 +593,105 @@ static func _rect_near(r: Rect2i, at: Vector2, radius: float) -> bool:
 	return Rect2(r).grow(radius).has_point(at)
 
 
-## Computer-run (and ownerless) spell buildings cast at the thickest group of
-## enemies in reach, and the Mage Tor at an enemy building (FirmMagic::process_ai).
+## FirmMagic::think_cast_magic: fully charged and at war, one of the
+## building's spells at random - Damage Building on a hostile building (a
+## damaged one first), the area spells where our fighting men face most
+## enemies, the spells about the building itself when it is besieged.
 static func auto_cast(f: Firm) -> void:
 	if f.cast_charge < Defs.MAX_CAST_DELAY or f.under_construction:
 		return
 	var g := Game.inst
-	for sp in Defs.FIRM_SPELLS.get(f.code, []):
-		if not can_cast(f, sp) or sp == "TELEPORT":
+	var n := f.nation()
+	if n == null or not g.nations.any(func(o): return o.alive and o != n and n.relation(o.id) == Defs.Relation.WAR):
+		return
+	var spells: Array = Defs.FIRM_SPELLS.get(f.code, [])
+	if spells.is_empty():
+		return
+	var sp: String = spells[g.rng.randi() % spells.size()]
+	match sp:
+		"DESTROY":
+			_think_destroy_building(f)
+		"FREEZE", "WOUND", "GOD_POWER":
+			_think_cast_to_area(f, sp)
+		"FREEZE_LASER", "LASER":
+			_think_cast_to_top(f, sp)
+		# "TELEPORT": the original's computer does not teleport
+
+
+static func _hostile_to(f: Firm, o: GameObj) -> bool:
+	var on := Game.inst.nation(o.nation_id) if o.nation_id > 0 else null
+	return on != null and on.relation(f.nation_id) == Defs.Relation.WAR
+
+
+## FirmMagic::think_destroy_building
+static func _think_destroy_building(f: Firm) -> void:
+	if not can_cast(f, "DESTROY"):
+		return
+	var g := Game.inst
+	var hostile: Array = g.firms.filter(func(o): return not o.dead and o.nation_id > 0 and _hostile_to(f, o))
+	if hostile.is_empty():
+		return
+	var best: Firm = null
+	var best_r := 0
+	for o in hostile:
+		if o.hp >= o.max_hp:
 			continue
-		var d := spell_def(sp)
-		if sp == "DESTROY":
-			var best: GameObj = null
-			var bd := float(d["range"])
-			for o in g.firms + g.towns:
-				if _enemy(f, o) and not (o is Town and o.nation_id == 0):
-					var dd := f.distance_to(o)
-					if dd < bd:
-						bd = dd
-						best = o
-			if best and cast(f, sp, best.center_loc()):
-				return
+		var r := int(100.0 - 100.0 * o.hp / o.max_hp)
+		if r > best_r:
+			best_r = r
+			best = o
+	if best == null:
+		best = hostile[g.rng.randi() % hostile.size()]
+	cast(f, "DESTROY", best.center_loc())
+
+
+## FirmMagic::think_cast_to_area: around each of our units that fought in the
+## last day, the enemies in nine cells of the spell's size are counted; cast
+## on the heaviest at once if it has 8 or more, else the best over 3.
+static func _think_cast_to_area(f: Firm, sp: String) -> void:
+	if not can_cast(f, sp):
+		return
+	var g := Game.inst
+	var radius := maxi(1, int(spell_def(sp)["radius"]))
+	var best_w := 0
+	var best_at := Vector2.ZERO
+	for u in g.units:
+		if u.dead or u.inside_firm != null or u.nation_id != f.nation_id or g.frame - u.last_attacked_frame > Defs.FRAMES_PER_DAY and not u.attacking:
 			continue
-		var reach := float(d["range"]) if not self_aimed(sp) else 0.0
-		var radius := float(d["radius"])
-		var best_at := Vector2(-1, -1)
-		var best_n := 1 if sp == "FREEZE" else 2
-		for u in g.units:
-			if not _enemy(f, u) or f.center_loc().distance_to(u.center_loc()) > maxf(reach, radius) + 2.0:
+		var c := u.cell()
+		var w := [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+		for e in g.units_near(u.center_loc(), float(radius * 3) + 1.0):
+			if e.dead or e.inside_firm != null or e.nation_id == f.nation_id or not _hostile_to(f, e):
 				continue
-			var at: Vector2 = u.center_loc() if reach > 0 else f.center_loc()
-			if reach > 0 and f.center_loc().distance_to(at) > reach:
-				continue
-			var cnt := 0
-			for v in _units_in(at, radius):
-				if _enemy(f, v):
-					cnt += 1
-				elif v.nation_id == f.nation_id:
-					cnt -= 1
-			if cnt > best_n:
-				best_n = cnt
-				best_at = at
-			if reach <= 0:
-				break
-		if best_at.x >= 0 and cast(f, sp, best_at):
+			var ec: Vector2i = e.cell()
+			var cy := 0 if ec.y < c.y - radius else (2 if ec.y > c.y + radius else 1)
+			var cx := 0 if ec.x < c.x - radius else (2 if ec.x > c.x + radius else 1)
+			w[cy][cx] += 1
+		for yy in 3:
+			for xx in 3:
+				if w[yy][xx] > best_w:
+					best_w = w[yy][xx]
+					best_at = Vector2(c.x + (xx - 1) * radius * 2, c.y + (yy - 1) * radius * 2) + Vector2(0.5, 0.5)
+		if best_w >= 8:
+			cast(f, sp, best_at)
 			return
+	if best_w > 3:
+		cast(f, sp, best_at)
+
+
+## FirmMagic::think_cast_to_top: the spells about the building, when many
+## enemies are attacking us here or a close fight is on.
+static func _think_cast_to_top(f: Firm, sp: String) -> void:
+	if not can_cast(f, sp):
+		return
+	var g := Game.inst
+	var own := 0
+	var enemy := 0
+	for u in _units_in(f.center_loc(), float(spell_def(sp)["radius"])):
+		if u.nation_id == f.nation_id:
+			own += 1
+		elif _hostile_to(f, u):
+			if u.order == Unit.Order.ATTACK and u.target != null and is_instance_valid(u.target) and u.target.nation_id == f.nation_id:
+				enemy += 1
+	if enemy > int(10.0 * f.hp / f.max_hp) + g.rng.randi() % 10 			or (enemy >= 5 and own >= 5 and own - enemy - 5 < g.rng.randi() % 20):
+		cast(f, sp, f.center_loc())

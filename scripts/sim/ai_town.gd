@@ -119,7 +119,8 @@ static func should_migrate(ai: NationAI, t: Town) -> bool:
 static func think_migrate(ai: NationAI, t: Town) -> void:
 	if ai.g.day < t.setup_day + 90:
 		return
-	var min_loyalty := 35 + 5 + ai.pref("loyalty_concern") / 10
+	# 35 + recruit_dec_loyalty(1, 0) + pref_loyalty_concern/10
+	var min_loyalty := 35 + int(minf(5.0, float(Defs.MAX_TOWN_POPULATION) / maxi(1, t.population))) + ai.pref("loyalty_concern") / 10
 	if t.loyalty < min_loyalty:
 		if t.grant_penalty == 0 and t.target_loyalty < min_loyalty + 5 and ai.should_spend(20 + ai.pref("territorial_cohesiveness") / 2):
 			t.grant(t.nation_id)

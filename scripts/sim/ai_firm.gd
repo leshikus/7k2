@@ -51,8 +51,10 @@ static func process(ai: NationAI, f: Firm, day: int) -> void:
 					return
 				_inn_think_hire_spy(ai, f)
 				_inn_think_hire_general(ai, f)
-		"STABLE", "SPY":
-			Training.process_ai(f, ai, day)        # FirmTrain/FirmSpy::process_ai (training.gd)
+		"STABLE":
+			Training.process_ai(f, ai, day)        # FirmTrain::process_ai (training.gd)
+		"SPY":
+			AISpy.college(ai, f, day)              # FirmSpy::process_ai
 		"BASE":
 			# FirmBase::think_invoke_god: as soon as the prayers are full
 			if ai.n.prayer_points >= Wishes.FULL and f.god_cost() <= ai.n.prayer_points:
@@ -1295,3 +1297,16 @@ static func _inn_think_hire_general(ai: NationAI, f: Firm) -> bool:
 				ai.add_action(Vector2i(best.x1, best.y1), Vector2i(-1, -1), NationAI.ASSIGN_OVERSEER, best.code, 1, u)
 			return true
 	return false
+
+
+## Firm::ai_firm_captured: the computer whose building is taken ends its
+## treaty with the captor and declares war on it.
+static func firm_captured(f: Firm, by: int) -> void:
+	var n := f.nation()
+	if n == null or not (n.ai is NationAI) or by <= 0 or by == n.id:
+		return
+	var ai: NationAI = n.ai
+	if ai.relation(by) >= Defs.Relation.PEACE:
+		AIGrand.end_treaty(ai, by)
+	Diplomacy._ai_send(ai.g, n, by, "DECLARE_WAR")
+

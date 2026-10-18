@@ -7,7 +7,7 @@ func _ready() -> void:
 	var species: Dictionary = Defs.monsters[0]
 	var g := Game.new()
 	add_child(g)
-	g.start({"seed": 9, "size": 100, "race": species["unit"], "ai_count": 2, "fryhtan_count": 1, "reveal": true})
+	g.start({"seed": 9, "size": 100, "race": species["unit"], "ai_count": 0, "fryhtan_count": 1, "reveal": true})   # no human kingdoms: they hunt down a kingdom without towns (Nation::think_deal_with_all_enemy)
 	var p := g.player()
 	var ok := true
 	print("player ", p.name, " fryhtan=", p.is_fryhtan, " monster=", p.monster_code, " life=", p.live_points, " cash=", p.cash)

@@ -2624,6 +2624,15 @@ func on_town_changed(t: Town, old_nation: int) -> void:
 	var n := nation(t.nation_id)
 	if n:
 		n.change_reputation(1.0)
+	# FirmCamp::think_linked_town_change_nation: a computer's camp trying to win
+	# a village another kingdom has taken gives up, unless the village has no
+	# protection
+	if old_nation == 0 and t.nation_id > 0:
+		for f in t.linked_firms:
+			var fn := nation(f.nation_id)
+			if fn and fn.ai is NationAI and f.nation_id != t.nation_id and Espionage.is_camp(f):
+				if AITown.protection_available(t) > 0:
+					f.should_close = true
 
 
 func on_town_destroyed(t: Town) -> void:

@@ -380,16 +380,11 @@ static func process_ai(f: Firm, ai, day: int) -> void:
 	var n := f.nation()
 	if n == null:
 		return
-	if f.code == "STABLE":
-		if day % 15 == f.obj_id % 15:
-			_think_train_special(f, n)
-		if day % 15 == (f.obj_id + 5) % 15:
-			_think_transfer(f, n, ai)
-	else:
-		if day % 30 == f.obj_id % 30:
-			_think_train_spy(f, n, ai)
-		if day % 30 == (f.obj_id + 15) % 30:
-			_think_spy_action(f, n)
+	# the espionage college's AI is AISpy.college (of_spya.cpp)
+	if day % 15 == f.obj_id % 15:
+		_think_train_special(f, n)
+	if day % 15 == (f.obj_id + 5) % 15:
+		_think_transfer(f, n, ai)
 	if day % 30 == f.obj_id % 30 and f.linked_towns.is_empty():
 		f.die(null)        # think_del: no town to draw from
 
@@ -450,46 +445,6 @@ static func _think_transfer(f: Firm, n: Nation, ai) -> void:
 			break
 		u.order_enter(best)
 		room -= 1
-
-
-## FirmSpy::think_train_new
-static func _think_train_spy(f: Firm, n: Nation, ai) -> void:
-	var g := Game.inst
-	var pref := Diplomacy._pref(n, "spy")
-	var pop := 0
-	for t in g.towns:
-		if t.nation_id == n.id and not t.dead:
-			pop += t.population
-	if pop < 30 - pref / 10:
-		return
-	var spies := g.units.filter(func(u): return u.is_spy and u.nation_id == n.id and not u.dead).size()
-	if spies > pop * (10 + pref / 5) / 100:
-		return
-	if not ai_should_spend(n, 25 + pref / 2):
-		return
-	if f.linked_towns.is_empty():
-		return
-	var start := g.rng.randi() % f.linked_towns.size()
-	for k in f.linked_towns.size():
-		var t: Town = f.linked_towns[(start + k + 1) % f.linked_towns.size()]
-		var civ := g.rng.randi() % 2 == 0
-		var type := CIVILIAN if civ else (INFANTRY if g.rng.randi() % 2 == 0 else SPECIAL)
-		if f.trainees.any(func(rec): return rec["race"] == t.race and (rec["type"] == CIVILIAN) == civ):
-			continue                 # has_spy: one of this kind in training already
-		if can_train_from_town(f, t, type) and recruit(f, t, type):
-			return
-
-
-## FirmSpy::think_spy_action: trained spies go out on missions (Espionage.ai_think
-## picks their targets), less often with a bad reputation.
-static func _think_spy_action(f: Firm, n: Nation) -> void:
-	var g := Game.inst
-	if n.reputation < 0 and g.rng.randi() % maxi(1, int(-n.reputation / 5)) != 0:
-		return
-	for i in range(f.trainees.size() - 1, -1, -1):
-		if not f.trainees[i]["training"]:
-			mobilize(f, i)
-			return
 
 
 # ------------------------------------------------------------------- info ---
