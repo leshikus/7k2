@@ -21,7 +21,10 @@ static func process(ai: NationAI, f: Firm, day: int) -> void:
 	if ai.g.config.has("tutorial"):
 		return
 	match f.code:
-		"CAMP", "FORT":
+		"FORT":
+			_think_train_archer(ai, f)       # FirmFort::process_ai
+			_process_camp(ai, f, day)
+		"CAMP":
 			_process_camp(ai, f, day)
 		"MINE":
 			_process_mine(ai, f, day)
@@ -355,8 +358,62 @@ static func _think_recruit(ai: NationAI, f: Firm) -> void:
 		f.ai_recruiting = false
 
 
+## FirmFort::think_train_archer
+static func _think_train_archer(ai: NationAI, f: Firm) -> bool:
+	if f.target_archers > f.archers:
+		return false
+	var imp := ai.pref("military_development") / 3 + (combat_level_needed(ai, f) - total_combat_level(f)) / 10
+	if not ai.should_spend(imp, Firm.TRAIN_ARCHER_COST):
+		return false
+	if f.target_archers == f.archers and f.target_archers < Firm.MAX_FORT_ARCHER:
+		f.set_target_archers(-1)
+		return true
+	return false
+
+
+## Nation::not_enough_food_index: 0..100, how serious the lack of food is.
+static func not_enough_food_index(ai: NationAI) -> int:
+	if ai.has_enough_food():
+		return 0
+	return mini(100, int(100.0 * -ai.yearly_food_change() / maxf(1.0, ai.n.food)))
+
+
+## FirmFort::ai_recruit: two at a time from the linked towns (its own race
+## first, rewarding a disloyal town first), the rest from elsewhere.
+static func _fort_recruit(ai: NationAI, f: Firm, count: int) -> bool:
+	if f.soldiers.size() + f.patrol_units.size() >= NationAI.MAX_SOLDIER or count == 0:
+		return false
+	if f.soldiers.filter(func(s): return s.basic_days > 0).size() >= 2:
+		return false
+	if not ai.has_enough_food():
+		count = count * (100 - not_enough_food_index(ai)) / 100
+		if count < 1:
+			return false
+	count = mini(mini(count, NationAI.MAX_SOLDIER - f.soldiers.size() - f.patrol_units.size()), 2)
+	if ai.n.cash > 0.0:
+		for loop in [1, 2]:
+			for t in f.linked_towns:
+				if t.nation_id != f.nation_id or (loop == 1 and t.race != f.race) or t.jobless() == 0:
+					continue
+				if t.loyalty < 40:
+					if t.grant_penalty > 30:
+						break
+					t.grant(t.nation_id)
+				while t.can_recruit():
+					if t.draft_into(f) == null:
+						break
+					count -= 1
+					if count == 0:
+						return true
+	if count > 0:
+		ai.add_action(Vector2i(f.x1, f.y1), Vector2i(-1, -1), NationAI.ASSIGN_SOLDIER, "CAMP", count)
+	return true
+
+
 ## FirmCamp::ai_recruit
 static func ai_recruit(ai: NationAI, f: Firm, count: int) -> bool:
+	if f.code == "FORT":
+		return _fort_recruit(ai, f, count)
 	if f.soldiers.size() + f.patrol_units.size() >= NationAI.MAX_SOLDIER or count == 0:
 		return false
 	count = mini(count, NationAI.MAX_SOLDIER - f.soldiers.size() - f.patrol_units.size())

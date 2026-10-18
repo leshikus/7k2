@@ -247,11 +247,6 @@ func next_day(day: int) -> void:
 				Caravans.process_ai(u, day)          # UnitCaravan::process_ai
 			else:
 				AIUnit.process(self, u, day)
-	# FirmFort::think_train_archer
-	for f in my_firms("FORT"):
-		if not f.under_construction and f.target_archers == f.archers and f.archers < Firm.MAX_FORT_ARCHER:
-			if should_spend(pref("military_development") / 3, Firm.TRAIN_ARCHER_COST):
-				f.set_target_archers(-1)
 	Espionage.ai_think(n, g, war_target, day)
 	_use_gods()
 
@@ -499,6 +494,15 @@ func _count_done() -> void:
 			actions.erase(a)
 
 
+## Nation::check_firm_ready: the building is still there, ours, and of the
+## type the action was queued for (a fort's request filed as a camp's is
+## dropped, as in the original).
+func _firm_ready(f: Firm, code: String) -> bool:
+	if f == null or f.dead or f.nation_id != n.id:
+		return false
+	return code == "" or code == "0" or f.code == code
+
+
 func _firm_at(x: int, y: int) -> Firm:
 	for f in g.firms:
 		if not f.dead and f.footprint().has_point(Vector2i(x, y)):
@@ -552,7 +556,7 @@ func _do_build_town(a: Dictionary) -> int:
 ## Nation::ai_assign_overseer
 func _do_assign_overseer(a: Dictionary) -> int:
 	var f := _firm_at(a["x"], a["y"])
-	if f == null or f.nation_id != n.id or not Espionage.is_camp(f):
+	if not _firm_ready(f, str(a["para"])) or not (Espionage.is_camp(f) or f.code == "LAIR"):
 		return -1
 	var u: Unit = a["unit"] if a["unit"] != null else get_unit(false, AIFirm.majority_race(f), Vector2i(a["x"], a["y"]))
 	if u == null:
@@ -571,7 +575,7 @@ func _do_assign_overseer(a: Dictionary) -> int:
 ## Nation::ai_assign_soldier
 func _do_assign_soldier(a: Dictionary) -> int:
 	var f := _firm_at(a["x"], a["y"])
-	if f == null or f.nation_id != n.id or not Espionage.is_camp(f):
+	if not _firm_ready(f, str(a["para"])) or not (Espionage.is_camp(f) or f.code == "LAIR"):
 		return -1
 	if f.soldiers.size() >= MAX_SOLDIER:
 		return -1
@@ -581,13 +585,6 @@ func _do_assign_soldier(a: Dictionary) -> int:
 	if u == null:
 		u = recruit_in_firm_soldier(f, str(a["para2"]))
 	if u == null:
-		# FirmCamp recruits from its linked towns as the player's "Recruit" does
-		for t in f.linked_towns:
-			if t.nation_id == n.id and t.can_recruit():
-				u = t.draft_into(f)
-				if u:
-					a["processing"] += 0
-					return 1
 		return 0
 	u.order_enter(f)
 	u.ai_action_id = a["id"]
