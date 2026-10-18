@@ -1651,8 +1651,12 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		_add_action("Sell building (%d%s)" % [int(float(ft.get("cost", 0)) / 2.0 * k), (" gold, %d life" % lp) if lp > 0 else ""],
 			func(): _do(f, "sell_firm"), true, "Sell this building for half its cost. Units inside will leave.")
 	else:
-		_add_action("Demolish", func(): _do(f, "die", [null]), true,
-			"Destroy this building. Units inside will leave." + ("" if f.under_construction else " Only a building above %d%% of its hit points can be sold." % Firm.CAN_SELL_HIT_POINTS_PERCENT))
+		if f.under_construction:
+			_add_action("Cancel construction", func(): _do(f, "cancel_construction"), true,
+				"Stop building: half the cost is refunded and the builder comes out.")
+		else:
+			_add_action("Demolish", func(): _do(f, "die", [null]), true,
+				"Destroy this building. Units inside will leave. Only a building above %d%% of its hit points can be sold." % Firm.CAN_SELL_HIT_POINTS_PERCENT)
 
 
 ## Firm::toggle_town_link / toggle_firm_link: the links this building can

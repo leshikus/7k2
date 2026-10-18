@@ -214,6 +214,16 @@ func _ready() -> void:
 	p.king.reward(p.id)
 	_check(p.king.loyalty == 50.0, "the king is not rewarded")
 
+	# --- cancelling a building site: half the cost back, the builder walks out
+	var site_at := g._place_near(home.footprint(), 5, 5, 18)
+	var uc := g.spawn_firm("INN", p.id, p.race, site_at, false)
+	var bld := g.spawn_unit(Defs.unit_sprite(p.race, "CIV"), p.id, g.free_unit_cell(site_at), 20.0)
+	uc.set_builder(bld)
+	var cash3 := p.cash
+	uc.cancel_construction()
+	_check(uc.dead and is_equal_approx(p.cash - cash3, float(Defs.firm_types["INN"]["cost"]) / 2.0), "a cancelled site refunds half its cost")
+	_check(not bld.dead and bld.inside_firm == null and bld.visible, "and its builder comes out")
+
 	# --- Fryhtans are not people: they cannot found towns
 	var fu := g.spawn_unit(fry.monster_code, p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(8, 8)), 30.0)
 	_check(fu != null and not fu.is_human() and not fu.can_found_town(), "a Fryhtan cannot build a town")
