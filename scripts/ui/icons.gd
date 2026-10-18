@@ -8,7 +8,7 @@ extends RefCounted
 ## [substring, icon], first match wins (case-insensitive); verbs before names.
 const RULES := [
 	# selection, toggles
-	["Mobilize all", "⇶"], ["Mobilize ", "🚶"], ["Cancel", "✖"], ["Stop converting", "⏹"], ["Stop", "⏹"],
+	["Mobilize all", "⇶"], ["Mobilize ", "🚶"], ["Cancel construction", "🚧"], ["Cancel", "✖"], ["Stop converting", "⏹"], ["Stop", "⏹"],
 	["No formation", "⁘"], ["Formation: Vanguard", "⏶"], ["Formation: Line", "☰"], ["Formation: Circle", "◯"],
 	["Formation: Arc", "◠"], ["Formation: Staggered", "⁙"], ["Formation: Square", "▦"], ["Formation: Sandwich", "≣"],
 	# building and towns

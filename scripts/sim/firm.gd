@@ -470,6 +470,23 @@ func eject_all() -> void:
 	extra_units.clear()
 
 
+## Firm::cancel_construction: half the setup cost (and life points) back;
+## the builder comes out and the site is cleared.
+func cancel_construction() -> void:
+	if dead or not under_construction:
+		return
+	var n := nation()
+	if n:
+		n.refund_expense(float(ftype.get("cost", 0)) / 2.0, "Construction")
+		if n.is_fryhtan:
+			n.live_points += float(ftype.get("live_cost", 0)) / 2.0
+	var b := builder
+	builder = null
+	if b and is_instance_valid(b) and not b.dead and b.inside_firm == self:
+		release_unit(b)
+	die(null)
+
+
 func set_builder(u: Unit) -> bool:
 	if not under_construction or u.nation_id != nation_id:
 		return false
