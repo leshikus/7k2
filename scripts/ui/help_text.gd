@@ -8,7 +8,7 @@ extends RefCounted
 
 ## our button label (its start) -> the original's help code
 const CODES := {
-	"Promote to General": "PROMOTE", "Demote to Soldier": "DEMOTE", "Build...": "BUILD",
+	"Promote to General": "PROMOTE", "Reward": "REWARD", "Demote to Soldier": "DEMOTE", "Build...": "BUILD",
 	"Return": "RETCAMP", "Send out soldiers": "PATROL", "Send out defenders": "PATROL",
 	"Send out brood": "F_PATROL", "Fill from towns": "TRAIN", "Hire caravan": "HIRECARA",
 	"Clone caravan": "CARACOPY", "Set destination": "CSETSTOP", "Invoke Greater Being": "GDINVOKE",

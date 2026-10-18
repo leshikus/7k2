@@ -200,6 +200,20 @@ func _ready() -> void:
 		g.frame += 1
 	_check(cmp.code == "FORT" and cmp.upgrading == "" and cmp.overseer == cg and cs in cmp.soldiers, "after 200 frames the camp is a fort with its commander and soldiers inside")
 
+	# --- rewards: 30 gold for 10 loyalty (Unit::reward, FirmCamp::reward)
+	cs.loyalty = 40.0
+	cg.loyalty = 70.0
+	var cash2 := p.cash
+	cmp.reward_least_loyal()
+	_check(cs.loyalty == 50.0 and cg.loyalty == 70.0 and is_equal_approx(cash2 - p.cash, 30.0), "the camp's least loyal man is rewarded")
+	var ru := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(9, -6)), 30.0)
+	ru.loyalty = 95.0
+	ru.reward(p.id)
+	_check(ru.loyalty == 100.0, "a reward lifts loyalty, up to 100")
+	p.king.loyalty = 50.0
+	p.king.reward(p.id)
+	_check(p.king.loyalty == 50.0, "the king is not rewarded")
+
 	# --- Fryhtans are not people: they cannot found towns
 	var fu := g.spawn_unit(fry.monster_code, p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(8, 8)), 30.0)
 	_check(fu != null and not fu.is_human() and not fu.can_found_town(), "a Fryhtan cannot build a town")

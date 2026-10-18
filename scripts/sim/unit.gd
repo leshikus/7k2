@@ -340,6 +340,20 @@ func promote() -> void:
 		leadership = maxf(leadership, 25.0)
 
 
+const REWARD_COST := 30.0                # gamedef.h
+const REWARD_LOYALTY_INCREASE := 10.0
+
+
+## Unit::reward: 30 gold for 10 more loyalty; not the king, not a war machine.
+func reward(from_nation: int) -> void:
+	var n := Game.inst.nation(from_nation)
+	if n == null or n.cash < REWARD_COST or rank == Defs.Rank.KING or not is_human():
+		return
+	if nation_id == from_nation:
+		loyalty = minf(100.0, loyalty + REWARD_LOYALTY_INCREASE)
+	n.add_cash(-REWARD_COST, "Rewards")
+
+
 func demote() -> void:
 	if rank == Defs.Rank.GENERAL and not is_hero:
 		rank = Defs.Rank.SOLDIER
