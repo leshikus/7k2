@@ -46,11 +46,19 @@ func render(cv) -> void:
 	if g:
 		var c := Vector2(pos) + Vector2(w, h) * 0.5
 		var sc := Vector2.ZERO
+		var code: String = build.get("firm", "")
+		var camp := code in ["CAMP", "FORT", "LAIR"]
+		var work := code in Firm.WORK_FIRMS
 		for t in g.towns:
-			if Game._center_dist(c, t.center_loc()) <= Defs.EFFECTIVE_FIRM_TOWN_DISTANCE and t.visible:
-				cv.draw_line(sc, o + Iso.to_screen(t.center_loc()), Color(1, 0.9, 0.3, 0.8), 2.0)
+			if not t.visible or Game._center_dist(c, t.center_loc()) > Defs.effective_distance(code, ""):
+				continue
+			if t.nation_id == 0 and not (work or code == "MARKET" or camp):
+				continue
+			if t.nation_id > 0 and t.nation_id != g.player_id and not camp:
+				continue
+			cv.draw_line(sc, o + Iso.to_screen(t.center_loc()), Color(1, 0.9, 0.3, 0.8), 2.0)
 		for f in g.firms:
-			if f.nation_id == g.player_id and Game._center_dist(c, f.center_loc()) <= Defs.EFFECTIVE_FIRM_FIRM_DISTANCE:
+			if f.nation_id == g.player_id and Game._center_dist(c, f.center_loc()) <= Defs.effective_distance(f.code, code):
 				cv.draw_line(sc, o + Iso.to_screen(f.center_loc()), Color(0.5, 0.8, 1.0, 0.8), 2.0)
 	var frames: Array = build.get("frames", [])
 	if frames.is_empty():

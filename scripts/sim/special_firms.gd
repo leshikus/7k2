@@ -89,7 +89,7 @@ static func can_take_lair(lair: Firm, nid: int, check_cash := true) -> bool:
 		return false
 	for f in Game.inst.firms:
 		if f.code == "LAIR" and f.nation_id == nid and f.overseer != null and not f.dead \
-				and Game._center_dist(f.center_loc(), lair.center_loc()) <= Defs.EFFECTIVE_FIRM_FIRM_DISTANCE:
+				and Game._center_dist(f.center_loc(), lair.center_loc()) <= Defs.effective_distance("LAIR", "LAIR"):
 			return true
 	return false
 

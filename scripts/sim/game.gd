@@ -2179,18 +2179,33 @@ func update_links() -> void:
 	for f in firms:
 		f.linked_towns.clear()
 		f.linked_firms.clear()
+	# Firm::setup_link: by World::effective_distance; buildings of one kingdom
+	# only (a lair may link to a wild lair); an independent village links to
+	# work places, markets and camps, a kingdom's town to its own buildings and
+	# to other kingdoms' camps, forts and lairs
 	for f in firms:
 		if f.dead:
 			continue
 		var fc := f.center_loc()
+		var camp: bool = f.code in ["CAMP", "FORT", "LAIR"]
+		var town_reach := Defs.effective_distance(f.code, "")
 		for t in towns:
 			if t.dead:
 				continue
-			if _center_dist(fc, t.center_loc()) <= Defs.EFFECTIVE_FIRM_TOWN_DISTANCE:
+			if t.nation_id == 0:
+				if not (f.is_work_firm() or f.code == "MARKET" or camp):
+					continue
+			elif t.nation_id != f.nation_id and not camp:
+				continue
+			if _center_dist(fc, t.center_loc()) <= town_reach:
 				f.linked_towns.append(t)
 				t.linked_firms.append(f)
 		for g in firms:
-			if g != f and not g.dead and _center_dist(fc, g.center_loc()) <= Defs.EFFECTIVE_FIRM_FIRM_DISTANCE:
+			if g == f or g.dead:
+				continue
+			if g.nation_id != f.nation_id and not (f.code == "LAIR" and g.code == "LAIR"):
+				continue
+			if _center_dist(fc, g.center_loc()) <= Defs.effective_distance(g.code, f.code):
 				f.linked_firms.append(g)
 
 
