@@ -564,7 +564,7 @@ func draft_into(f: Firm) -> Unit:
 func recruit() -> Unit:
 	if not can_recruit():
 		return null
-	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
+	var c := Game.inst.exit_cell(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
 	# Town::mobilize_town_people: a villager leaves as a civilian, not a soldier
 	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
 	if u == null:
@@ -593,7 +593,7 @@ func recruit_wagon() -> Unit:
 		return null
 	if count == 1:
 		return _mobilize_one()
-	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
+	var c := Game.inst.exit_cell(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
 	var w := Game.inst.spawn_unit("WAGON", nation_id, c, 100.0)
 	if w == null:
 		return null
@@ -620,7 +620,7 @@ func _recruit_dec_loyalty() -> void:
 
 ## Town::mobilize_town_people for a wagon of one: the villager walks.
 func _mobilize_one() -> Unit:
-	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
+	var c := Game.inst.exit_cell(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
 	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
 	if u == null:
 		return null
@@ -751,7 +751,7 @@ func mobilize_defender(attacker: GameObj) -> Unit:
 	else:
 		resistance[anid] = maxf(0.0, cur - dec)
 		last_attack_nation = anid
-	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(attacker.center_loc()))
+	var c := Game.inst.exit_cell(footprint(), Vector2i(attacker.center_loc()))
 	var lvl := clampi(town_combat_level + Game.inst.rng.randi() % 20 - 10, 10, 100)
 	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, float(lvl))
 	if u == null:

@@ -56,7 +56,7 @@ static func town_rebels(g: Game, t: Town) -> int:
 static func _rebel_unit(g: Game, t: Town, leader: bool) -> Unit:
 	if t.jobless() <= 0 and not leader:
 		return null
-	var c := g.world.adjacent_to_rect(t.footprint(), Vector2i(t.center_loc()) + Vector2i(0, 4))
+	var c := g.exit_cell(t.footprint(), Vector2i(t.center_loc()) + Vector2i(0, 4))
 	var u := g.spawn_unit(Defs.unit_sprite(t.race, "CIV"), 0, c, 10.0)
 	if u == null:
 		return null

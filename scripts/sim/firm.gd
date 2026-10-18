@@ -332,7 +332,7 @@ func release_unit(u: Unit, attack_target: GameObj = null) -> void:
 	u.inside_firm = null
 	if u.sleeper_for > 0 and u.sleeper_for != nation_id:
 		Game.inst.sleeper_wakes(u, self)
-	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
+	var c := Game.inst.exit_cell(footprint(), door())
 	if c.x < 0:
 		c = Vector2i(x1 + w, y1 + h - 1)
 	u.loc = Vector2(c)
@@ -767,7 +767,7 @@ func _complete() -> void:
 	builder = null
 	if b and is_instance_valid(b):
 		b.inside_firm = null
-		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
+		var c := Game.inst.exit_cell(footprint(), door())
 		b.loc = Vector2(c)
 		b.position = Iso.to_screen(b.loc)
 		b.visible = true
@@ -898,7 +898,7 @@ func _war_factory() -> void:
 	weapon_progress += 100.0 / days * productivity() / 100.0 * (1.0 + 0.25 * n.tech_level("WAR_PROD")) * Game.inst.work_speed(nation_id)
 	if weapon_progress >= 100.0:
 		weapon_progress = 0.0
-		var c := Game.inst.world.adjacent_to_rect(footprint(), door())
+		var c := Game.inst.exit_cell(footprint(), door())
 		var u := Game.inst.spawn_unit(weapon, nation_id, c, 30.0)
 		send_to_rally(u)
 		if u and nation_id == Game.inst.player_id:
@@ -947,7 +947,7 @@ func hire_hero(i: int) -> Unit:
 	n.add_cash(-float(hdef["cost"]), "Hiring")
 	heroes.remove_at(i)
 	var sprite := Defs.unit_sprite(hdef["race"], "SPU" if hdef["special"] else "INF")
-	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
+	var c := Game.inst.exit_cell(footprint(), door())
 	var u := Game.inst.spawn_unit(sprite, nation_id, c, hdef["combat"])
 	send_to_rally(u)
 	if u:
@@ -987,7 +987,7 @@ func invoke_god() -> Unit:
 	if g.is_empty() or not Assets.has_sprite(g["unit"]):
 		return null
 	n.prayer_points -= god_cost()
-	var c := Game.inst.world.adjacent_to_rect(footprint(), door())
+	var c := Game.inst.exit_cell(footprint(), door())
 	var u := Game.inst.spawn_unit(g["unit"], nation_id, c, 100.0)
 	send_to_rally(u)
 	if u:

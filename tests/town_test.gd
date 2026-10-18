@@ -125,6 +125,10 @@ func _ready() -> void:
 		camp.accept_unit(u)
 	var out3 := camp.patrol(Firm.PATROL_ALL)
 	_check(gen in out3 and men[2] in out3 and not (men[3] in out3), "all: everyone trained goes out with the commander")
+	var cells := {}
+	for u in out3:
+		cells[u.cell()] = true
+	_check(cells.size() == out3.size(), "the men come out on separate cells (%d men, %d cells)" % [out3.size(), cells.size()])
 
 	# --- one commander: a general entering takes over and the old one comes out
 	for u in out3:

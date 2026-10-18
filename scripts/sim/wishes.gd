@@ -282,7 +282,7 @@ static func _expose(g: Game, nid: int, tenths: int, place: GameObj = null) -> in
 static func _make_unit(g: Game, f: Firm, sprite: String, skill: float) -> Unit:
 	if not Assets.has_sprite(sprite):
 		return null
-	var c := g.world.adjacent_to_rect(f.footprint(), f.door())
+	var c := g.exit_cell(f.footprint(), f.door())
 	var u := g.spawn_unit(sprite, f.nation_id, c, skill)
 	f.send_to_rally(u)
 	return u
