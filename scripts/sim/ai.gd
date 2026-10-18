@@ -86,10 +86,9 @@ func total_unit_count() -> int:
 	return g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.is_human() and not u.is_civilian()).size()
 
 
+## NationBase::true_profit_365days
 func true_profit() -> float:
-	if n.last_income_year > 0.0 or n.last_expense_year > 0.0:
-		return n.last_income_year - n.last_expense_year
-	return n.income_year - n.expense_year
+	return n.true_profit_365()
 
 
 func military_rank() -> int:
@@ -168,9 +167,9 @@ func next_day(day: int) -> void:
 	_on_going()
 	# the original keeps its computer kingdoms afloat
 	if _aggressiveness() == GameSetup.NONE and not g.config.has("tutorial") and n.cash > 1000:
-		n.add_cash(ceilf(-n.cash / 500.0), "Other")
+		n.add_cheat(ceilf(-n.cash / 500.0))
 	if n.cash < 100:
-		n.add_cash(float(200 + g.rng.randi() % 500), "Other")
+		n.add_cheat(float(200 + g.rng.randi() % 500))
 	if n.food < 100:
 		n.food += 1000.0
 	if day % 360 == n.id % 360:

@@ -192,7 +192,7 @@ static func _yearly_food_use(g: Game, n: Nation) -> float:
 
 
 static func _fixed_expense(n: Nation) -> float:
-	return maxf(1.0, n.last_expense_year if n.last_expense_year > 0 else n.expense_year)
+	return maxf(1.0, n.fixed_expense_365())
 
 
 # ------------------------------------------------- what may be sent ---

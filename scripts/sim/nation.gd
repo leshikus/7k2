@@ -120,6 +120,49 @@ func add_cash(v: float, kind := "Other") -> void:
 	else:
 		expense_year -= v
 		expense_by[kind] = expense_by.get(kind, 0.0) - v
+		if kind in FIXED_EXPENSES:
+			fixed_expense_year -= v
+
+
+## Upkeep and pay the original books as fixed expenses (add_expense(..., 1)).
+const FIXED_EXPENSES := ["Buildings", "Units", "Generals", "Weapons", "Caravans", "Imports", "Conversion", "Workers", "Spies"]
+var fixed_expense_year := 0.0
+var last_fixed_expense_year := 0.0
+var cheat_year := 0.0                # NationBase::cur_year_cheat: what the computer gave itself
+var last_cheat_year := 0.0
+
+
+## NationBase::add_cheat: booked as ordinary income, and remembered as a cheat.
+func add_cheat(v: float) -> void:
+	add_cash(v, "Other")
+	cheat_year += v
+
+
+## NationBase::*_365days: last year's figure for the days not yet past this year, plus this year's.
+func _y365(last: float, cur: float) -> float:
+	var yd := Game.inst.day % 365 if Game.inst else 0
+	return last * (365 - yd) / 365.0 + cur
+
+
+func income_365() -> float:
+	return _y365(last_income_year, income_year)
+
+
+func expense_365() -> float:
+	return _y365(last_expense_year, expense_year)
+
+
+func fixed_expense_365() -> float:
+	return _y365(last_fixed_expense_year, fixed_expense_year)
+
+
+func profit_365() -> float:
+	return income_365() - expense_365()
+
+
+## NationBase::true_profit_365days: the profit without the computer's cheats.
+func true_profit_365() -> float:
+	return profit_365() - _y365(last_cheat_year, cheat_year)
 
 
 ## A refund taken off the year's expense of that kind (add_expense with a negative amount).
@@ -146,6 +189,10 @@ func new_year() -> void:
 	import_year = {}
 	last_income_year = income_year
 	last_expense_year = expense_year
+	last_fixed_expense_year = fixed_expense_year
+	fixed_expense_year = 0.0
+	last_cheat_year = cheat_year
+	cheat_year = 0.0
 	income_year = 0.0
 	expense_year = 0.0
 	last_income_by = income_by

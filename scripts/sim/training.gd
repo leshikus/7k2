@@ -398,9 +398,11 @@ static func process_ai(f: Firm, ai, day: int) -> void:
 static func ai_should_spend(n: Nation, importance: int, amount := 0.0) -> bool:
 	if n.cash < amount:
 		return false
-	var fixed := maxf(1.0, n.last_expense_year if n.last_expense_year > 0 else n.expense_year)
+	var fixed := maxf(1.0, n.fixed_expense_365())
 	var std := maxf(fixed, 2000.0) * (150 + Diplomacy._pref(n, "cash_reserve")) / 100.0
-	var profit := n.last_income_year - n.last_expense_year
+	if n.is_fryhtan:
+		std /= 2.0                  # the standard cash level of a Fryhtan kingdom is lower
+	var profit := n.true_profit_365()
 	if profit < 0.0:
 		var r1 := int(100.0 * -profit / fixed)
 		var r2 := int(200.0 * -profit / maxf(1.0, n.cash))
