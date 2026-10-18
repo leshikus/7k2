@@ -126,6 +126,42 @@ func _ready() -> void:
 	var out3 := camp.patrol(Firm.PATROL_ALL)
 	_check(gen in out3 and men[2] in out3 and not (men[3] in out3), "all: everyone trained goes out with the commander")
 
+	# --- one commander: a general entering takes over and the old one comes out
+	for u in out3:
+		if u != gen:
+			camp.accept_unit(u)
+	var king := p.king
+	if king.inside_firm:
+		king.inside_firm.release_unit(king)
+	camp.accept_unit(king)
+	_check(camp.overseer == king and gen.inside_firm == null, "the king takes command of the fort")
+	camp.accept_unit(gen)
+	_check(camp.overseer == gen and king.inside_firm == null and not (king in camp.soldiers), "a general entering takes command; the king comes out")
+	_check(not camp.soldiers.any(func(s): return s.rank >= Defs.Rank.GENERAL), "no general or king is kept among the soldiers")
+	var sol: Unit = camp.soldiers.filter(func(s): return s.basic_days <= 0)[0]
+	camp.make_overseer(sol)
+	_check(sol in camp.soldiers, "no promotion while there is a commander")
+	camp.release_unit(gen)
+	camp.make_overseer(sol)
+	_check(camp.overseer == sol and sol.rank == Defs.Rank.GENERAL, "with none, a soldier is promoted to general and commander")
+
+	# --- villagers throw stones and bricks (Town::bullet_id)
+	var foe: Nation = g.nations.filter(func(n): return n.id != p.id and not n.is_fryhtan)[0]
+	var vt: Town = g.towns.filter(func(x): return x.nation_id == 0)[0]
+	vt.population = 30
+	vt.resistance[foe.id] = 80.0
+	var raider := g.spawn_unit(Defs.unit_sprite(foe.race, "INF"), foe.id, g.free_unit_cell(Vector2i(vt.center_loc()) + Vector2i(5, 0)), 30.0)
+	vt.aggressors[foe.id] = g.frame       # it has attacked the village
+	g.unit_grid.clear()
+	g.sim_frame()
+	var nb := g.bullets.size()
+	for i in 40:
+		vt.archer_energy = 100
+		vt.town_shoot()
+	var thrown: Array = g.bullets.slice(nb)
+	_check(not thrown.is_empty() and thrown.all(func(b): return b.sprite_code in ["ROCK", "BRICK"]), "villagers throw rocks and bricks (%d thrown)" % thrown.size())
+	raider.die(null)
+
 	# --- a wagon takes the jobless first, then workers; one alone walks
 	var home: Town = g.towns.filter(func(x): return x.nation_id == p.id)[0]
 	var mine := g.spawn_firm("FACTORY", p.id, p.race, g._place_near(home.footprint(), 5, 5, 14), true)

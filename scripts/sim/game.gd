@@ -1361,12 +1361,12 @@ func defect_unit(u: Unit, to_nation: int) -> void:
 		notify("One of your units has defected!", u.center_loc())
 
 
-func spawn_town_arrow(from: GameObj, to: Unit, sprite: String, dmg: float) -> void:
+func spawn_town_arrow(from: GameObj, to: Unit, sprite: String, dmg: float, spd := 16.0) -> void:
 	var b := Bullet.new()
 	b.shooter = from
 	b.target = to
 	b.sprite_code = sprite
-	b.speed = 16.0
+	b.speed = spd
 	b.damage = dmg
 	b.color = from.nation_color()
 	b.position = Iso.to_screen(from.center_loc()) + Vector2(0, -30)

@@ -272,10 +272,9 @@ func town_shoot() -> void:
 		dmg = resistance_to(best.nation_id) * 8.0 / 100.0 + 6.0
 	else:
 		dmg = 14.0
-	var arrow := Defs.unit_sprite(race, "ARROW")
-	if not Assets.has_sprite(arrow):
-		arrow = "NO_ARROW"
-	g.spawn_town_arrow(self, best, arrow, dmg)
+	# Town::bullet_id: the villagers throw stones and bricks, by turns
+	var missile := "ROCK" if (g.frame + obj_id) & 1 else "BRICK"
+	g.spawn_town_arrow(self, best, missile, dmg, 15.0)       # TOWN_BULLET_SPEED
 	archer_energy >>= 2
 
 

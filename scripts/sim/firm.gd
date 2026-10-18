@@ -263,8 +263,15 @@ func accept_unit(u: Unit) -> bool:
 		_hide_unit(u)
 		return true
 	var leads := u.can_lead() if code != "LAIR" else (u.rank >= Defs.Rank.GENERAL and nation_id != GameObj.MONSTER_NATION)
-	if leads and overseer == null:
+	if leads:
+		# FirmCamp::assign_overseer: a general or king always takes command;
+		# the commander he replaces comes out
+		var old := overseer
 		overseer = u
+		_hide_unit(u)
+		if old:
+			release_unit(old)
+		return true
 	elif soldiers.size() < capacity():
 		soldiers.append(u)
 	else:
@@ -273,13 +280,15 @@ func accept_unit(u: Unit) -> bool:
 	return true
 
 
-## Puts a general from the garrison in command; the previous commander joins the soldiers.
+## FirmCamp::promote_soldier: with no commander, a trained soldier of at least
+## a villager's skill is made a general and takes command.
 func make_overseer(u: Unit) -> void:
-	if not u in soldiers or not u.can_lead():
+	if overseer or not u in soldiers or u.basic_days > 0 or u.combat < Defs.CITIZEN_COMBAT_LEVEL:
+		return
+	if code != "LAIR" and not u.is_human():
 		return
 	soldiers.erase(u)
-	if overseer:
-		soldiers.append(overseer)
+	u.rank = Defs.Rank.GENERAL
 	overseer = u
 	Game.inst.update_links()
 
@@ -564,7 +573,7 @@ func _return_fire(target: GameObj) -> void:
 	if ready < 0 or now >= MAX_ARCHER_SIMULTANEOUS:
 		return
 	_archer_fired[ready] = g.frame
-	g.spawn_town_arrow(self, target, "ARROW" if Assets.has_sprite("ARROW") else "NO_ARROW", FORT_BULLET_DAMAGE)
+	g.spawn_town_arrow(self, target, "ARROW" if Assets.has_sprite("ARROW") else "NO_ARROW", FORT_BULLET_DAMAGE, 18.0)     # FORT_BULLET_SPEED
 
 
 ## Towers fire at the nearest hostile unit in range.

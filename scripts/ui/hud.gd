@@ -1730,9 +1730,9 @@ func _occupant_buttons(f: Firm) -> void:
 			game.selected = [who]
 			who.selected = true
 		var promote := func():
-			if who != f.overseer and who.can_lead():
+			if who != f.overseer and f.overseer == null:
 				_do(f, "make_overseer", [who])
-		var b := _add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote)
+		var b := _add_action(lbl, out, true, "Left-click: send out. Right-click a soldier while there is no commander: promote him to general and commander.", promote)
 		# the unit's own standing sprite in its kingdom's colour (not all are human)
 		var fr := Assets.sprite_frame(who.sprite_code, "S", Iso.dir_map[4], 0, who.nation_color())
 		var mark := "👑" if who.rank == Defs.Rank.KING else ("★" if who.rank >= Defs.Rank.GENERAL else "")
