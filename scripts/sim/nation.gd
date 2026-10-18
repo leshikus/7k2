@@ -54,7 +54,7 @@ var last_aid_day := -1000         # last military aid received
 var last_independent_join_day := -1000   # NationBase::last_independent_unit_join_date
 var kill_monster_score := 0.0   # Fryhtans slain: 1 a soldier, 5 a general, 20 a king (Unit::die)
 
-var ai: NationAI = null
+var ai: AIBase = null
 
 
 func _init(nation_id: int, nation_race: String, nation_color: Color, ai_controlled: bool) -> void:

@@ -1,5 +1,5 @@
 class_name FryhtanAI
-extends NationAI
+extends AIBase
 ## Computer-controlled Fryhtan kingdom (after on_mons.cpp / of_laira.cpp):
 ## breeds Fryhtans in its lairs with gold and life points, builds new lairs
 ## beside independent villages, terrorises them until they pay tribute, and

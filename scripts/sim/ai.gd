@@ -1,690 +1,957 @@
 class_name NationAI
-extends RefCounted
-## Computer-controlled kingdom. A compact take on the oai_*.cpp strategies:
-## secure towns with camps, build the mine-factory-market chain, research,
-## win independent towns over with camps and grants, and attack weaker rivals.
+extends AIBase
+## A computer-run human kingdom, as the original runs one (oai_*.cpp): a
+## personality; a main thought cycle at the pace set by the aggressiveness
+## setting (build mines, capture towns, expand the army, secret attacks,
+## diplomacy, grand plans, cutting costs); a queue of actions that units
+## carry out (build, assign a commander or soldiers, settle, scout); and the
+## towns, buildings and units that think for themselves (AITown, AIFirm, AIUnit).
 
-## "SPUS"/"SPUB" stand for the special-unit techs of the kingdom's own race.
-const RESEARCH_ORDER := ["MINING", "MANUFACT", "INFCLOSE", "FARMING", "SPUS", "INFDEFEN", "CATAPULT", "INFRANGE", "BALLISTA", "WAR_PROD", "AGITATE", "SPUB", "FLAMETHR", "STEALINF", "BRIBE", "COUNTERS", "CANNON", "OFF_BLD3", "EXPCART", "ASSASSIN", "STEALTEC", "F_BALLIS", "OFF_BLD1", "OFF_BLD4", "OFF_BLD2"]
+enum { BUILD_FIRM = 1, ASSIGN_OVERSEER, ASSIGN_SOLDIER, ASSIGN_SPY, SCOUT, BUILD_TOWN, SETTLE_TOWN }
+const STD_ACTION_RETRY_COUNT := 4
+const MAX_SUITABLE_ATTACK_CAMP := 30
+const MAX_AI_ATTACK_TARGET := 10
+const MAX_SOLDIER := 15
+const IDEAL_INTER_PLACE_SPACE := 3
 
-var n: Nation
-var g: Game
-var war_target := 0
-var war_start_day := 0
-var attack_target: GameObj = null
-var aggression := 1.0
+var actions: Array = []             # ActionNode: {id, mode, para, para2, x, y, rx, ry, unit, retry, instance, processing, processed, add_day, next_retry}
+var last_action_id := 0
+var capture_town: Town = null       # ai_capture_enemy_town_recno
+var capture_plan_day := 0
+var capture_start_day := 0
+var capture_use_all := false
+var attack_camps: Array = []        # AttackCamp: {firm, combat, distance, patrol_day}
+var attack_targets: Array = []      # ai_attack_target_x/y_loc
+var attack_target_nation := -1
+var lead_attack_camp: Firm = null
+var last_defend_day := -1000
+var secret_attack := {}             # nation id -> true (NationRelation::ai_secret_attack)
 
 
 func _init(nation: Nation, game: Game) -> void:
-	n = nation
-	g = game
-	aggression = g.rng.randf_range(0.7, 1.4)
-	# Config::ai_aggressiveness (none .. very high) on top of each kingdom's temper
-	aggression *= [0.5, 0.75, 1.0, 1.3, 1.6][clampi(_aggressiveness(), 0, 4)]
+	super(nation, game)
+	init_personality()
+	# Nation::init: the computer grants gold before its people rebel
+	for t in g.towns:
+		if t.nation_id == n.id:
+			t.auto_grant_loyalty = Defs.REBEL_LOYALTY + 1
 
 
-var _last_close := -999
+## Nation::init_personalty
+const PREFS := ["force_projection", "military_development", "inc_pop_by_capture", "peacefulness", "military_courage",
+	"territorial_cohesiveness", "trading_tendency", "allying_tendency", "honesty", "town_defense", "loyalty_concern",
+	"forgiveness", "collect_tax", "hire_unit", "use_weapon", "keep_general", "keep_skilled_unit", "diplomacy_retry",
+	"attack_monster", "spy", "counter_spy", "cash_reserve", "food_reserve", "use_marine", "repair_concern", "scout",
+	"research", "seat_of_power", "monster_aggressiveness", "monster_special", "live_points_reserve", "surrender"]
 
 
+func init_personality() -> void:
+	if n.prefs.has("_set"):
+		return
+	for k in PREFS:
+		n.prefs[k] = g.rng.randi() % 101
+	n.prefs["economic_development"] = 100 - int(n.prefs["military_development"])
+	n.prefs["inc_pop_by_growth"] = 100 - int(n.prefs["inc_pop_by_capture"])
+	n.prefs["spy"] = mini(60, int(n.prefs["spy"]))
+	n.prefs["counter_spy"] = mini(60, int(n.prefs["counter_spy"]))
+	n.prefs["unit_chase_distance"] = 15 + g.rng.randi() % 15
+	n.prefs["_set"] = 1
+
+
+func pref(k: String) -> int:
+	return int(n.prefs.get(k, 50))
+
+
+# -------------------------------------------------------------- figures ---
+
+func camps() -> Array:
+	return my_firms().filter(func(f): return Espionage.is_camp(f) and not f.under_construction)
+
+
+func total_population() -> int:
+	var p := 0
+	for t in my_towns():
+		p += t.population
+	return p
+
+
+func total_jobless() -> int:
+	var p := 0
+	for t in my_towns():
+		p += t.jobless()
+	return p
+
+
+func total_unit_count() -> int:
+	return g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.is_human() and not u.is_civilian()).size()
+
+
+func true_profit() -> float:
+	if n.last_income_year > 0.0 or n.last_expense_year > 0.0:
+		return n.last_income_year - n.last_expense_year
+	return n.income_year - n.expense_year
+
+
+func military_rank() -> int:
+	return Diplomacy.military_rank(g, n)
+
+
+func overall_rank() -> int:
+	return Diplomacy.overall_rank(g, n)
+
+
+## NationBase::yearly_food_change: farming less eating.
+func yearly_food_change() -> float:
+	var farm := 1.0 + 0.25 * n.tech_level("FARMING")
+	var made := 0.0
+	var eat := 0.0
+	for t in my_towns():
+		made += t.jobless() * farm * Defs.PEASANT_FOOD_YEAR_PRODUCTION
+		eat += t.population * Defs.UNIT_FOOD_YEAR_CONSUMPTION
+	eat += g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.is_human() and u.rank != Defs.Rank.KING).size() * Defs.UNIT_FOOD_YEAR_CONSUMPTION
+	return made - eat
+
+
+## Nation::ai_has_enough_food
+func has_enough_food() -> bool:
+	var yc := yearly_food_change()
+	if yc < 0.0 and n.food > 0.0 and 100.0 * -yc / n.food > 50 - pref("food_reserve") / 3:
+		return false
+	return n.food > 2000 + 2000 * pref("food_reserve") / 100 or yc > 0.0
+
+
+func should_spend(importance: int, amount := 0.0) -> bool:
+	return Training.ai_should_spend(n, importance, amount)
+
+
+## Nation::ai_should_spend_war
+func should_spend_war(enemy_military: int, cease := false) -> bool:
+	var imp := 30 + pref("military_development") / 5 + military_rank() - enemy_military * 2
+	if cease:
+		imp += 20
+	return should_spend(imp)
+
+
+func can_ai_build(code: String) -> bool:
+	return n.cash >= float(Defs.firm_types.get(code, {}).get("cost", 0)) and Defs.knows_firm(n, code)
+
+
+func relation(nid: int) -> int:
+	return n.relation(nid) if nid > 0 else Defs.Relation.NEUTRAL
+
+
+func distance_rating(a: Vector2, b: Vector2) -> int:
+	return 100 - 100 * int(maxf(absf(a.x - b.x), absf(a.y - b.y))) / g.world.w
+
+
+# ------------------------------------------------------------ main loop ---
+
+## Nation::process_ai
 func next_day(day: int) -> void:
 	if not n.alive:
 		return
-	Espionage.ai_think(n, g, war_target, day)
-	for u in g.units.duplicate():
-		if u.is_caravan and u.nation_id == n.id and not u.dead:
-			Caravans.process_ai(u, day)
-	# FirmSpecial::process_ai, FirmSpy::process_ai, FirmFort::think_train_archer
+	if n.king == null or not is_instance_valid(n.king) or n.king.dead:
+		if think_succeed_king():
+			return
+		AIGrand.think_surrender(self)
+		return
+	if n.research_tech == "":
+		think_new_research()
+	var interval: int = [300, 90, 30, 15, 15][clampi(_aggressiveness(), 0, 4)]
+	if g.config.has("tutorial"):
+		interval = 120
+	_main(posmod(day - n.id * 4, interval))
+	if not n.alive:
+		return
+	if posmod(day - n.id, 3) == 0:
+		process_actions()
+	_on_going()
+	# the original keeps its computer kingdoms afloat
+	if _aggressiveness() == GameSetup.NONE and not g.config.has("tutorial") and n.cash > 1000:
+		n.add_cash(ceilf(-n.cash / 500.0), "Other")
+	if n.cash < 100:
+		n.add_cash(float(200 + g.rng.randi() % 500), "Other")
+	if n.food < 100:
+		n.food += 1000.0
+	if day % 360 == n.id % 360:
+		_improve_relation()
+	# the towns, buildings and units of the kingdom think for themselves
+	for t in my_towns():
+		AITown.process(self, t, day)
 	for f in my_firms():
-		# Firm::process_common_ai: repair when it can spend
-		if not f.repair and f.hp < f.max_hp and not f.under_construction and Training.ai_should_spend(n, 50 + Diplomacy._pref(n, "repair_concern") / 2):
-			f.repair = true
-		if f.code == "FORT" and not f.under_construction and f.target_archers == f.archers and f.archers < Firm.MAX_FORT_ARCHER:
-			var importance := Diplomacy._pref(n, "military_development") / 3 + (10 if war_target > 0 else 0)
-			if Training.ai_should_spend(n, importance, Firm.TRAIN_ARCHER_COST):
-				f.set_target_archers(-1)
-		if Training.is_train_firm(f) and not f.under_construction:
-			Training.process_ai(f, self, day)
-	if (day + n.id * 3) % 7 != 0:
-		return
-	if my_towns().is_empty() and my_firms().is_empty():
-		_homeless(day)
-		return
-	_garrisons()
-	_seek_treasure()
-	_settle_spare_peasants()
-	_economy(day)
-	_think_split_towns(day)
-	_expand(day)
-	_military(day)
+		if not f.dead and not f.under_construction:
+			AIFirm.process(self, f, day)
+	for u in g.units.duplicate():
+		if u.nation_id == n.id and not u.dead and u.inside_firm == null:
+			AIUnit.process(self, u, day)
+	Espionage.ai_think(n, g, war_target, day)
 	_use_gods()
-	_diplomacy(day)
 
 
-# ---------------------------------------------------------------- helpers ---
+## Nation::process_ai_main
+func _main(id: int) -> void:
+	match id:
+		0: think_build_firm()
+		1: AICapture.think_capture(self)
+		2: pass                       # think_explore: nothing in the original
+		3: think_military()
+		4: AIAttack.think_secret_attack(self)
+		5: Diplomacy.ai_think(g, n)
+		6: AIGrand.think_grand_plan(self)
+		7: think_reduce_expense()
 
-func my_towns() -> Array:
-	return g.towns.filter(func(t): return t.nation_id == n.id and not t.dead)
+
+## Nation::process_on_going_action
+func _on_going() -> void:
+	if capture_town and g.day % 5 == n.id % 5:
+		AICapture.think_capturing_enemy_town(self)
+	if not attack_camps.is_empty():
+		AIAttack.execute(self, true)
 
 
-func my_firms(code := "") -> Array:
-	return g.firms.filter(func(f): return f.nation_id == n.id and not f.dead and (code == "" or f.code == code))
+func _improve_relation() -> void:
+	for o in g.nations:
+		if o == n or not o.alive or n.relation(o.id) == Defs.Relation.WAR:
+			continue
+		Diplomacy.change_ai_rel(n, o.id, Diplomacy.trade_rating(g, n, o) / 10)
+		if int(n.war_count.get(o.id, 0)) > 0 and g.rng.randi() % maxi(1, 5 - pref("forgiveness") / 20) > 0:
+			n.war_count[o.id] = int(n.war_count[o.id]) - 1
 
 
-func idle_units(humans_only := true) -> Array:
-	return g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.inside_firm == null and u.order == Unit.Order.IDLE and u.home_town == null and (not humans_only or u.is_human()))
+## Nation::think_succeed_king
+func think_succeed_king() -> bool:
+	var best: Unit = null
+	var best_r := 0
+	for u in g.units:
+		if u.nation_id != n.id or u.dead or not u.is_human() or u.is_civilian() or u.is_spy:
+			continue
+		if u.inside_firm != null and u.inside_firm.overseer != u and not (u in u.inside_firm.soldiers):
+			continue
+		var r := int(u.lead_skill()) + int(u.combat) / 4
+		if u.race == n.race:
+			r += 50
+		if u.rank == Defs.Rank.GENERAL:
+			r += 30
+		if r > best_r:
+			best_r = r
+			best = u
+	if best == null:
+		return false
+	if best.inside_firm:
+		best.inside_firm.release_unit(best)
+	g.succeed_king(n, best)
+	return true
 
 
-func _builder_near(c: Vector2) -> Unit:
+## Nation::think_new_research
+func think_new_research() -> void:
+	if my_firms("RESEARCH").filter(func(f): return not f.under_construction).is_empty():
+		return
+	var best := ""
+	var cls := ""
+	var farming := Defs.tech_def("FARMING")
+	if Defs.can_research(n, farming) and (not has_enough_food() or g.rng.randi() % maxi(1, 100 - pref("food_reserve")) < 10):
+		best = "FARMING"
+	if best == "" and pref("use_weapon") > 50:
+		var tw := 0
+		for w in Defs.WEAPONS:
+			tw += n.tech_level(w)
+		if g.rng.randi() % maxi(1, 100 - pref("use_weapon") + tw * 3) < 25:
+			cls = "WEAPON"
+	if best == "" and cls == "" and pref("spy") > 50:
+		var ts := 0
+		for t in Defs.TECHS:
+			if t.get("spy", false):
+				ts += n.tech_level(t["code"])
+		if g.rng.randi() % maxi(1, 100 - pref("spy") + ts * 3) < 25:
+			cls = "SPYING"
+	var race_pop := {}
+	for t in my_towns():
+		race_pop[t.race] = int(race_pop.get(t.race, 0)) + t.jobless()
+	if best == "" and cls == "":
+		var max_pop := 0
+		for r in race_pop:
+			var code := Defs.spu_structure_tech(r)
+			if Defs.can_research(n, Defs.tech_def(code)) and race_pop[r] > max_pop:
+				max_pop = race_pop[r]
+				best = code
+	var all := Defs.research_techs()
+	if best == "":
+		var pool: Array = all.filter(func(t): return _tech_class(t) == cls) if cls != "" else []
+		if pool.is_empty():
+			var classes := ["PRODUCT", "SPYING", "MILITARY", "SPU_STRU", "SPU_POW", "WEAPON", "OFF_BLD"]
+			var c2: String = classes[g.rng.randi() % classes.size()]
+			pool = all.filter(func(t): return _tech_class(t) == c2)
+		best = _random_researchable(pool, race_pop)
+	if best == "":
+		best = _random_researchable(all, race_pop)
+	if best == "":
+		best = _random_researchable(all, {})
+	if best != "":
+		n.start_research(best)
+
+
+func _tech_class(t: Dictionary) -> String:
+	var c: String = t["code"]
+	if t.get("spy", false):
+		return "SPYING"
+	if c in ["MINING", "MANUFACT", "FARMING", "WAR_PROD"]:
+		return "PRODUCT"
+	if c in ["INFCLOSE", "INFRANGE", "INFDEFEN"]:
+		return "MILITARY"
+	if c.begins_with("SPUS"):
+		return "SPU_STRU"
+	if c.begins_with("SPUB"):
+		return "SPU_POW"
+	if c.begins_with("OFF_BLD"):
+		return "OFF_BLD"
+	return "WEAPON"
+
+
+func _random_researchable(pool: Array, race_pop: Dictionary) -> String:
+	if pool.is_empty():
+		return ""
+	var start := g.rng.randi() % pool.size()
+	for i in pool.size():
+		var t: Dictionary = pool[(start + i + 1) % pool.size()]
+		if not Defs.can_research(n, t):
+			continue
+		if not race_pop.is_empty() and t.has("race") and int(race_pop.get(t["race"], 0)) <= 0:
+			continue
+		return t["code"]
+	return ""
+
+
+# ------------------------------------------------------------- actions ---
+
+## Nation::add_action: not when the same is queued already.
+func add_action(at: Vector2i, ref: Vector2i, mode: int, para = 0, instance := 1, unit: Unit = null, para2 = "") -> Dictionary:
+	if find_action(at, ref, mode, para, unit) != null:
+		return {}
+	last_action_id += 1
+	var a := {"id": last_action_id, "mode": mode, "para": para, "para2": para2, "x": at.x, "y": at.y, "rx": ref.x, "ry": ref.y,
+		"unit": unit, "retry": STD_ACTION_RETRY_COUNT, "instance": instance, "processing": 0, "processed": 0,
+		"add_day": g.day, "next_retry": 0}
+	actions.append(a)
+	if unit:
+		a["retry"] = 1
+		_process_one(a)          # the unit may change, carry it out now
+	return a
+
+
+## Nation::is_action_exist: at the location, or (at.x < 0) by the reference location.
+func find_action(at: Vector2i, ref: Vector2i, mode: int, para, unit: Unit = null):
+	for a in actions:
+		if a["mode"] != mode or str(a["para"]) != str(para):
+			continue
+		if unit and a["unit"] != unit:
+			continue
+		if at.x >= 0:
+			if a["x"] == at.x and a["y"] == at.y:
+				return a
+		elif a["rx"] == ref.x and a["ry"] == ref.y:
+			return a
+	return null
+
+
+func action_exists(mode: int, para) -> bool:
+	return actions.any(func(a): return a["mode"] == mode and str(a["para"]) == str(para))
+
+
+## Nation::is_build_action_exist: a building of the kind planned near.
+func build_action_near(code: String, at: Vector2) -> bool:
+	var d := Defs.effective_distance(code, "")
+	return actions.any(func(a): return a["mode"] == BUILD_FIRM and a["para"] == code and maxf(absf(a["x"] - at.x), absf(a["y"] - at.y)) <= d)
+
+
+## Nation::process_action (every 3 days): a share of the queue is carried out;
+## a failed action is tried again a week later, up to four times.
+func process_actions() -> void:
+	_count_done()
+	var alive_nations := g.nations.filter(func(x): return x.alive).size()
+	var max_count := 70 / maxi(1, alive_nations) / maxi(1 - _aggressiveness(), 1)
+	var done := 0
+	for a in actions.duplicate():
+		if done >= max_count:
+			break
+		if a["processing"] >= a["instance"]:
+			if g.day > a["add_day"] + 30 * 6:
+				actions.erase(a)
+			continue
+		if g.day < a["next_retry"] or a["retry"] <= 0:
+			continue
+		if a["unit"] != null and (not is_instance_valid(a["unit"]) or a["unit"].dead):
+			actions.erase(a)
+			continue
+		_process_one(a)
+		done += 1
+
+
+func _process_one(a: Dictionary) -> void:
+	var rc := 0
+	match a["mode"]:
+		BUILD_FIRM: rc = _do_build_firm(a)
+		ASSIGN_OVERSEER: rc = _do_assign_overseer(a)
+		ASSIGN_SOLDIER: rc = _do_assign_soldier(a)
+		ASSIGN_SPY: rc = _do_assign_spy(a)
+		SCOUT: rc = _do_scout(a)
+		BUILD_TOWN: rc = _do_build_town(a)
+		SETTLE_TOWN: rc = _do_settle_town(a)
+	var del := false
+	if rc == 1:
+		a["processing"] += 1
+	elif rc == 0:
+		if a["unit"] != null:
+			del = true
+		else:
+			a["next_retry"] = g.day + 7
+			a["retry"] -= 1
+			if a["retry"] <= 0:
+				del = true
+	else:
+		a["retry"] = 0
+		del = true
+	if del and a["processing"] <= a["processed"]:
+		actions.erase(a)
+
+
+## Nation::action_finished: units that carried an action out (or failed to)
+## are counted; a fully done action is removed.
+func _count_done() -> void:
+	var busy := {}
+	for u in g.units:
+		if u.nation_id == n.id and not u.dead and u.ai_action_id > 0:
+			if u.order == Unit.Order.IDLE or u.inside_firm != null:
+				u.ai_action_id = 0
+			else:
+				busy[u.ai_action_id] = int(busy.get(u.ai_action_id, 0)) + 1
+	for a in actions.duplicate():
+		a["processed"] = a["processing"] - int(busy.get(a["id"], 0))
+		if a["processing"] > 0 and (a["processed"] >= a["instance"] or (a["retry"] <= 0 and a["processed"] >= a["processing"])):
+			actions.erase(a)
+
+
+func _firm_at(x: int, y: int) -> Firm:
+	for f in g.firms:
+		if not f.dead and f.footprint().has_point(Vector2i(x, y)):
+			return f
+	return null
+
+
+func _town_at(x: int, y: int) -> Town:
+	for t in g.towns:
+		if not t.dead and t.footprint().has_point(Vector2i(x, y)):
+			return t
+	return null
+
+
+## Nation::ai_build_firm
+func _do_build_firm(a: Dictionary) -> int:
+	var code: String = a["para"]
+	var race: String = a["para2"] if str(a["para2"]) != "" else n.race
+	var b: Unit = a["unit"] if a["unit"] != null else get_unit(true, race if code in ["BASE", "STABLE", "SPY"] else "", Vector2i(a["x"], a["y"]))
+	if b == null and code in ["CAMP", "FORT"]:
+		b = get_unit(false, "", Vector2i(a["x"], a["y"]))
+	if b == null or not can_ai_build(code):
+		return 0
+	var at := Vector2i(a["x"], a["y"])
+	if code == "MINE":
+		at = Vector2i(a["rx"], a["ry"])
+	var f := g.spawn_firm(code, n.id, race, at, false)
+	if f == null:
+		return -1
+	n.add_cash(-float(Defs.firm_types.get(code, {}).get("cost", 0)), "Construction")
+	f.setup_day = g.day
+	b.order_build(f)
+	b.ai_action_id = a["id"]
+	a["unit"] = b
+	return 1
+
+
+## Nation::ai_build_town
+func _do_build_town(a: Dictionary) -> int:
+	if g.config.has("tutorial"):
+		return 0
+	var b: Unit = a["unit"] if a["unit"] != null else get_unit(true, str(a["para"]), Vector2i(a["x"], a["y"]))
+	if b == null or not b.can_found_town():
+		return 0
+	b.order_found_town(Vector2i(a["x"], a["y"]))
+	b.ai_action_id = a["id"]
+	a["unit"] = b
+	return 1
+
+
+## Nation::ai_assign_overseer
+func _do_assign_overseer(a: Dictionary) -> int:
+	var f := _firm_at(a["x"], a["y"])
+	if f == null or f.nation_id != n.id or not Espionage.is_camp(f):
+		return -1
+	var u: Unit = a["unit"] if a["unit"] != null else get_unit(false, AIFirm.majority_race(f), Vector2i(a["x"], a["y"]))
+	if u == null:
+		return 0
+	if u.rank == Defs.Rank.SOLDIER:
+		u.rank = Defs.Rank.GENERAL
+	if f.overseer and f.overseer != u:
+		var old := f.overseer
+		f.release_unit(old)
+	u.order_enter(f)
+	u.ai_action_id = a["id"]
+	a["unit"] = u
+	return 1
+
+
+## Nation::ai_assign_soldier
+func _do_assign_soldier(a: Dictionary) -> int:
+	var f := _firm_at(a["x"], a["y"])
+	if f == null or f.nation_id != n.id or not Espionage.is_camp(f):
+		return -1
+	if f.soldiers.size() >= MAX_SOLDIER:
+		return -1
+	if MAX_SOLDIER - f.soldiers.size() < a["instance"]:
+		a["instance"] = maxi(a["processing"] + 1, MAX_SOLDIER - f.soldiers.size())
+	var u: Unit = a["unit"]
+	if u == null:
+		u = recruit_in_firm_soldier(f, str(a["para2"]))
+	if u == null:
+		# FirmCamp recruits from its linked towns as the player's "Recruit" does
+		for t in f.linked_towns:
+			if t.nation_id == n.id and t.can_recruit():
+				u = t.draft_into(f)
+				if u:
+					a["processing"] += 0
+					return 1
+		return 0
+	u.order_enter(f)
+	u.ai_action_id = a["id"]
+	return 1
+
+
+## Nation::ai_settle_town: villagers (a wagon for several) move to another town.
+func _do_settle_town(a: Dictionary) -> int:
+	if g.config.has("tutorial"):
+		return 0
+	var dest := _town_at(a["x"], a["y"])
+	var src := _town_at(a["rx"], a["ry"])
+	if dest == null or src == null or dest.nation_id != n.id or src.nation_id != n.id:
+		return -1
+	if not src.can_recruit():
+		if not src.has_linked_camp(n.id):
+			return 0
+		if n.cash > 0.0:
+			src.grant(n.id)
+		return 0
+	var count: int = a["instance"] - a["processing"]
+	var u: Unit = src.recruit_wagon() if count > 1 else src.recruit()
+	if u == null:
+		return 0
+	u.order_settle_into(dest)
+	u.ai_action_id = a["id"]
+	if count > 1:
+		a["instance"] = maxi(a["processing"] + 1, a["instance"] - u.settlers() + 1)
+	return 1
+
+
+## Nation::ai_scout
+func _do_scout(a: Dictionary) -> int:
+	var src := _town_at(a["rx"], a["ry"])
+	if src == null or src.nation_id != n.id:
+		return -1
+	if not src.can_recruit():
+		return 0
+	var u := src.recruit()
+	if u == null:
+		return 0
+	u.order_move(Vector2i(a["x"], a["y"]))
+	u.ai_action_id = a["id"]
+	return 1
+
+
+## Nation::ai_assign_spy (the action): the spy puts on the target's colours and goes in.
+func _do_assign_spy(a: Dictionary) -> int:
+	var u: Unit = a["unit"]
+	if u == null or u.dead or not u.is_spy or u.nation_id != n.id:
+		return -1
+	var target: GameObj = _town_at(a["x"], a["y"])
+	if target == null:
+		target = _firm_at(a["x"], a["y"])
+	if target == null:
+		return -1
+	if not u.order_infiltrate(target):
+		u.order_move(u.cell() + Vector2i(g.rng.randi() % 20 - 10, g.rng.randi() % 20 - 10))
+		a["retry"] += 1
+		return 0
+	if Espionage.can_camouflage(u) and g.rng.randi() % 100 < int(u.spy_skill):
+		Espionage.start_camouflage(u)
+	return -1
+
+
+# --------------------------------------------------------- unit supply ---
+
+## Nation::ai_get_unit / ai_find_unit: an idle unit of the kind near by, else
+## one hired at an inn (military) or recruited from a town (civilian), else a
+## soldier taken out of a camp.
+func get_unit(civilian: bool, race: String, dest: Vector2i) -> Unit:
 	var best: Unit = null
 	var best_d := INF
-	for u in idle_units():
-		if u.rank == Defs.Rank.KING:
+	for u in g.units:
+		if u.nation_id != n.id or u.dead or not u.is_human() or u.is_spy or u.is_caravan or u.rank == Defs.Rank.KING:
 			continue
-		var d: float = u.center_loc().distance_to(c)
+		if race != "" and u.race != race:
+			continue
+		if u.is_civilian() != civilian or u.home_town != null:
+			continue
+		if u.inside_firm != null:
+			if u.inside_firm.overseer == u and Espionage.is_camp(u.inside_firm) and u.inside_firm.should_close:
+				u.inside_firm.release_unit(u)
+				return u
+			continue
+		if u.order != Unit.Order.IDLE or u.ai_action_id > 0 or u.attacking or u.home_firm != null:
+			continue
+		var d := u.center_loc().distance_to(Vector2(dest))
 		if d < best_d:
 			best_d = d
 			best = u
-	if best == null:
-		# recruit a builder from the most loyal town
-		var towns := my_towns().filter(func(t): return t.can_recruit() and t.population > 12)
-		towns.sort_custom(func(a, b): return a.loyalty > b.loyalty)
-		if not towns.is_empty():
-			best = towns[0].recruit()
-	return best
-
-
-func _has_market_chain(m: Firm) -> bool:
-	for f in m.linked_firms:
-		if f.code == "FACTORY" and f.nation_id == n.id and not f.under_construction:
-			if f.linked_firms.any(func(x): return x.code == "MARKET" and x.nation_id == n.id and not x.under_construction):
-				return true
-	return false
-
-
-func _close_unprofitable() -> void:
-	# mines (600/yr) that do not end in a market, then idle luxuries
-	for m in my_firms("MINE"):
-		if not m.under_construction and not _has_market_chain(m):
-			m.die(null)
-			return
-	for f in my_firms("FACTORY"):
-		if not f.linked_firms.any(func(x): return x.code == "MARKET" and x.nation_id == n.id):
-			f.die(null)
-			return
-	# luxuries next; defences (towers, forts) are kept until the debt is crippling
-	for code in ["INN", "SPY", "STABLE", "WAR"]:
-		var l := my_firms(code)
-		if not l.is_empty():
-			l[0].die(null)
-			return
-	for r in my_firms("RESEARCH"):
-		if r.research_tech == "":
-			r.die(null)
-			return
-	if n.cash > -2000:
-		return
-	for f in my_firms():
-		if Firm.TOWER_FIRMS.has(f.code):
-			f.die(null)
-			return
-	for code in ["BASE"]:
-		var l := my_firms(code)
-		if not l.is_empty():
-			l[0].die(null)
-			return
-	for r in my_firms("RESEARCH"):
-		if r.research_tech == "":
-			r.die(null)
-			return
-
-
-func _nearest_own_town(c: Vector2) -> Town:
-	var best: Town = null
-	for t in my_towns():
-		if best == null or t.center_loc().distance_to(c) < best.center_loc().distance_to(c):
-			best = t
-	return best
-
-
-func _under_construction() -> bool:
-	for f in my_firms():
-		if f.under_construction:
-			return true
-	return false
-
-
-func _try_build(code: String, near: Rect2i, anchors: Array = []) -> Firm:
-	var cost := float(Defs.firm_types.get(code, {}).get("cost", 200))
-	if not n.can_afford(cost):
+	if best:
+		return best
+	if not civilian:
+		var h := hire_unit(race, false, dest)
+		if h:
+			return h
+		if race != "":
+			return find_unit_from_camp(race, dest)
 		return null
-	var b := Assets.firm_build(code, n.race)
-	var pos := g._place_near(near, b.get("loc_w", 5), b.get("loc_h", 5), 8, anchors)
-	if pos.x < 0:
+	return recruit_peasant(race, dest)
+
+
+func should_hire_unit(importance: int) -> bool:
+	if my_firms("INN").is_empty():
+		return false
+	return should_spend(importance + pref("hire_unit") / 5 - 10)
+
+
+## Nation::hire_unit: the best hero of the race the treasury can pay.
+func hire_unit(race: String, spy: bool, dest: Vector2i) -> Unit:
+	if not should_hire_unit(20):
 		return null
-	var builder := _builder_near(Vector2(pos))
-	if builder == null:
-		return null
-	var f := g.spawn_firm(code, n.id, n.race, pos, false)
-	if f == null:
-		return null
-	n.add_cash(-cost, "Construction")
-	builder.order_build(f)
-	return f
-
-
-func _resume_construction() -> void:
-	for f in my_firms():
-		if f.under_construction and (f.builder == null or not is_instance_valid(f.builder) or f.builder.dead):
-			var busy := g.units.any(func(u): return u.nation_id == n.id and u.order == Unit.Order.BUILD and u.order_firm == f)
-			if not busy:
-				var b := _builder_near(f.center_loc())
-				if b:
-					b.order_build(f)
-
-
-# -------------------------------------------------------------- garrisons ---
-
-func _garrisons() -> void:
-	_resume_construction()
-	for f in my_firms():
-		if not (f.code in Firm.MILITARY_FIRMS) or f.under_construction:
-			continue
-		var heading := g.units.any(func(u): return u.nation_id == n.id and u.order == Unit.Order.ENTER and u.order_firm == f)
-		if f.overseer == null and not heading:
-			var gen := _best_idle_leader(f.center_loc())
-			if gen:
-				gen.order_enter(f)
-				continue
-		if f.soldiers.size() < f.capacity() * 2 / 3 and n.cash > 200:
-			var linked: Array = f.linked_towns.filter(func(t): return t.nation_id == n.id and t.loyalty >= 50 and t.population > 25)
-			if not linked.is_empty():
-				linked[0].draft_into(f)
-
-
-## Site::ai_get_site_object: send the nearest idle unit that can take it to any
-## treasure near the kingdom's towns and buildings.
-func _seek_treasure() -> void:
-	if g.treasures.is_empty():
-		return
-	var bases: Array = my_towns() + my_firms()
-	for t in g.treasures:
-		if g.units.any(func(u): return u.nation_id == n.id and u.order == Unit.Order.MOVE and u.goal == t.cell):
-			continue
-		if not bases.any(func(b): return b.center_loc().distance_to(t.center_loc()) < 30.0):
-			continue
-		var best: Unit = null
-		var best_d := 40.0
-		for u in idle_units():
-			if u.rank == Defs.Rank.KING or u.is_civilian() and t.kind == Treasure.Kind.ITEM:
-				continue
-			if t.kind == Treasure.Kind.SCROLL and u.race != t.race():
-				continue
-			if t.kind == Treasure.Kind.ITEM and (u.item_id != 0 or not Items.can_pick(u)):
-				continue
-			var d: float = u.center_loc().distance_to(t.center_loc())
-			if d < best_d:
-				best_d = d
-				best = u
-		if best:
-			best.order_move(t.cell)
-
-
-## Peasants left over from building go back to a town, keeping two on hand.
-func _settle_spare_peasants() -> void:
-	var idle := idle_units().filter(func(u): return u.is_civilian())
-	for i in range(2, idle.size()):
-		idle[i].order_settle()
-
-
-func _best_idle_leader(c: Vector2) -> Unit:
-	var best: Unit = null
-	for u in idle_units():
-		if u.rank == Defs.Rank.GENERAL and (best == null or u.leadership > best.leadership):
-			best = u
-	if best == null:
-		for u in idle_units():
-			if u.rank == Defs.Rank.SOLDIER and not u.is_civilian() and (best == null or u.leadership > best.leadership):
-				best = u
-		if best:
-			best.rank = Defs.Rank.GENERAL
-			best.leadership = maxf(best.leadership, 30.0)
-	return best
-
-
-# --------------------------------------------------------------- economy ---
-
-func _economy(day: int) -> void:
-	var towns := my_towns()
-	if towns.is_empty():
-		return
-	# in debt: close a building that earns nothing, at most one a month
-	if n.cash < -100 and day - _last_close >= 30:
-		_last_close = day
-		_close_unprofitable()
-	# taxes when short of money
-	if n.cash < 300:
-		for t in towns:
-			if t.loyalty > 65:
-				t.collect_tax()
-	# walls for towns at war, once the economy can afford them
-	if war_target > 0 and n.cash > 2000:
-		for t in towns:
-			if t.target_wall_level < 2 and t.population > 25:
-				t.build_wall()
-				break
-	# grants to keep towns loyal
-	for t in towns:
-		if t.loyalty < 40 and n.cash > t.grant_cost() * 4:
-			t.grant(n.id)
-	# keep every Tower of Science busy
-	for r in my_firms("RESEARCH"):
-		if r.research_tech == "" and not r.under_construction:
-			for c in RESEARCH_ORDER:
-				var code: String = c
-				if code == "SPUS":
-					code = Defs.spu_structure_tech(n.race)
-				elif code == "SPUB":
-					code = Defs.spu_berserk_tech(n.race)
-				var t := Defs.tech_def(code)
-				if Defs.can_research(n, t):
-					r.start_research(code)
-					break
-	if _under_construction():
-		return
-	# every town needs a camp
-	for t in towns:
-		if not t.linked_firms.any(func(f): return f.nation_id == n.id and f.code in Firm.MILITARY_FIRMS):
-			if _try_build("CAMP", t.footprint()):
-				return
-	# Keep at least a third of the people farming (Town::process_food): only add
-	# workplaces while their staff would fit within 60% of the population.
-	var pop := 0
-	for t in towns:
-		pop += t.population
-	var work_slots := my_firms().filter(func(f): return f.is_work_firm()).size() * Defs.MAX_WORKER
-	var can_employ := n.cash > 0 and work_slots < pop * 2
-	if n.food < 0:
-		for r in my_firms("RESEARCH"):
-			if n.tech_level("FARMING") < Defs.tech_def("FARMING")["max"]:
-				r.start_research("FARMING")
-	if not can_employ:
-		return
-	# mines on deposits near our towns
-	for s in g.sites:
-		if s.mine != null or s.reserve < 1000:
-			continue
-		for t in towns:
-			if Game._center_dist(s.center_loc(), t.center_loc()) <= Defs.EFFECTIVE_FIRM_TOWN_DISTANCE:
-				# only start a mine when the whole mine-factory-market chain is affordable
-				if n.cash > 1300 and my_firms("MINE").filter(func(m): return not m.linked_firms.any(func(f): return f.code == "FACTORY")).is_empty():
-					var b := _builder_near(s.center_loc())
-					if b:
-						var f := g.spawn_firm("MINE", n.id, n.race, Vector2i(s.x1, s.y1), false)
-						if f:
-							n.add_cash(-float(Defs.firm_types["MINE"]["cost"]), "Construction")
-							b.order_build(f)
-							return
-				break
-	# factories must reach both a mine and a town (for workers); markets a factory and a town
-	for m in my_firms("MINE"):
-		if not m.linked_firms.any(func(f): return f.code == "FACTORY" and f.nation_id == n.id):
-			var t := _nearest_own_town(m.center_loc())
-			if t and _try_build("FACTORY", t.footprint(), [m.center_loc(), t.center_loc()]):
-				return
-	for fa in my_firms("FACTORY"):
-		if not fa.linked_firms.any(func(f): return f.code == "MARKET" and f.nation_id == n.id):
-			var t := _nearest_own_town(fa.center_loc())
-			if t and _try_build("MARKET", t.footprint(), [fa.center_loc(), t.center_loc()]):
-				return
-	if day > 200 and my_firms("RESEARCH").is_empty() and n.cash > 1200:
-		if _try_build("RESEARCH", towns[0].footprint()):
-			return
-	if day > 400 and my_firms("INN").is_empty() and n.cash > 1500:
-		if _try_build("INN", towns[0].footprint()):
-			return
-	for inn in my_firms("INN"):
-		if not inn.heroes.is_empty() and n.cash > 2500:
-			inn.hire_hero(0)
-	# spies: guard home, then infiltrate the camps and towns of the kingdom we fight
-	if day > 600 and my_firms("SPY").is_empty() and n.cash > 2000:
-		if _try_build("SPY", towns[0].footprint(), [towns[0].center_loc()]):
-			return
-	# caravans between our markets and those of friendly kingdoms
-	# (FirmMarket::ai_create_new_trade: a caravan with the other market as its second stop)
-	for mk in my_firms("MARKET"):
-		if mk.under_construction or g.caravans_of(mk) >= 1 or Caravans.can_hire(mk) <= 0 or not Training.ai_should_spend(n, 30):
-			continue
-		var partner := g.find_trade_partner(mk, n.id)
-		if partner:
-			var c: Unit = mk.hire_caravan()
-			if c:
-				c.set_caravan_stop(1, partner)
-			break
-	if day > 500 and my_firms("STABLE").is_empty() and n.cash > 1200 and n.tech_level(Defs.spu_structure_tech(n.race)) > 0:
-		if _try_build("STABLE", towns[0].footprint(), [towns[0].center_loc()]):
-			return
-	if day > 700 and my_firms("WAR").is_empty() and n.cash > 2000 and n.tech_level("CATAPULT") > 0:
-		if _try_build("WAR", towns[0].footprint()):
-			return
-	for wf in my_firms("WAR"):
-		if wf.weapon == "" and n.cash > 1500:
-			for wcode in Defs.MEGA_WEAPONS + ["CANNON", "F_BALLIS", "FLAMETHR", "BALLISTA", "EXPCART", "CATAPULT"]:
-				if n.tech_level(wcode) > 0:
-					wf.queue_weapon(wcode)
-					break
-	# an offensive building beside a fort, once researched (FirmMagic::process_ai casts by itself)
-	if day > 900 and n.cash > 3500:
-		var have := my_firms().filter(func(f): return f.code in Defs.OFFENSIVE_FIRMS).size()
-		var forts := my_firms("FORT") + my_firms("CAMP")
-		if have < 2 and not forts.is_empty():
-			for code in Defs.OFFENSIVE_FIRMS:
-				if Defs.knows_firm(n, code) and my_firms(code).is_empty():
-					var anchor: Firm = forts[(day / 7) % forts.size()]
-					if _try_build(code, anchor.footprint()):
-						return
-					break
-	if day > 900 and my_firms("BASE").is_empty() and n.cash > 3500:
-		var same_race := towns.filter(func(t): return t.race == n.race)
-		if not same_race.is_empty() and _try_build("BASE", same_race[0].footprint()):
-			return
-	for b in my_firms("BASE"):
-		if n.prayer_points >= b.god_cost() and war_target > 0:
-			var god: Unit = b.invoke_god()
-			if god and attack_target and is_instance_valid(attack_target) and not attack_target.dead:
-				god.order_attack(attack_target)
-
-
-# ------------------------------------------------------------- expansion ---
-
-func _expand(_day: int) -> void:
-	var towns := my_towns()
-	if towns.is_empty():
-		return
-	var best: Town = null
-	var best_d := 34.0
-	for t in g.towns:
-		if t.nation_id != 0 or t.dead:
-			continue
-		for mt in towns:
-			var d := t.center_loc().distance_to(mt.center_loc())
-			if d < best_d:
-				best_d = d
-				best = t
-	if best == null:
-		return
-	if best.has_linked_camp(n.id):
-		if n.cash > best.grant_cost() * 3 and best.resistance_to(n.id) < 60 and best.resistance_to(n.id) > Defs.SURRENDER_RESISTANCE:
-			best.grant(n.id)
-		return
-	var pending := best.linked_firms.any(func(f): return f.nation_id == n.id and f.code in Firm.MILITARY_FIRMS)
-	if not pending and not _under_construction():
-		_try_build("CAMP", best.footprint())
-
-
-# -------------------------------------------------------------- military ---
-
-func _military(day: int) -> void:
-	var army := idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING and not u.is_civilian())
-	var mine := g.military_strength(n.id)
-	# pick a war
-	if war_target == 0 and day > int(700 / aggression):
-		var weakest := 0
-		var weakest_s := INF
-		for o in g.nations:
-			if o.id == n.id or not o.alive or n.relation(o.id) >= Defs.Relation.PEACE:
-				continue
-			if Diplomacy.has_trade(n, o.id) and Diplomacy.ai_rel(n, o.id) >= 60:
-				continue      # a valued trading partner (think_declare_war wants a poor relation)
-			var s := g.military_strength(o.id)
-			# more aggressive towards human players (oai_attk.cpp: +100/+300/+500 to the rating)
-			if o.is_player and _aggressiveness() >= GameSetup.MODERATE:
-				s *= [1.0, 1.0, 0.8, 0.6, 0.4][_aggressiveness()]
-			if s < weakest_s:
-				weakest_s = s
-				weakest = o.id
-		if weakest > 0 and mine > weakest_s * (1.6 / aggression) and g.rng.randf() < 0.2:
-			war_target = weakest
-			war_start_day = day
-			g.declare_war(n.id, weakest)
-	if war_target > 0:
-		var wn := g.nation(war_target)
-		if wn == null or not wn.alive or n.relation(war_target) != Defs.Relation.WAR:
-			war_target = 0
-			attack_target = null
-	# also respond to anyone at war with us; the standing war with Fryhtan
-	# kingdoms only becomes an offensive once the kingdom is established
-	if war_target == 0:
-		for o in g.nations:
-			if o.alive and o.id != n.id and n.relation(o.id) == Defs.Relation.WAR:
-				if o.is_fryhtan and (day < 700 or mine < g.military_strength(o.id) * 1.2):
-					continue
-				war_target = o.id
-				war_start_day = day
-				break
-	if attack_target == null or not is_instance_valid(attack_target) or attack_target.dead or attack_target.nation_id != war_target:
-		attack_target = _pick_target()
-	# pull soldiers out of camps to form an army
-	if war_target > 0 and army.size() < 8:
-		for f in my_firms():
-			if f.code in Firm.MILITARY_FIRMS and f.soldiers.size() > 3:
-				for i in f.soldiers.size() - 2:
-					f.release_unit(f.soldiers[0])
-	army = idle_units(false).filter(func(u): return u.can_attack() and u.rank != Defs.Rank.KING and not u.is_civilian())
-	# against a human, more troops (maxTargetCombatLevel grows by a third a level)
-	var needed := 6
-	var wt := g.nation(war_target) if war_target > 0 else null
-	if wt and wt.is_player and _aggressiveness() >= GameSetup.MODERATE:
-		needed += needed * (_aggressiveness() - GameSetup.MODERATE + 1) / 3
-	if attack_target and army.size() >= needed:
-		for u in army:
-			u.order_attack(attack_target)
-		return
-	# clear nearby Fryhtan lairs when strong enough
-	if army.size() >= 8:
-		var lair := _nearest_lair()
-		if lair:
-			for u in army:
-				u.order_attack(lair)
-			return
-	# otherwise park extra soldiers in camps
-	if war_target == 0:
-		for u in army:
-			if u.rank == Defs.Rank.GENERAL and not u.is_hero:
-				continue
-			for f in my_firms():
-				if f.code in Firm.MILITARY_FIRMS and not f.under_construction and f.soldiers.size() < f.capacity():
-					u.order_enter(f)
-					break
-
-
-## An army without a home (a scenario's invaders, or the remains of a beaten
-## kingdom): win a base by wearing down the nearest independent town until it
-## surrenders, otherwise make war on the nearest kingdom it is not at peace with.
-func _homeless(day: int) -> void:
-	var army := g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.inside_firm == null and u.can_attack())
-	if army.is_empty():
-		return
-	var c := Vector2.ZERO
-	for u in army:
-		c += u.center_loc()
-	c /= army.size()
-	if attack_target != null and is_instance_valid(attack_target) and not attack_target.dead and attack_target.nation_id != n.id:
-		for u in army:
-			if u.order == Unit.Order.IDLE and u.rank != Defs.Rank.KING:
-				u.order_attack(attack_target)
-		return
-	var best: GameObj = null
-	var best_d := INF
-	for t in g.towns:
-		if t.nation_id == 0 and not t.dead:
-			var d := c.distance_to(t.center_loc())
-			if d < best_d:
-				best_d = d
-				best = t
-	if best == null or best_d > 60.0:
-		# no village to take nearby: attack the closest rival not at peace with us
-		for o in g.nations:
-			if o.id == n.id or not o.alive or n.relation(o.id) >= Defs.Relation.PEACE:
-				continue
-			for obj in g.firms + g.towns:
-				if obj.nation_id == o.id and not obj.dead:
-					var d := c.distance_to(obj.center_loc())
-					if d < best_d:
-						best_d = d
-						best = obj
-		if best != null and best.nation_id > 0 and n.relation(best.nation_id) != Defs.Relation.WAR:
-			g.declare_war(n.id, best.nation_id)
-			war_target = best.nation_id
-			war_start_day = day
-	attack_target = best
-	if best == null:
-		return
-	for u in army:
-		if u.rank != Defs.Rank.KING or army.size() == 1:
-			u.order_attack(best)
-
-
-func _aggressiveness() -> int:
-	return int(g.config.get("aggressiveness", GameSetup.MODERATE))
-
-
-func _pick_target() -> GameObj:
-	if war_target == 0:
-		return null
-	var home := my_towns()
-	var c: Vector2 = home[0].center_loc() if not home.is_empty() else Vector2(g.world.w / 2.0, g.world.h / 2.0)
-	var best: GameObj = null
-	var best_d := INF
-	for f in g.firms:
-		if f.nation_id == war_target and not f.dead:
-			var d := c.distance_to(f.center_loc()) * (0.7 if f.code in Firm.MILITARY_FIRMS else 1.0)
-			if d < best_d:
-				best_d = d
-				best = f
-	if best == null:
-		for t in g.towns:
-			if t.nation_id == war_target and not t.dead:
-				var d := c.distance_to(t.center_loc())
-				if d < best_d:
-					best_d = d
-					best = t
-	return best
-
-
-func _nearest_lair() -> Firm:
-	var home := my_towns()
-	if home.is_empty():
-		return null
-	var c: Vector2 = home[0].center_loc()
 	var best: Firm = null
-	var best_d := 40.0
+	var best_i := -1
+	var best_r := 0
+	for inn in my_firms("INN"):
+		for i in inn.heroes.size():
+			var h: Dictionary = inn.heroes[i]
+			if race != "" and h["race"] != race:
+				continue
+			if spy and int(h.get("spy_skill", 0)) == 0:
+				continue
+			if n.cash < float(h["cost"]):
+				continue
+			var r := int(h["leadership"]) - (100 - 100 * int(inn.center_loc().distance_to(Vector2(dest))) / g.world.w)
+			if h["race"] == n.race:
+				r += 50
+			if r > best_r:
+				best_r = r
+				best = inn
+				best_i = i
+	return best.hire_hero(best_i) if best else null
+
+
+func find_unit_from_camp(race: String, dest: Vector2i) -> Unit:
+	var best: Firm = null
+	var best_r := 0
+	for c in camps():
+		if c.soldiers.any(func(s): return s.race == race and s.basic_days <= 0):
+			var r := distance_rating(Vector2(dest), c.center_loc())
+			if r > best_r:
+				best_r = r
+				best = c
+	if best == null:
+		return null
+	for s in best.soldiers:
+		if s.race == race and s.basic_days <= 0:
+			best.release_unit(s)
+			return s
+	return null
+
+
+## Nation::recruit_peasant: from the nearest own town that can spare one.
+func recruit_peasant(race: String, dest: Vector2i) -> Unit:
+	var best: Town = null
+	var best_r := 0
+	for t in my_towns():
+		if t.jobless() <= 0 or (race != "" and t.race != race):
+			continue
+		var r := distance_rating(t.center_loc(), Vector2(dest))
+		if r > best_r:
+			best_r = r
+			best = t
+	if best == null:
+		return null
+	if not best.can_recruit():
+		if n.cash > 0.0:
+			best.grant(n.id)
+		if not best.can_recruit():
+			return null
+	return best.recruit()
+
+
+## Nation::recruit_in_firm_soldier: a soldier from the camp with men to spare.
+func recruit_in_firm_soldier(dest: Firm, race: String) -> Unit:
+	if race == "":
+		race = AIFirm.majority_race(dest)
+		if race == "":
+			return null
+	var best: Firm = null
+	var best_r := 0
+	for c in camps():
+		if c == dest:
+			continue
+		var r := (AIFirm.total_combat_level(c) - AIFirm.combat_level_needed(self, c)) / 3 + distance_rating(c.center_loc(), dest.center_loc())
+		for s in c.soldiers:
+			if s.basic_days <= 0 and s.race == race:
+				r += 50
+		if r > best_r:
+			best_r = r
+			best = c
+	if best == null:
+		return null
+	var pick: Unit = null
+	var pr := 0
+	for s in best.soldiers:
+		if s.basic_days > 0:
+			continue
+		var r := 50 if s.race == race else (20 if not s.is_human() else 10)
+		if r > pr:
+			pr = r
+			pick = s
+	if pick:
+		best.release_unit(pick)
+	return pick
+
+
+# ------------------------------------------------------------ placement ---
+
+## Nation::find_best_place_loc: weigh every spot around the reference place -
+## nearer is better; near the kingdom's towns (and friendly or willing
+## independent ones); factories and markets near mines, markets and
+## factories; and never hard against another building or town.
+func find_best_place(code: String, ref: GameObj, distance := IDEAL_INTER_PLACE_SPACE) -> Vector2i:
+	var c := ref.center_loc()
+	var eff := Defs.effective_distance(code, ref.code if ref is Firm else "")
+	var pw := Defs.TOWN_SIZE
+	var ph := Defs.TOWN_SIZE
+	if code != "":
+		var bd := Assets.firm_build(code, n.race)
+		pw = bd.get("loc_w", 3)
+		ph = bd.get("loc_h", 3)
+	var rx1 := maxi(0, int(c.x) - eff - pw / 2)
+	var ry1 := maxi(0, int(c.y) - eff - ph / 2)
+	var rx2 := mini(g.world.w - 1, int(c.x) + eff)
+	var ry2 := mini(g.world.h - 1, int(c.y) + eff)
+	var rw := rx2 - rx1 + 1
+	var rh := ry2 - ry1 + 1
+	var m := PackedInt32Array()
+	m.resize(rw * rh)
+	for y in rh:
+		for x in rw:
+			m[y * rw + x] = 10 - maxi(absi(rx1 + x - int(c.x)), absi(ry1 + y - int(c.y)))
+	var add := func(r: Rect2i, v: int) -> void:
+		for y in range(maxi(ry1, r.position.y), mini(ry2, r.end.y - 1) + 1):
+			for x in range(maxi(rx1, r.position.x), mini(rx2, r.end.x - 1) + 1):
+				m[(y - ry1) * rw + (x - rx1)] += v
+	var area := Rect2i(rx1 - 20, ry1 - 20, rw + 40, rh + 40)
 	for f in g.firms:
-		if f.code == "LAIR" and not f.dead:
-			var d := c.distance_to(f.center_loc())
-			if d < best_d:
-				best_d = d
-				best = f
+		if f.dead or not area.intersects(f.footprint()):
+			continue
+		if (code == "MARKET" and f.code in ["MINE", "FACTORY"] or code == "FACTORY" and f.code in ["MINE", "MARKET"]) and f.nation_id == n.id:
+			var e := Defs.effective_distance(f.code, code)
+			add.call(Rect2i(Vector2i(f.center_loc()) - Vector2i.ONE * e, Vector2i.ONE * (e * 2 + 1)), 40)
+		add.call(f.footprint().grow(distance), -20)
+	for t in g.towns:
+		if t.dead or not area.intersects(t.footprint()):
+			continue
+		var e := Defs.effective_distance("", code)
+		var wa := t.population * 2
+		if t.nation_id != n.id:
+			if t.nation_id == 0:
+				wa = wa * (100 - int(t.resistance_to(n.id))) / 100
+			else:
+				wa = wa * (relation(t.nation_id) + 1) / 4
+		add.call(Rect2i(Vector2i(t.center_loc()) - Vector2i.ONE * e, Vector2i.ONE * (e * 2 + 1)), wa)
+		add.call(t.footprint().grow(distance), -100)
+	var best := Vector2i(-1, -1)
+	var best_w := 0
+	for y in range(ry1, ry2 - ph + 2):
+		for x in range(rx1, rx2 - pw + 2):
+			if not g.world.can_place(x, y, pw, ph) or g._overlaps_site(Rect2i(x, y, pw, ph)):
+				continue
+			var tot := 0
+			for yy in ph:
+				for xx in pw:
+					tot += m[(y - ry1 + yy) * rw + (x - rx1 + xx)]
+			var wv := tot / (pw * ph)
+			if wv > best_w:
+				best_w = wv
+				best = Vector2i(x, y)
 	return best
 
 
-# ------------------------------------------------------------- diplomacy ---
+# ------------------------------------------------------------ economy ---
 
-## Town::think_split_town / ai_settle_new: a town close to its population
-## limit sends a villager to found a new town beside it, unless a small town
-## of its race is already nearby.
-func _think_split_towns(day: int) -> void:
-	if not n.can_afford(Game.TOWN_BUILDING_COST + 300.0):
+## Nation::think_build_firm (mines)
+func think_build_firm() -> void:
+	if not _should_build_mine():
 		return
-	for t in my_towns():
-		if (day / 7 + t.obj_id) % 4 != 0 or t.under_construction:
-			continue
-		if t.population < Defs.MAX_TOWN_POPULATION - 15 + int(Diplomacy._pref(n, "cohesive")) / 10:
-			continue
-		if g.towns.any(func(o): return o != t and o.nation_id == n.id and o.race == t.race and o.population < 20 				and o.center_loc().distance_to(t.center_loc()) < 16.0):
-			continue
-		var c := Vector2i(t.center_loc())
-		var site := Vector2i(-1, -1)
-		for r in range(Defs.TOWN_SIZE + 2, 13):
-			for k in 16:
-				var a := TAU * k / 16.0
-				var p := c + Vector2i(roundi(cos(a) * r), roundi(sin(a) * r)) - Vector2i.ONE * (Defs.TOWN_SIZE / 2)
-				if g.can_build_town(p):
-					site = p
-					break
-			if site.x >= 0:
+	var s := _seek_mine()
+	if s == null:
+		return
+	var mined := my_firms("MINE").filter(func(f): return f.raw == s.raw).size()
+	if mined > 0 and not should_spend(20):
+		return
+	if not g.config.get("explore", true) and g.config.get("setup", false):
+		var ok := false
+		for t in my_towns():
+			if g.day > int(Vector2(s.x1, s.y1).distance_to(t.center_loc())) * (5 - _aggressiveness()) / 5:
+				ok = true
 				break
-		if site.x < 0:
-			continue
-		var u: Unit = t.recruit()
-		if u:
-			u.order_found_town(site)
+		if not ok:
 			return
+	add_action(Vector2i(s.x1, s.y1), Vector2i(s.x1, s.y1), BUILD_FIRM, "MINE")
 
 
-## UnitGod::think_*_god: where a computer kingdom's Greater Being casts.
-func _use_gods() -> void:
-	for u in g.units:
-		if not u.is_god or u.nation_id != n.id or u.dead or not u.can_cast_power() or u.cast_target.x >= 0:
+## Nation::ai_should_build_mine
+func _should_build_mine() -> bool:
+	var jl := total_jobless()
+	if jl < (100 - pref("economic_development")) / 2 or jl < 16:
+		return false
+	if not g.sites.any(func(s): return s.mine == null and s.reserve > 0.0):
+		return false
+	if not can_ai_build("MINE"):
+		return false
+	var mines := my_firms("MINE")
+	if not mines.is_empty() and (true_profit() < 0.0 or total_population() < 40 + pref("economic_development") / 5):
+		return false
+	if action_exists(BUILD_FIRM, "MINE"):
+		return false
+	if jl < 30:
+		for m in mines:
+			if m.workers() < Defs.MAX_WORKER:
+				return false
+	return true
+
+
+## Nation::seek_mine: a deposit of a kind we do not mine yet, nearest a town
+## of ours; else of the kind we mine least.
+func _seek_mine() -> Site:
+	var mined := {}
+	for m in my_firms("MINE"):
+		mined[m.raw] = int(mined.get(m.raw, 0)) + 1
+	var near := {}
+	var near_d := {}
+	for s in g.sites:
+		if s.mine != null or s.reserve <= 0.0 or not g.world.can_place(s.x1, s.y1, s.w, s.h):
 			continue
-		var at := _god_target(u)
-		if at.x >= 0:
-			u.order_cast_power(at)
+		if find_action(Vector2i(-1, -1), Vector2i(s.x1, s.y1), BUILD_FIRM, "MINE") != null:
+			continue
+		for t in my_towns():
+			var d := maxf(absf(s.x1 - t.center_loc().x), absf(s.y1 - t.center_loc().y))
+			if d < float(near_d.get(s.raw, INF)):
+				near_d[s.raw] = d
+				near[s.raw] = s
+	var best: Site = null
+	var best_d := INF
+	for r in near:
+		if not mined.has(r) and near_d[r] < best_d:
+			best_d = near_d[r]
+			best = near[r]
+	if best == null:
+		var least := 1 << 30
+		for r in near:
+			if int(mined.get(r, 0)) < least:
+				least = int(mined.get(r, 0))
+				best = near[r]
+	return best
 
 
-func _god_target(god: Unit) -> Vector2i:
-	var c := god.center_loc()
-	match god.god_info().get("race", ""):
-		"ROMAN":
-			# think_roman_god: the commander most in need of leadership
-			var best: Firm = null
-			var best_r := 0.0
-			for f in my_firms():
-				if Espionage.is_camp(f) and f.overseer and f.overseer.is_human() and f.overseer.leadership <= 70.0:
-					var r := 5000.0 + (5000.0 if f.overseer.rank == Defs.Rank.KING else 0.0) - absf(f.overseer.leadership - 40.0) * 70.0
-					for s in f.soldiers:
-						r += f.overseer.combat - s.combat
-					if r > best_r:
-						best_r = r
-						best = f
-			return Vector2i(best.center_loc()) if best else Vector2i(-1, -1)
-		"GREEK", "MONGOL", "INDIAN", "CARTH":
-			# fighting near by: the god goes where the enemy is
-			var e = g.find_enemy_near(god, 12.0)
-			if e and (god.god_info()["race"] != "CARTH" or not (e is Unit)):
-				return Vector2i(e.center_loc())
-			if e and god.god_info()["race"] == "CARTH":
-				return Vector2i(-1, -1)
-			return Vector2i(-1, -1)
-		"PERSIAN":
-			for f in g.firms:
-				if not f.dead and f.nation_id != n.id and f.nation_id > 0 and not f.revealed_to.has(n.id) and f.center_loc().distance_to(c) < 20.0:
-					return Vector2i(f.center_loc())
-		"EGYPTIAN":
-			var small: Town = null
-			for t in my_towns():
-				if t.population < Defs.MAX_TOWN_POPULATION - 10 and (small == null or t.population < small.population):
-					small = t
-			return Vector2i(small.center_loc()) if small else Vector2i(-1, -1)
-		"JAPANESE":
-			for s in g.spies:
-				if s.nation_id != n.id and is_instance_valid(s.spy_place) and s.spy_place.nation_id == n.id:
-					return Vector2i(s.spy_place.center_loc())
-	return Vector2i(-1, -1)
+## Nation::think_reduce_expense: close the least productive war factory or tower.
+func think_reduce_expense() -> void:
+	if true_profit() > 0.0 or n.cash > 5000 * pref("cash_reserve") / 100:
+		return
+	var best: Firm = null
+	var best_r := 0
+	for f in my_firms():
+		if f.code in ["WAR", "RESEARCH"]:
+			var r := 100 - int(f.productivity())
+			if r > best_r:
+				best_r = r
+				best = f
+	if best:
+		AIFirm.del_firm(self, best)
 
 
-## Nation::think_diplomacy about once a month: cease-fires, treaties, food
-## purchases and technology exchanges (Diplomacy.ai_think).
-func _diplomacy(day: int) -> void:
-	if (day / 7 + n.id) % 4 == 0:
-		Diplomacy.ai_think(g, n)
+# ------------------------------------------------------------ military ---
+
+## Nation::think_military: a new fort by the biggest base town when the army
+## needs room, or close one down when food runs short.
+func think_military() -> void:
+	if yearly_food_change() < 0.0:
+		return             # think_close_camp: does nothing in the original
+	if not _should_expand_military() and not _troop_needs_camp():
+		return
+	var best: Town = null
+	var best_r := 0
+	for t in my_towns():
+		if not t.is_base_town or t.no_neighbor_space:
+			continue
+		if t.population > best_r:
+			best_r = t.population
+			best = t
+	if best == null:
+		return
+	var at := find_best_place("FORT", best)
+	if at.x < 0:
+		best.no_neighbor_space = true
+		return
+	add_action(at, Vector2i(best.x1, best.y1), BUILD_FIRM, "FORT")
+
+
+func _should_expand_military() -> bool:
+	if true_profit() < 0.0 or not should_spend(pref("military_development") / 2):
+		return false
+	var cs := camps()
+	if cs.size() * 9 > total_jobless() * (50 + pref("military_development")) / 150:
+		return false
+	var free := 0
+	for c in cs:
+		if c.should_close:
+			continue
+		free += 9 - (int(c.overseer != null) + c.soldiers.size() + c.patrol_units.size())
+		if c.ai_recruiting:
+			return false
+	return free < 9
+
+
+func has_too_many_camps() -> bool:
+	return camps().size() * 9 > total_jobless() * (150 + pref("military_development")) / 150
+
+
+func _troop_needs_camp() -> bool:
+	if has_too_many_camps() or not should_spend(50 + pref("military_development") / 2):
+		return false
+	var units := g.units.filter(func(u): return u.nation_id == n.id and not u.dead and not u.is_civilian() and (u.is_human() or u.is_weapon))
+	var gens := units.filter(func(u): return u.rank == Defs.Rank.GENERAL).size()
+	var cs := camps().size()
+	return units.size() - cs * MAX_SOLDIER >= 9 + 20 * (100 - pref("military_development")) / 200 \
+		and gens - cs >= 2 + 4 * (100 - pref("military_development")) / 200
+
+
+## Nation::ai_defend: answer an attack on a town, building or leader.
+func ai_defend(attacker: GameObj) -> void:
+	if attacker == null or not is_instance_valid(attacker) or attacker.dead or g.day < last_defend_day + 7:
+		return
+	last_defend_day = g.day
+	var lvl := AICapture.mobile_defense_combat_level(self, attacker.center_loc(), attacker.nation_id, false)
+	AIAttack.attack_target(self, attacker, lvl, true)
 
 
 func accepts_peace(from: int) -> bool:
-	var rel := n.relation(from)
-	var mine := g.military_strength(n.id)
-	var theirs := g.military_strength(from)
-	var other := g.nation(from)
-	var rep: float = other.reputation if other else 0.0
-	if rel == Defs.Relation.WAR:
-		return mine < theirs * 0.8 or (g.day - war_start_day > 500 and rep > 0 and g.rng.randf() < 0.5)
-	return rep > -20.0 and (war_target != from)
+	return Diplomacy.consider_cease_war(g, n, g.nation(from)) > 0
