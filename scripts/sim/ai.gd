@@ -125,8 +125,9 @@ func pref(k: String) -> int:
 
 # -------------------------------------------------------------- figures ---
 
+## Nation::ai_camp_array: forts and camps, and a Fryhtan kingdom's lairs.
 func camps() -> Array:
-	return my_firms().filter(func(f): return Espionage.is_camp(f) and not f.under_construction)
+	return my_firms().filter(func(f): return (Espionage.is_camp(f) or f.code == "LAIR") and not f.under_construction)
 
 
 func total_population() -> int:
@@ -143,8 +144,9 @@ func total_jobless() -> int:
 	return p
 
 
+## Nation::total_unit_count: the kingdom's fighting men (Fryhtans too) and war machines.
 func total_unit_count() -> int:
-	return g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.is_human() and not u.is_civilian()).size()
+	return g.units.filter(func(u): return u.nation_id == n.id and not u.dead and not u.is_civilian() and not u.is_caravan and not u.is_god and not u.is_wagon()).size()
 
 
 ## NationBase::true_profit_365days
@@ -193,6 +195,8 @@ func should_spend_war(enemy_military: int, cease := false) -> bool:
 
 
 func can_ai_build(code: String) -> bool:
+	if n.is_fryhtan and n.live_points < SpecialFirms.setup_live(code):
+		return false
 	return n.cash >= float(Defs.firm_types.get(code, {}).get("cost", 0)) and Defs.knows_firm(n, code)
 
 
@@ -286,7 +290,9 @@ func think_succeed_king() -> bool:
 	var best: Unit = null
 	var best_r := 0
 	for u in g.units:
-		if u.nation_id != n.id or u.dead or not u.is_human() or u.is_civilian() or u.is_spy:
+		if u.nation_id != n.id or u.dead or u.is_civilian() or u.is_spy:
+			continue
+		if not (u.is_human() or (n.is_fryhtan and SpecialFirms.is_fryhtan_unit(u))):
 			continue
 		if u.inside_firm != null and u.inside_firm.overseer != u and not (u in u.inside_firm.soldiers):
 			continue
@@ -403,7 +409,7 @@ func add_action(at: Vector2i, ref: Vector2i, mode: int, para = 0, instance := 1,
 
 
 ## Nation::is_action_exist: at the location, or (at.x < 0) by the reference location.
-func find_action(at: Vector2i, ref: Vector2i, mode: int, para, unit: Unit = null):
+func find_action(at: Vector2i, ref: Vector2i, mode: int, para, unit: Unit = null) -> Variant:
 	for a in actions:
 		if a["mode"] != mode or str(a["para"]) != str(para):
 			continue
@@ -533,6 +539,10 @@ func _do_build_firm(a: Dictionary) -> int:
 	if f == null:
 		return -1
 	n.add_cash(-float(Defs.firm_types.get(code, {}).get("cost", 0)), "Construction")
+	if n.is_fryhtan:
+		n.live_points -= SpecialFirms.setup_live(code)
+	if code == "LAIR":
+		f.monster_code = n.monster_code
 	f.setup_day = g.day
 	b.order_build(f)
 	b.ai_action_id = a["id"]

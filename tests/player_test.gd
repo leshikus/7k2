@@ -5,7 +5,7 @@ func _ready() -> void:
 		get_tree().quit(1); return
 	var g := Game.new()
 	add_child(g)
-	g.start({"seed": 11, "size": 100, "race": "NORMAN", "ai_count": 1, "reveal": true, "lairs": 0})
+	g.start({"seed": 11, "size": 100, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "reveal": true, "lairs": 0})   # no Fryhtan raids: this is about the economy
 	g.make_peace(1, 2)
 	var p := g.player()
 	var ok := true

@@ -18,6 +18,9 @@ static func process(ai: NationAI, f: Firm, day: int) -> void:
 	_process_common(ai, f, day)
 	if f.dead:
 		return
+	if f.code in ["LAIR", "BEE", "TERMITE", "ANIMAL", "ALCHEMY", "INCUBAT"]:
+		AIFryhtan.process(ai, f, day)        # of_laira.cpp and the Fryhtan buildings
+		return
 	if ai.g.config.has("tutorial"):
 		return
 	match f.code:
@@ -68,6 +71,8 @@ static func _process_common(ai: NationAI, f: Firm, day: int) -> void:
 
 
 static func _should_close(ai: NationAI, f: Firm) -> bool:
+	if f.code == "LAIR":
+		return AIFryhtan.should_close(ai, f)
 	if Espionage.is_camp(f):
 		# FirmCamp::ai_should_close
 		return f.linked_towns.is_empty() and f.linked_firms.is_empty() \
@@ -688,7 +693,7 @@ static func _think_assign_better_commander(ai: NationAI, f: Firm) -> bool:
 	var best_s: Unit = null
 	for c in ai.camps():
 		for s in c.soldiers:
-			if not s.is_human() or s.basic_days > 0:
+			if not (s.is_human() or c.code == "LAIR") or s.basic_days > 0:
 				continue
 			var l := int(s.lead_skill())
 			if s.race != best_race:

@@ -182,10 +182,14 @@ func _run() -> void:
 	await _click(MOUSE_BUTTON_LEFT, _screen(Iso.to_screen(town.center_loc())))
 	_check(game.selected == [town], "left-click selects the town")
 	main.hud.refresh_selection(true)
-	var units_before := game.units.size()
+	var ids_before := {}
+	for u in game.units:
+		ids_before[u.obj_id] = true
 	var pop_before := town.population
 	_check(await _press_hud_button("Recruit"), "Recruit button enabled")
-	_check(game.units.size() == units_before + 1 and town.population == pop_before - 1, "recruiting sends a peasant out of the town")
+	# other kingdoms' units come and go meanwhile: look for our new villager
+	var new_civ := game.units.filter(func(u): return not ids_before.has(u.obj_id) and u.nation_id == p.id and u.is_civilian())
+	_check(new_civ.size() == 1 and town.population == pop_before - 1, "recruiting sends a peasant out of the town")
 
 	# 5b. double-click a soldier selects every soldier of that type on screen
 	var outside: Array = game.units.filter(func(u): return u.nation_id == p.id and u.sprite_code == "NO_CIV" and u.inside_firm == null and not u.dead)

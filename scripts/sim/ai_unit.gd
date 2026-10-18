@@ -19,15 +19,16 @@ static func process(ai: NationAI, u: Unit, day: int) -> void:
 	# a spy of another kingdom in our colours is not ours to command
 	if u.is_spy and u.nation_id != ai.n.id:
 		return
+	var leader_race := u.is_human() or SpecialFirms.is_fryhtan_unit(u)     # race_id: people and Fryhtans
 	if u.is_human() and u.rank != Defs.Rank.KING and day % 5 == id % 5:
 		think_reward(ai, u)
 	if not u.visible:
 		return
 	if think_use_item(ai, u):
 		return
-	if u.is_human() and u.rank == Defs.Rank.KING and think_king_flee(ai, u):
+	if leader_race and u.rank == Defs.Rank.KING and think_king_flee(ai, u):
 		return
-	if u.is_human() and u.rank == Defs.Rank.GENERAL and day % 7 == id % 7 and think_general_flee(ai, u):
+	if leader_race and u.rank == Defs.Rank.GENERAL and day % 7 == id % 7 and think_general_flee(ai, u):
 		return
 	# stop attacking a village that has no resistance left
 	if u.order == Unit.Order.ATTACK and u.target is Town and u.target.nation_id == 0 and u.target.resistance_to(ai.n.id) < 1.0:
@@ -55,9 +56,12 @@ static func process(ai: NationAI, u: Unit, day: int) -> void:
 		u.home_firm = null
 	if u.order != Unit.Order.IDLE:
 		return
-	if u.is_human() and u.rank == Defs.Rank.KING:
-		think_leader_action(ai, u)
-	elif u.is_human() and u.rank == Defs.Rank.GENERAL:
+	if leader_race and u.rank == Defs.Rank.KING:
+		if u.is_human():
+			think_leader_action(ai, u)
+		else:
+			think_normal_monster_action(ai, u)
+	elif leader_race and u.rank == Defs.Rank.GENERAL:
 		think_general_action(ai, u)
 	elif u.is_weapon:
 		if day % 15 == id % 15:

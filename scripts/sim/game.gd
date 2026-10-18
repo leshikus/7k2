@@ -1795,7 +1795,8 @@ func units_near(c: Vector2, r: float) -> Array:
 			var l = unit_grid.get(Vector2i(bx, by))
 			if l != null:
 				out.append_array(l)
-	return out
+	# a unit freed since the grid was built this frame is left out
+	return out.filter(func(u): return is_instance_valid(u))
 
 
 func find_enemy_near(obj: GameObj, range: float) -> GameObj:
@@ -2626,7 +2627,7 @@ func on_object_attacked(victim: GameObj, attacker: GameObj) -> void:
 	var vn := nation(victim.nation_id) if victim.nation_id > 0 else null
 	if vn and vn.ai is NationAI and attacker.nation_id != victim.nation_id and not victim.dead:
 		if victim is Unit:
-			if victim.is_human() and victim.rank >= Defs.Rank.GENERAL:
+			if (victim.is_human() or SpecialFirms.is_fryhtan_unit(victim)) and victim.rank >= Defs.Rank.GENERAL:
 				AIUnit.leader_attacked(vn.ai, victim, attacker)
 		else:
 			vn.ai.ai_defend(attacker)
