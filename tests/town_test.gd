@@ -228,6 +228,42 @@ func _ready() -> void:
 	_check(uc.dead and is_equal_approx(p.cash - cash3, float(Defs.firm_types["INN"]["cost"]) / 2.0), "a cancelled site refunds half its cost")
 	_check(not bld.dead and bld.inside_firm == null and bld.visible, "and its builder comes out")
 
+	# --- loyalty as the original keeps it
+	# a soldier in the field without a general drifts down a point a month
+	var lone := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-9, 6)), 30.0)
+	lone.loyalty = 60.0
+	Espionage.update_unit_loyalty(lone)
+	_check(lone.loyalty == 59.0, "a soldier with no general loses a point a month (%.0f)" % lone.loyalty)
+	# a general who has done much and been rewarded little is less loyal
+	var vet := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-9, 8)), 60.0)
+	vet.rank = Defs.Rank.GENERAL
+	vet.nation_contribution = 120
+	_check(Espionage.contribution_penalty(vet) == 50.0, "an unrewarded veteran general loses up to 50 of his target loyalty")
+	vet.reward(p.id)
+	vet.reward(p.id)
+	_check(Espionage.contribution_penalty(vet) == 0.0, "rewards make up for it (%d gold for %d deeds)" % [vet.total_reward, vet.nation_contribution])
+	# a camp's men change loyalty once a month, not daily
+	var lc := g.spawn_firm("CAMP", p.id, p.race, g._place_near(home.footprint(), 6, 6, 20), true)
+	var lg := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(lc.door()), 40.0)
+	lg.rank = Defs.Rank.GENERAL
+	lg.leadership = 10.0
+	lc.accept_unit(lg)
+	var ls := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(lc.door()), 90.0)
+	ls.leadership = 60.0
+	lc.accept_unit(ls)
+	ls.loyalty = 70.0
+	for d in 29:
+		lc.next_day(g.day + 1 + d)
+	_check(ls.loyalty >= 69.0, "camp loyalty moves once a month, not daily (%.0f after 29 days)" % ls.loyalty)
+	# below 30 a soldier in the field may go over to another kingdom
+	var foe2: Nation = g.nations.filter(func(n): return n.id != p.id and not n.is_fryhtan)[0]
+	p.contact[foe2.id] = true
+	foe2.reputation = 80.0
+	var turn := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-11, 6)), 30.0)
+	turn.loyalty = 0.0
+	Espionage.think_betray(g, turn)
+	_check(turn.nation_id == foe2.id and turn.loyalty >= 40.0, "a soldier with no loyalty left goes over to a respected kingdom (loyalty now %.0f)" % turn.loyalty)
+
 	# --- Fryhtans are not people: they cannot found towns
 	var fu := g.spawn_unit(fry.monster_code, p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(8, 8)), 30.0)
 	_check(fu != null and not fu.is_human() and not fu.can_found_town(), "a Fryhtan cannot build a town")

@@ -195,7 +195,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"item": [u.item_id, u.item_para],
 		"stops": u.stops.map(func(st): return {"firm": _id(st["firm"]), "x": st["x"], "y": st["y"], "pick": st["pick"], "picks": st["picks"]}),
 		"caravan": [u.dest_stop, u.journey, u.wait, u.market_auto, u.last_load_day], "cargo": u.cargo,
-		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action],
+		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action], "merit": [u.nation_contribution, u.total_reward],
 	}
 
 
@@ -497,6 +497,9 @@ static func load_path(g: Game, path: String) -> String:
 		u.weapon_version = int(ud.get("ver", u.weapon_version))
 		u.life_frames = int(ud["life"])
 		u.dir = int(ud["dir"])
+		var merit: Array = ud.get("merit", [0, 0])
+		u.nation_contribution = int(merit[0])
+		u.total_reward = int(merit[1])
 		var uai: Array = ud.get("ai", [0, false, false])
 		u.ai_action_id = int(uai[0])
 		u.in_attack_mission = bool(uai[1])

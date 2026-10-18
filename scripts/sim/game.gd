@@ -1980,6 +1980,14 @@ func next_day() -> void:
 			_even_out_workers(t)
 	for f in firms.duplicate():
 		f.next_day(day)
+	# Unit::next_day: loyalty monthly, betrayal every 15 days
+	for u in units.duplicate():
+		if u.dead or u.nation_id <= 0 or u.nation_id == GameObj.MONSTER_NATION:
+			continue
+		if u.inside_firm == null and day % 30 == u.obj_id % 30:
+			Espionage.update_unit_loyalty(u)
+		if day % 15 == u.obj_id % 15:
+			Espionage.think_betray(self, u)
 	_pay_units()
 	if day % 15 == 0:
 		Economy.distribute_demand(self)

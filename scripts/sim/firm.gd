@@ -746,8 +746,8 @@ func next_day(day: int) -> void:
 	match code:
 		"CAMP", "FORT":
 			_train()
-			Espionage.update_camp_loyalty(self)
-			Espionage.think_desert(self, day)
+			if day % 30 == obj_id % 30:
+				Espionage.update_camp_loyalty(self)     # FirmCamp::update_loyalty, monthly
 		"MINE":
 			if day % Defs.PROCESS_GOODS_INTERVAL == obj_id % Defs.PROCESS_GOODS_INTERVAL:
 				Economy.mine_day(self)

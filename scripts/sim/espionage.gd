@@ -308,10 +308,114 @@ static func general_target_loyalty(f: Firm, o: Unit) -> float:
 	t += n.reputation / 4.0
 	if n.king and is_instance_valid(n.king) and not n.king.dead:
 		t += n.king.lead_skill() / 4.0
+	t -= contribution_penalty(o)
 	t = clampf(t, 0.0, 100.0)
 	if o.sleeper_for > 0:
 		t = maxf(t, 30.0 + o.obj_id % 10)
 	return t
+
+
+## Unit::update_loyalty: a general rewarded less than half of what he has
+## done for the kingdom grows unhappy (up to 50 points).
+static func contribution_penalty(o: Unit) -> float:
+	if o.nation_contribution > o.total_reward * 2:
+		return minf(50.0, (o.nation_contribution - o.total_reward * 2) / 2.0)
+	return 0.0
+
+
+## Unit::update_loyalty for a unit out in the field (monthly): a general by
+## the men he leads, a soldier by his general - and a soldier with no
+## general drifts to nothing; villagers keep theirs.
+static func update_unit_loyalty(u: Unit) -> void:
+	var n := u.nation()
+	if n == null or u.rank == Defs.Rank.KING or not u.is_human() or u.is_civilian() or u.is_weapon:
+		return
+	var t := 0.0
+	if u.rank >= Defs.Rank.GENERAL:
+		var led := Game.inst.units.filter(func(m): return m.leader == u and not m.dead and m.inside_firm == null).size()
+		t = led * 3.0
+		if n.race == u.race:
+			t += 20.0
+		t += n.reputation / 4.0
+		if n.king and is_instance_valid(n.king) and not n.king.dead:
+			t += n.king.lead_skill() / 4.0
+		t -= contribution_penalty(u)
+		t = clampf(t, 0.0, 100.0)
+		if u.is_spy:
+			t = maxf(t, 30.0 + u.obj_id % 10)
+	else:
+		var l := u.leader
+		if l and is_instance_valid(l) and not l.dead:
+			var lead := l.lead_skill()
+			t = 30.0 + lead - u.combat / 2.0 - u.lead_skill()
+			if l.rank == Defs.Rank.KING:
+				t += 20.0
+			if l.race == u.race:
+				t += 20.0
+			t = clampf(t, 0.0, 100.0)
+		else:
+			t = 0.0
+	_approach(u, t)
+
+
+## Unit::think_betray (every 15 days): below 30 a unit in the field, or the
+## commander of a camp with his whole camp, goes over to the kingdom with
+## the best reputation and standing; with none and no loyalty left, he leaves.
+static func think_betray(g: Game, u: Unit) -> void:
+	if u.dead or u.is_spy or u.sleeper_for > 0 or u.rank == Defs.Rank.KING or not u.is_human() or u.is_civilian():
+		return
+	if u.nation_id <= 0 or u.home_town != null or u.home_firm != null or u.loyalty >= Defs.UNIT_BETRAY_LOYALTY:
+		return
+	if u.inside_firm != null and u.inside_firm.overseer != u:
+		return
+	var cur := u.nation()
+	if cur == null:
+		return
+	var best := 0
+	var best_s := -100 if u.loyalty <= 0.0 else int(u.loyalty)
+	for o in g.nations:
+		if not o.alive or o == cur or not cur.contact.has(o.id) or o.is_fryhtan != cur.is_fryhtan:
+			continue
+		if not g.towns.any(func(t): return t.nation_id == o.id and not t.dead):
+			continue
+		var s := int(o.reputation) + Diplomacy.overall_rank(g, o) - Diplomacy.overall_rank(g, cur)
+		if o.race == u.race:
+			s += 30
+		if s > best_s:
+			best_s = s
+			best = o.id
+	if best > 0:
+		betray(g, u, best)
+	elif u.loyalty <= 0.0 and u.inside_firm == null:
+		g.notify_nation(u.nation_id, "%s has left your service." % u.display_name(), u.center_loc())
+		g.remove_unit(u)
+
+
+## Unit::betray: the unit (a commander with his camp, a general with his
+## men) changes side, at a loyalty of 40-60 lifted by the new kingdom's
+## reputation and race.
+static func betray(g: Game, u: Unit, to: int) -> void:
+	var old := u.nation_id
+	var team: Array = g.units.filter(func(m): return m.leader == u and not m.dead and m.inside_firm == null)
+	if u.inside_firm != null:
+		u.inside_firm.change_nation(to)
+		g.update_links()
+	else:
+		var rank := u.rank
+		g.defect_unit(u, to)
+		u.rank = rank
+		for m in team:
+			g.defect_unit(m, to)
+			m.leader = u
+	var n := g.nation(to)
+	u.loyalty = float(Defs.UNIT_BETRAY_LOYALTY + 10 + g.rng.randi() % 20)
+	if n.reputation > 0.0:
+		u.loyalty += n.reputation
+	if n.race == u.race:
+		u.loyalty += 30.0
+	u.loyalty = clampf(u.loyalty, 0.0, 100.0)
+	g.notify_nation(old, "%s has betrayed you and gone over to the %s." % [u.display_name(), n.name], u.center_loc())
+	g.notify_nation(to, "%s has come over to your side." % u.display_name(), u.center_loc())
 
 
 ## Unit::commander_power: villagers of the linked own towns, shared among their camps.
@@ -323,23 +427,7 @@ static func commander_power(f: Firm) -> int:
 		var camps := t.linked_firms.filter(func(x): return is_camp(x) and x.nation_id == t.nation_id and x.overseer != null).size()
 		if camps > 0:
 			p += t.population / camps
-	return p
-
-
-## Men whose loyalty has fallen below UNIT_BETRAY_LOYALTY may walk out (monthly).
-static func think_desert(f: Firm, day: int) -> void:
-	if f.code == "LAIR" or day % 30 != f.obj_id % 30:
-		return
-	var g := Game.inst
-	for s in occupants(f):
-		if s.rank == Defs.Rank.KING or s.sleeper_for > 0 or s.loyalty >= Defs.UNIT_BETRAY_LOYALTY:
-			continue
-		if g.rng.randi() % 100 < int(Defs.UNIT_BETRAY_LOYALTY - s.loyalty) * 3:
-			f.release_unit(s)
-			_log("desert")
-			g.notify_nation(f.nation_id, "%s has deserted %s." % [s.display_name(), f.display_name()], f.center_loc())
-			g.defect_unit(s, 0)
-			return
+	return p + f.soldiers.size() * 3       # and 3 for every soldier under him
 
 
 # --------------------------------------------------------------- bribe ---

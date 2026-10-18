@@ -53,6 +53,8 @@ var camouflage_days := 0         # camouflaged spy: unseen by other kingdoms whi
 var camouflage_power := 0        # recharges a day at a time (Spy::camouflage_power)
 var sleeper_for := 0             # a bribed general or soldier: the kingdom he secretly serves
 var loyalty := 70.0              # a soldier's or general's loyalty to his kingdom (Unit::loyalty)
+var nation_contribution := 0     # Unit::nation_contribution: a point for every blow struck
+var total_reward := 0            # Unit::total_reward: gold he has been rewarded with
 var stops: Array = []             # caravan: up to two stops {firm, x, y, pick, picks} (UnitCaravan::stop_array)
 var dest_stop := -1               # caravan: the stop it is heading for (dest_stop_id)
 var journey := "none"             # caravan: none | on_way | surround | inside (journey_status)
@@ -353,6 +355,7 @@ func reward(from_nation: int) -> void:
 	if n == null or n.cash < REWARD_COST or rank == Defs.Rank.KING or not is_human():
 		return
 	if nation_id == from_nation:
+		total_reward += int(REWARD_COST)
 		loyalty = minf(100.0, loyalty + REWARD_LOYALTY_INCREASE)
 	n.add_cash(-REWARD_COST, "Rewards")
 
@@ -996,7 +999,13 @@ func _item_strike(dmg: float) -> void:
 		use_item()
 
 
+const MAX_NATION_CONTRIBUTION := 10000
+
+
 func gain_experience() -> void:
+	# Unit::gain_experience: the unit's contribution to the kingdom grows
+	if is_human() and not is_weapon and nation_contribution < MAX_NATION_CONTRIBUTION:
+		nation_contribution += 1
 	if is_human() and combat < Defs.MAX_COMBAT_TRAIN:
 		combat = maxf(combat, minf(Defs.MAX_COMBAT_TRAIN, combat + 0.06))
 
