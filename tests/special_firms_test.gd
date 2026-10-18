@@ -138,7 +138,8 @@ func _ready() -> void:
 	check(not SpecialFirms.can_cast(mag, "TELEPORT"), "no second spell until recharged")
 	days(g, 31)
 	check(SpecialFirms.can_cast(mag, "TELEPORT"), "recharged after 30 days")
-	var tp_unit: Unit = bees[0] if not bees.is_empty() else jag
+	var alive: Array = (bees + [jag]).filter(func(u): return u != null and not u.dead and u.inside_firm == null)
+	var tp_unit: Unit = alive[0] if not alive.is_empty() else g.spawn_unit("BEE", p.id, g.free_unit_cell(Vector2i(mag.x1, mag.y1 + mag.h + 2)), 20.0)
 	var dest := g.world.nearest_walkable(Vector2i(home) + Vector2i(25, 25))
 	check(SpecialFirms.cast(mag, "TELEPORT", Vector2(dest), tp_unit) and tp_unit.cell().distance_to(dest) < 4.0, "teleport a unit")
 

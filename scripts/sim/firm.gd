@@ -155,12 +155,8 @@ func is_work_firm() -> bool:
 
 func capacity() -> int:
 	match code:
-		"FORT":
-			return Defs.MAX_SOLDIER
-		"CAMP":
-			return 8
-		"LAIR":
-			return 8
+		"FORT", "CAMP", "LAIR":
+			return Defs.MAX_SOLDIER        # FirmCamp::is_soldier_full: all camps hold MAX_SOLDIER
 		"FORTRESS":
 			return SpecialFirms.FORTRESS_ARCHERS
 	return 0

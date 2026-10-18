@@ -99,5 +99,27 @@ func _ready() -> void:
 	var c1 := p.cash
 	_days(g, 3)
 	_check(fort.hp > fort.max_hp - 10.0 and p.cash < c1, "ordered, it is mended a point a day at its cost")
+	# --- a wagon takes the jobless first, then workers; one alone walks
+	var home: Town = g.towns.filter(func(x): return x.nation_id == p.id)[0]
+	var mine := g.spawn_firm("FACTORY", p.id, p.race, g._place_near(home.footprint(), 5, 5, 14), true)
+	g.update_links()
+	home.population = 12
+	home.loyalty = 80.0
+	home.recruit_penalty = 0
+	mine.worker_towns.clear()
+	for i in 12:
+		mine.worker_towns.append(home)
+	g._update_workers()
+	_check(home.jobless() == 0 and home.wagon_count() == 10, "a town with nobody idle can still send a wagon of 10")
+	var w := home.recruit_wagon()
+	g._update_workers()
+	_check(w != null and w.is_wagon() and w.wagon_pop == 10 and home.population == 2, "ten leave in the wagon (%d left)" % home.population)
+	_check(mine.workers() == 2, "the workers who left quit the mine (%d stay)" % mine.workers())
+	_check(home.loyalty < 80.0, "the town's loyalty drops (%.1f)" % home.loyalty)
+	home.population = 1
+	mine.worker_towns.clear()
+	g._update_workers()
+	var one := home.recruit_wagon()
+	_check(one != null and not one.is_wagon() and home.population == 0, "a lone villager walks instead")
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit(0 if fails == 0 else 2)

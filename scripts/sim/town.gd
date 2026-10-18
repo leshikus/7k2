@@ -580,11 +580,20 @@ func recruit() -> Unit:
 
 
 ## Town::recruit(wagon): up to ten villagers leave together in a wagon to
-## settle elsewhere; a single one leaves on foot.
+## settle elsewhere - the jobless first, then workers (recruitable_pop counts
+## the whole town); a single one leaves on foot.
+func wagon_count() -> int:
+	if nation_id <= 0 or under_construction:
+		return 0
+	return mini(population, Defs.MAX_WAGON_POPULATION)
+
+
 func recruit_wagon() -> Unit:
-	var count := mini(jobless(), Defs.MAX_WAGON_POPULATION)
-	if nation_id <= 0 or count <= 1 or under_construction:
-		return recruit()
+	var count := wagon_count()
+	if count <= 0:
+		return null
+	if count == 1:
+		return _mobilize_one()
 	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
 	var w := Game.inst.spawn_unit("WAGON", nation_id, c, 100.0)
 	if w == null:
@@ -592,12 +601,39 @@ func recruit_wagon() -> Unit:
 	w.wagon_pop = count
 	w.wagon_race = race
 	w.loyalty = loyalty
+	_recruit_dec_loyalty()
 	population -= count
-	loyalty = maxf(0.0, loyalty - minf(10.0, minf(5.0, float(Defs.MAX_TOWN_POPULATION) / maxf(1.0, population + count)) + recruit_penalty / 5.0))
-	recruit_penalty += 5
+	while employed > population and employed > 0:
+		Game.inst._unjob(self)
+		employed -= 1
 	_check_empty()
 	queue_redraw()
 	return w
+
+
+## Town::recruit_dec_loyalty
+func _recruit_dec_loyalty() -> void:
+	var dec := minf(5.0, float(Defs.MAX_TOWN_POPULATION) / population) if population > 0 else 0.0
+	dec = minf(dec + recruit_penalty / 5.0, 10.0)
+	recruit_penalty += 5
+	loyalty = maxf(0.0, loyalty - dec)
+
+
+## Town::mobilize_town_people for a wagon of one: the villager walks.
+func _mobilize_one() -> Unit:
+	var c := Game.inst.world.adjacent_to_rect(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
+	var u := Game.inst.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
+	if u == null:
+		return null
+	u.loyalty = loyalty
+	_recruit_dec_loyalty()
+	population -= 1
+	if employed > population:
+		Game.inst._unjob(self)
+		employed = mini(employed, population)
+	_check_empty()
+	queue_redraw()
+	return u
 
 
 ## Town::process_construction: a percent every other frame (eleven under fast

@@ -13,7 +13,7 @@ const RULES := [
 	["Formation: Arc", "◠"], ["Formation: Staggered", "⁙"], ["Formation: Square", "▦"], ["Formation: Sandwich", "≣"],
 	# building and towns
 	["Build...", "🔨"], ["Build a town", "🏘"], ["wall", "🧱"], ["Demolish", "💥"], ["Eject all", "⏏"],
-	["Fill from towns", "👥"], ["Send out wagon", "🛒"], ["Send out", "⚔"], ["Collect tax", "💰"], ["Grant gold", "🎁"],
+	["Fill from towns", "👥"], ["Send out wagon", "🐂"], ["Send out", "⚔"], ["Collect tax", "💰"], ["Grant gold", "🎁"],
 	["Recruit peasant", "🚶"], ["Settle in town", "🏠"], ["Rally point", "🚩"], ["Set destination", "🚩"],
 	["Hire caravan", "🐪"], ["Clone caravan", "🐫"], ["Return", "↩"],
 	# ranks and items

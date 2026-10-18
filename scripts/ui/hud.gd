@@ -1354,8 +1354,8 @@ func _show_town(t: Town, rebuild: bool) -> void:
 	if t.nation_id == game.player_id:
 		var do_recruit := func(): _do(t, "recruit")
 		_add_action("Recruit peasant", do_recruit, t.can_recruit(), "Send a villager out as a peasant, to build, found a town or work as a spy. Soldiers come from a fort's \"Fill from towns\". Needs loyalty %d+." % Defs.MIN_RECRUIT_LOYALTY)
-		_add_action("Send out wagon (%d)" % mini(t.jobless(), Defs.MAX_WAGON_POPULATION), func(): _do(t, "recruit_wagon"), t.nation_id > 0 and t.jobless() > 1,
-			"Up to %d jobless villagers leave together to settle in another town of theirs or found a new one." % Defs.MAX_WAGON_POPULATION)
+		_add_action("Send out wagon (%d)" % t.wagon_count(), func(): _do(t, "recruit_wagon"), t.wagon_count() > 0,
+			"Up to %d villagers - the jobless first, then workers - leave together to settle in another town of yours or found a new one. One alone leaves on foot." % Defs.MAX_WAGON_POPULATION)
 		var do_tax := func(): _do(t, "collect_tax_cmd")
 		_add_action("Collect tax" + (" (auto %d)" % t.auto_tax_loyalty if t.auto_tax_loyalty > 0 else ""), do_tax, t.has_linked_camp(t.nation_id),
 			"Needs a linked camp with a general. Lowers loyalty. Right-click: collect automatically when loyalty reaches %s." % "/".join(Town.AUTO_TAX_LEVELS.slice(1).map(func(v): return str(v))),
@@ -1708,8 +1708,15 @@ func _occupant_buttons(f: Firm) -> void:
 		var promote := func():
 			if who != f.overseer and who.can_lead():
 				_do(f, "make_overseer", [who])
-		var icon := "👹" if not who.is_human() else ("👑" if who.rank == Defs.Rank.KING else ("🎖" if who.rank == Defs.Rank.GENERAL else "💂"))
-		_add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote, icon)
+		var b := _add_action(lbl, out, true, "Left-click: send out. Right-click a general: make him commander.", promote)
+		# the unit's own standing sprite in its kingdom's colour (not all are human)
+		var fr := Assets.sprite_frame(who.sprite_code, "S", Iso.dir_map[4], 0, who.nation_color())
+		var mark := "👑" if who.rank == Defs.Rank.KING else ("★" if who.rank >= Defs.Rank.GENERAL else "")
+		b.text = (mark + " " if mark != "" else "") + str(int(who.combat))
+		if not fr.is_empty():
+			b.icon = fr[0]
+			b.expand_icon = true
+			b.custom_minimum_size = Vector2(64, 48)
 
 
 func _fryhtan_tech_tip(t: Dictionary) -> String:
