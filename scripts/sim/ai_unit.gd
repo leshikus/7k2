@@ -22,7 +22,7 @@ static func process(ai: NationAI, u: Unit, day: int) -> void:
 	var leader_race := u.is_human() or SpecialFirms.is_fryhtan_unit(u)     # race_id: people and Fryhtans
 	if u.is_human() and u.rank != Defs.Rank.KING and day % 5 == id % 5:
 		think_reward(ai, u)
-	if not u.visible:
+	if u.has_meta("hidden"):          # Unit::is_visible: on the map (our .visible is the fog of war)
 		return
 	if think_use_item(ai, u):
 		return
@@ -96,7 +96,7 @@ static func think_stop_chase(ai: NationAI, u: Unit) -> bool:
 		return true
 	if not (t is Unit):
 		return false
-	if not t.visible:
+	if t.inside_firm != null or t.has_meta("hidden"):
 		u.stop()
 		return true
 	var from: Vector2 = u.get_meta("ai_chase_from")

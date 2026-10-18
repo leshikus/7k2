@@ -199,7 +199,7 @@ static func _eliminate_firm(ai: NationAI, enemy: int) -> bool:
 ## Nation::think_eliminate_enemy_unit
 static func _eliminate_unit(ai: NationAI, enemy: int) -> bool:
 	for u in ai.g.units:
-		if u.dead or u.nation_id != enemy or u.inside_firm != null or not u.visible:
+		if u.dead or u.nation_id != enemy or u.inside_firm != null or u.has_meta("hidden"):
 			continue
 		if not ai.n.is_fryhtan and not ai.my_towns().any(func(o): return o.is_base_town):
 			continue
