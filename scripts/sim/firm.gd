@@ -95,6 +95,8 @@ var target_archers := 0             # FirmFort::target_archer_count
 var archer_progress := 0            # FirmFort::train_archer_progress (days)
 var _archer_fired: Array = []       # FirmFort::last_archer_fire_frame
 var repair := false                 # Firm::repair_flag: repairs ordered
+var upgrading := ""                 # Firm::upgrading_firm_id: a camp becoming a fort
+var upgrade_percent := 0            # Firm::upgrade_completion_percent
 var rally := Vector2i(-1, -1)       # where the units it makes go (Firm::rally_dest)
 
 var anim_index := 0
@@ -488,6 +490,62 @@ func sim_frame() -> void:
 			_tower_shoot()
 	if code == "FORTRESS" and not soldiers.is_empty() and Game.inst.frame % FORTRESS_TICK == obj_id % FORTRESS_TICK:
 		SpecialFirms.fortress_shoot(self)
+	if upgrading != "":
+		_process_upgrade()
+
+
+## Firm::start_upgrade: a camp is rebuilt as a fort, the setup cost paid now.
+func start_upgrade(to_code: String) -> bool:
+	if upgrading != "" or under_construction or dead or not (code == "CAMP" and to_code == "FORT"):
+		return false
+	var n := nation()
+	if n == null:
+		return false
+	var ft: Dictionary = Defs.firm_types.get(to_code, {})
+	upgrading = to_code
+	upgrade_percent = 0
+	n.add_cash(-float(ft.get("cost", 0)), "Construction")
+	n.live_points -= float(ft.get("live_cost", 0))
+	return true
+
+
+func start_upgrade_to_fort() -> bool:
+	return start_upgrade("FORT")
+
+
+## Firm::process_upgrade: a percent every other frame (eleven under fast
+## build for the player), not within a day of being attacked.
+func _process_upgrade() -> void:
+	var g := Game.inst
+	if g.frame - last_attacked_frame <= Defs.FRAMES_PER_DAY * 2 or g.frame % 2 != 0:
+		return
+	upgrade_percent += 11 if g.fast_build and nation_id == g.player_id else 1
+	if upgrade_percent >= 100:
+		_finish_upgrade()
+
+
+## FirmArray::upgrade_firm: the fort takes the camp's place with everything
+## in it - commander, soldiers, links, hit points.
+func _finish_upgrade() -> void:
+	var g := Game.inst
+	g.world.release(x1, y1, w, h)
+	code = upgrading
+	upgrading = ""
+	upgrade_percent = 0
+	ftype = Defs.firm_types.get(code, {})
+	build = Assets.firm_build(code, race)
+	build_row = 0
+	w = build.get("loc_w", w)
+	h = build.get("loc_h", h)
+	var frac := hp / maxf(1.0, max_hp)
+	max_hp = float(ftype.get("hp", 400))
+	hp = minf(max_hp, max_hp * frac)
+	anim_index = 0
+	position = Iso.to_screen(center_loc())
+	g.world.occupy(self, x1, y1, w, h)
+	g._ground_dirty = true
+	g.update_links()
+	queue_redraw()
 
 
 # -------------------------------------------------------- fort archers ---

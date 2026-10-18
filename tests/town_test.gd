@@ -184,6 +184,22 @@ func _ready() -> void:
 	g._update_workers()
 	var one := home.recruit_wagon()
 	_check(one != null and not one.is_wagon() and home.population == 0, "a lone villager walks instead")
+	# --- a camp is upgraded to a fort in place, troops and all (Firm::start_upgrade)
+	var cmp := g.spawn_firm("CAMP", p.id, p.race, g._place_near(home.footprint(), 6, 6, 16), true)
+	var cg := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(cmp.door()), 50.0)
+	cg.rank = Defs.Rank.GENERAL
+	cmp.accept_unit(cg)
+	var cs := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(cmp.door()), 30.0)
+	cmp.accept_unit(cs)
+	p.cash = 5000.0
+	var cash1 := p.cash
+	_check(cmp.start_upgrade("FORT") and is_equal_approx(cash1 - p.cash, float(Defs.firm_types["FORT"]["cost"])), "the upgrade costs a fort's setup cost")
+	_check(not cmp.start_upgrade("FORT"), "it cannot be started twice")
+	for i in 260:
+		cmp.sim_frame()
+		g.frame += 1
+	_check(cmp.code == "FORT" and cmp.upgrading == "" and cmp.overseer == cg and cs in cmp.soldiers, "after 200 frames the camp is a fort with its commander and soldiers inside")
+
 	# --- Fryhtans are not people: they cannot found towns
 	var fu := g.spawn_unit(fry.monster_code, p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(8, 8)), 30.0)
 	_check(fu != null and not fu.is_human() and not fu.can_found_town(), "a Fryhtan cannot build a town")

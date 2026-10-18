@@ -12,7 +12,7 @@ const RULES := [
 	["No formation", "⁘"], ["Formation: Vanguard", "⏶"], ["Formation: Line", "☰"], ["Formation: Circle", "◯"],
 	["Formation: Arc", "◠"], ["Formation: Staggered", "⁙"], ["Formation: Square", "▦"], ["Formation: Sandwich", "≣"],
 	# building and towns
-	["Build...", "🔨"], ["Build a town", "🏘"], ["wall", "🧱"], ["Demolish", "💥"], ["Sell building", "🏷"], ["Eject all", "⏏"],
+	["Build...", "🔨"], ["Upgrad", "⏫"], ["Build a town", "🏘"], ["wall", "🧱"], ["Demolish", "💥"], ["Sell building", "🏷"], ["Eject all", "⏏"],
 	["Fill from towns", "👥"], ["Send out wagon", "🐂"], ["Send out", "⚔"], ["Collect tax", "💰"], ["Grant gold", "🎁"],
 	["Recruit peasant", "🚶"], ["Settle in town", "🏠"], ["Rally point", "🚩"], ["Set destination", "🚩"],
 	["Hire caravan", "🐪"], ["Clone caravan", "🐫"], ["Return", "↩"],

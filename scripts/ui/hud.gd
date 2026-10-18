@@ -978,8 +978,8 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 	s += "Hit points %d / %d  %s\n" % [int(u.hp), int(u.max_hp), _bar(u.hp, u.max_hp, "#60d060")]
 	if u.is_human():
 		s += "Combat %d\n" % int(u.combat)
-		if u.rank >= Defs.Rank.GENERAL:
-			s += "Leadership %d\n" % int(u.leadership)
+		if not u.is_civilian():
+			s += "Leadership %d\n" % int(u.lead_skill())
 	if u.is_hero:
 		s += "[color=#ffd860]Hero[/color]\n"
 	if u.is_spy and u.nation_id == game.player_id:
@@ -1401,7 +1401,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 		match f.code:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:
-					s += "Commander: %s (leadership %d%s)\n" % [f.overseer.display_name(), int(f.overseer.leadership),
+					s += "Commander: %s (leadership %d%s)\n" % [f.overseer.display_name(), int(f.overseer.lead_skill()),
 						", loyalty %d" % int(f.overseer.loyalty) if f.overseer.rank != Defs.Rank.KING and f.code != "LAIR" else ""]
 				elif f.code != "LAIR":
 					s += "[color=#ff9060]No general. Send a general here to gain influence.[/color]\n"
@@ -1409,7 +1409,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				if f.code == "FORT" and (f.archers > 0 or f.target_archers > 0):
 					s += "Archers %d%s\n" % [f.archers, (" (training %d of %d days)" % [f.archer_progress, Firm.MAX_TRAIN_ARCHER_PROGRESS]) if f.target_archers > f.archers else ""]
 				for u in f.soldiers:
-					s += "  %s — combat %d, HP %d%s\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.hp),
+					s += "  %s — combat %d, leadership %d, HP %d%s\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.lead_skill()), int(u.hp),
 						", loyalty %d" % int(u.loyalty) if u.is_human() else ""]
 				if f.code != "LAIR":
 					var towns := f.linked_towns.map(func(t): return t.town_name)
@@ -1522,6 +1522,14 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					f.target_archers < Firm.MAX_FORT_ARCHER and p.cash > Firm.TRAIN_ARCHER_COST,
 					"Archers on the walls shoot back at whoever attacks the fort. Each takes 60 days to train and costs %d a year. Right-click: one fewer." % Firm.COST_PER_ARCHER,
 					func(): _do(f, "set_target_archers", [-2]), "🏹")
+			if f.code == "CAMP":
+				# FirmCamp::disp_camp_upgrade: rebuild the camp as a fort
+				var fort_cost := float(Defs.firm_types.get("FORT", {}).get("cost", 0))
+				if f.upgrading != "":
+					_add_action("Upgrading to fort: %d%%" % f.upgrade_percent, func(): pass, false)
+				else:
+					_add_action("Upgrade to fort (%d)" % int(fort_cost), func(): _do(f, "start_upgrade", ["FORT"]), p.cash >= fort_cost,
+						"Rebuild this camp as a fort: stronger walls, archers and room for the same troops, who stay inside.")
 			_add_action("Eject all", func(): _do(f, "eject_all"))
 			_add_action("Fill from towns", func(): _fill_camp(f), true, "Villagers from your linked towns join this fort at once (towns need loyalty %d+)." % Defs.MIN_RECRUIT_LOYALTY)
 			# FirmCamp sortie: enabled with a commander or a trained soldier; right-click changes the kind
