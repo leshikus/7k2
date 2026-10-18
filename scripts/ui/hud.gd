@@ -1060,6 +1060,9 @@ func _unit_actions(sel: Array) -> void:
 			_add_action("Promote to General", promote, true, "A general can command a camp, extending the kingdom's influence over nearby towns.")
 		if u.rank == Defs.Rank.GENERAL and not u.is_hero:
 			_add_action("Demote to Soldier", func(): _do(u, "demote"))
+		if u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
+			_add_action("Reward (%d)" % int(Unit.REWARD_COST), func(): _do(u, "reward", [game.player_id]), game.player().cash >= Unit.REWARD_COST,
+				"Give %d gold to raise this unit's loyalty by %d." % [int(Unit.REWARD_COST), int(Unit.REWARD_LOYALTY_INCREASE)])
 		if u.home_town == null and (u.is_human() or u.is_wagon()):
 			_add_action("Settle in town", func(): _settle(u), true, "Walk to the nearest own town of the same race and join its population.")
 		if u.can_found_town():
@@ -1533,6 +1536,9 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			_add_action("Eject all", func(): _do(f, "eject_all"))
 			_add_action("Fill from towns", func(): _fill_camp(f), true, "Villagers from your linked towns join this fort at once (towns need loyalty %d+)." % Defs.MIN_RECRUIT_LOYALTY)
 			# FirmCamp sortie: enabled with a commander or a trained soldier; right-click changes the kind
+			if f.soldiers.any(func(x): return x.is_human()) or (f.overseer and f.overseer.rank != Defs.Rank.KING):
+				_add_action("Reward (%d)" % int(Unit.REWARD_COST), func(): _do(f, "reward_least_loyal"), p.cash >= Unit.REWARD_COST,
+					"Give %d gold to the least loyal man here: %d more loyalty." % [int(Unit.REWARD_COST), int(Unit.REWARD_LOYALTY_INCREASE)])
 			_sortie_button(f, "Send out soldiers")
 			_occupant_buttons(f)
 		"LAIR":

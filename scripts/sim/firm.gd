@@ -282,6 +282,21 @@ func accept_unit(u: Unit) -> bool:
 	return true
 
 
+## FirmCamp::reward: the chosen man gets 10 more loyalty for 30 gold - here
+## the least loyal of the commander and soldiers (our list has no selection).
+func reward_least_loyal() -> void:
+	var n := nation()
+	if n == null or n.cash < Unit.REWARD_COST:
+		return
+	var men: Array = soldiers.filter(func(s): return s.is_human())
+	if overseer and overseer.rank != Defs.Rank.KING and overseer.is_human():
+		men.append(overseer)
+	if men.is_empty():
+		return
+	men.sort_custom(func(a, b): return a.loyalty < b.loyalty)
+	men[0].reward(nation_id)
+
+
 ## FirmCamp::promote_soldier: with no commander, a trained soldier of at least
 ## a villager's skill is made a general and takes command.
 func make_overseer(u: Unit) -> void:

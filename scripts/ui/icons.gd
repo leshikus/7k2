@@ -17,7 +17,7 @@ const RULES := [
 	["Recruit peasant", "🚶"], ["Settle in town", "🏠"], ["Rally point", "🚩"], ["Set destination", "🚩"],
 	["Hire caravan", "🐪"], ["Clone caravan", "🐫"], ["Return", "↩"],
 	# ranks and items
-	["Promote", "★"], ["Demote", "☆"], ["Drop item", "⬇"], ["Activate ", "✨"], ["Use ", "✋"], ["Detonate", "💣"],
+	["Promote", "★"], ["Reward", "🏅"], ["Demote", "☆"], ["Drop item", "⬇"], ["Activate ", "✨"], ["Use ", "✋"], ["Detonate", "💣"],
 	# gods
 	["Invoke Greater Being", "⛩"], ["Cast power", "⚡"], ["Special Blessing", "🌟"],
 	# spies
