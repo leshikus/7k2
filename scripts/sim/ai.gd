@@ -949,7 +949,8 @@ func ai_defend(attacker: GameObj) -> void:
 	if attacker == null or not is_instance_valid(attacker) or attacker.dead or g.day < last_defend_day + 7:
 		return
 	last_defend_day = g.day
-	var lvl := AICapture.mobile_defense_combat_level(self, attacker.center_loc(), attacker.nation_id, false)
+	# the enemy's strength there less ours; ai_request_military_aid is disabled in the original
+	var lvl: int = AICapture.mobile_defense_combat_level(self, attacker.center_loc(), attacker.nation_id, false)[0]
 	AIAttack.attack_target(self, attacker, lvl, true)
 
 

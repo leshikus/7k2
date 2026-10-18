@@ -2494,6 +2494,18 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 				notify("The king of the %s has fallen, leaving no heir." % n.name, u.center_loc())
 
 
+## Nation::succeed_king: the chosen unit becomes king.
+func succeed_king(n: Nation, u: Unit) -> void:
+	if u == null or u.dead or u.nation_id != n.id:
+		return
+	if u.inside_firm:
+		u.inside_firm.release_unit(u)
+	u.rank = Defs.Rank.KING
+	u.loyalty = 100.0
+	n.king = u
+	notify_nation(n.id, "%s takes the throne." % u.unit_name, u.center_loc())
+
+
 func _best_heir(n: Nation) -> Unit:
 	var best: Unit = null
 	for u in units:

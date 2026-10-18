@@ -79,6 +79,9 @@ var weapon_version := 0          # war machine / Fryhtan unit: tech level it was
 var item_id := 0                  # the item carried (Items.TABLE), 0 = none
 var item_para := 0                # its charges, uses or time (Item::para)
 var death_frames := 0
+var ai_action_id := 0               # Unit::cur_order.ai_action_id: the computer's queued action it carries out
+var in_attack_mission := false      # Unit::in_ai_attack_mission
+var ai_no_action := false           # Unit::ai_no_suitable_action
 var _speed := 4.0
 
 
@@ -443,6 +446,17 @@ func order_settle() -> bool:
 		return false
 	stop()
 	home_town = best
+	order = Order.RETURN
+	return true
+
+
+## Unit::assign to a town: walk to the given town of the kingdom and join it.
+func order_settle_into(t: Town) -> bool:
+	if t == null or t.dead or t.nation_id != nation_id or t.race != settler_race() or t.under_construction \
+			or t.population + settlers() > Defs.MAX_TOWN_POPULATION or rank == Defs.Rank.KING:
+		return false
+	stop()
+	home_town = t
 	order = Order.RETURN
 	return true
 

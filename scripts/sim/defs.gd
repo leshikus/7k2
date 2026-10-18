@@ -337,6 +337,23 @@ static func race_name(code: String) -> String:
 	return code.capitalize()
 
 
+## World::effective_distance (building_size 2, the game's set): "" is a town.
+static func effective_distance(a: String, b: String) -> int:
+	if a == "" and b == "":
+		return 12              # EFFECTIVE_TOWN_TOWN_DISTANCE
+	if a == "":
+		var t := a
+		a = b
+		b = t
+	if b == "":
+		if a in ["CAMP", "FORT", "LAIR"]:
+			return 10          # EFFECTIVE_CAMP_TOWN_DISTANCE
+		return 16              # EFFECTIVE_FIRM_TOWN_DISTANCE
+	if a == "LAIR" and b == "LAIR":
+		return 9               # EFFECTIVE_LAIR_LAIR_DISTANCE
+	return 15                  # EFFECTIVE_FIRM_FIRM_DISTANCE
+
+
 static func unit_sprite(race: String, kind: String) -> String:
 	return RACE_PREFIX.get(race, "NO") + "_" + kind
 

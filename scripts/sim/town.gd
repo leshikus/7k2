@@ -48,6 +48,9 @@ var under_construction := false  # built by a unit or wagon (Town::process_const
 var build_progress := 0.0
 var builder_pop := 0             # the people who move in when it is done
 var builder_loyalty := 50.0
+var is_base_town := false           # Town::is_base_town (the computer's)
+var no_neighbor_space := false      # Town::no_neighbor_space
+var setup_day := 0                  # Town::setup_date
 
 
 func setup(name_: String, race_: String, nation: int, at: Vector2i, pop: int) -> void:
@@ -87,6 +90,29 @@ func footprint() -> Rect2i:
 
 func display_name() -> String:
 	return town_name
+
+
+## Town::linked_town_array: the towns within the town-to-town distance.
+func linked_towns() -> Array:
+	var out: Array = []
+	var d := Defs.effective_distance("", "")
+	for t in Game.inst.towns:
+		if t != self and not t.dead and maxf(absf(t.center_loc().x - center_loc().x), absf(t.center_loc().y - center_loc().y)) <= d:
+			out.append(t)
+	return out
+
+
+## Town::move_pop: a villager moves to another of the kingdom's towns of the same race.
+func migrate_to(dest: Town) -> bool:
+	if dest == self or dest.nation_id != nation_id or dest.race != race or jobless() <= 0 \
+			or dest.population >= Defs.MAX_TOWN_POPULATION or dest.under_construction:
+		return false
+	population -= 1
+	dest.population += 1
+	_check_empty()
+	queue_redraw()
+	dest.queue_redraw()
+	return true
 
 
 func jobless() -> int:
