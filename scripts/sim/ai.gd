@@ -164,14 +164,7 @@ func overall_rank() -> int:
 
 ## NationBase::yearly_food_change: farming less eating.
 func yearly_food_change() -> float:
-	var farm := 1.0 + 0.25 * n.tech_level("FARMING")
-	var made := 0.0
-	var eat := 0.0
-	for t in my_towns():
-		made += t.jobless() * farm * Defs.PEASANT_FOOD_YEAR_PRODUCTION
-		eat += t.population * Defs.UNIT_FOOD_YEAR_CONSUMPTION
-	eat += g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.is_human() and u.rank != Defs.Rank.KING).size() * Defs.UNIT_FOOD_YEAR_CONSUMPTION
-	return made - eat
+	return Diplomacy.yearly_food_change(g, n)
 
 
 ## Nation::ai_has_enough_food
@@ -263,7 +256,7 @@ func _main(id: int) -> void:
 		2: pass                       # think_explore: nothing in the original
 		3: think_military()
 		4: AIAttack.think_secret_attack(self)
-		5: Diplomacy.ai_think(g, n)
+		5: AIDiplomacy.think(self)
 		6: AIGrand.think_grand_plan(self)
 		7: think_reduce_expense()
 
@@ -857,7 +850,9 @@ func find_best_place(code: String, ref: GameObj, distance := IDEAL_INTER_PLACE_S
 	var best_w := 0
 	for y in range(ry1, ry2 - ph + 2):
 		for x in range(rx1, rx2 - pw + 2):
-			if not g.world.can_place(x, y, pw, ph) or g._overlaps_site(Rect2i(x, y, pw, ph)):
+			if code != "" and not g.can_build_firm(code, Vector2i(x, y), pw, ph):
+				continue
+			if code == "" and (not g.world.can_place(x, y, pw, ph) or g._overlaps_site(Rect2i(x, y, pw, ph))):
 				continue
 			var tot := 0
 			for yy in ph:

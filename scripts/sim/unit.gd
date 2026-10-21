@@ -339,10 +339,19 @@ func order_enter(f: Firm) -> void:
 
 ## Walk to the nearest own town of the same race and rejoin its population.
 ## Player commands (sent through Net.cmd in a network game).
+const PROMOTE_LOYALTY_INCREASE := 20.0     # gamedef.h
+const DEMOTE_LOYALTY_DECREASE := 40.0
+
+
+## Unit::set_rank(RANK_GENERAL): loyalty +20, out of his general's team, and
+## a leadership of up to 39 if he had hardly any.
 func promote() -> void:
 	if is_human() and rank == Defs.Rank.SOLDIER and not is_civilian():
+		loyalty = minf(100.0, loyalty + PROMOTE_LOYALTY_INCREASE)
+		leader = null
 		rank = Defs.Rank.GENERAL
-		leadership = maxf(leadership, 25.0)
+		if leadership < 10.0:
+			leadership = float(Game.inst.rng.randi() % 40)
 
 
 const REWARD_COST := 30.0                # gamedef.h
@@ -360,8 +369,14 @@ func reward(from_nation: int) -> void:
 	n.add_cash(-REWARD_COST, "Rewards")
 
 
+## Unit::set_rank(RANK_SOLDIER): loyalty -40, and the men he led have no
+## general any more.
 func demote() -> void:
-	if rank == Defs.Rank.GENERAL and not is_hero:
+	if rank == Defs.Rank.GENERAL:
+		loyalty = maxf(0.0, loyalty - DEMOTE_LOYALTY_DECREASE)
+		for m in Game.inst.units:
+			if m.leader == self:
+				m.leader = null
 		rank = Defs.Rank.SOLDIER
 
 
@@ -1275,6 +1290,12 @@ func die(killer: GameObj) -> void:
 	if dead:
 		return
 	dead = true
+	# a man dying inside a building leaves its roll
+	if inside_firm != null and is_instance_valid(inside_firm):
+		if inside_firm.overseer == self:
+			inside_firm.overseer = null
+		inside_firm.soldiers.erase(self)
+		inside_firm = null
 	order = Order.DYING
 	attacking = false
 	action = "D"

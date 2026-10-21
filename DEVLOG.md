@@ -904,7 +904,15 @@ The compact AI of our own design is replaced by a port of the original's:
   Seats of Power), `ai_unit.gd` (oun_ai), `ai_capture.gd` (oai_capt, oai_cap2,
   spy assignment from oai_spy), `ai_attack.gd` (oai_attk), `ai_grand.gd`
   (oai_gran, on_human), `fryhtan_ai.gd` + `ai_fryhtan.gd` (on_mons, of_laira,
-  of_lara2, the Fryhtan buildings' AIs).
+  of_lara2, the Fryhtan buildings' AIs), `ai_diplomacy.gd` (oai_dipl: war on a
+  hated weaker kingdom, food purchases, treaties and their ending, tribute and
+  aid, technology exchanges, offers for a throne, and the reaction to answers -
+  tribute and a second request, ending a treaty or declaring war). As in the
+  original, outside the tutorials a tribute or aid demand from
+  `think_demand_tribute_aid` is never sent: the amount is simply added to the
+  computer's treasury.
+- Loyalty follows the original: camps and field units monthly, betrayal checks
+  every 15 days, and generals rewarded less than half their merit grow unhappy.
 - The computer answers attacks on its places and leaders, and its plans are
   saved with the game. Original quirks are kept where they shape play (e.g. a
   fort's request for soldiers from elsewhere is dropped; the AI never builds a
@@ -922,4 +930,16 @@ The compact AI of our own design is replaced by a port of the original's:
   tabbed start screen with one Start button; the placement preview in 3D;
   scenario titles in capitals shown in title case; Fryhtans are not human (no
   towns).
+- "Play as: a human kingdom / Fryhtans" on the start screen; the menu leaves
+  room for its scroll bar.
+- Soldiers build only military buildings, civilians the rest (offensive
+  structures: soldiers only), as FirmInfo::can_build; a 2-cell free band is
+  kept around every new building (World::can_build_firm, INTER_PLACE_SPACE).
+- Right-click one of your towns to settle the selected people in it; a group
+  gets a Settle button too.
+- Promotion and demotion as Unit::set_rank (+20 / -40 loyalty, a general's
+  men freed); any general, heroes too, can be demoted; promotion needs some
+  leadership.
+- Fort occupants show their sprite with a figure under it; Alt+1-4 picks
+  combat, leadership, loyalty or hit points.
 

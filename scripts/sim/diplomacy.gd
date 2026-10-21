@@ -193,6 +193,19 @@ static func _pref(n: Nation, k: String) -> int:
 	return n.prefs[k]
 
 
+## NationBase::yearly_food_change: farming less eating.
+static func yearly_food_change(g: Game, n: Nation) -> float:
+	var farm := 1.0 + 0.25 * n.tech_level("FARMING")
+	var made := 0.0
+	var eat := 0.0
+	for t in g.towns:
+		if t.nation_id == n.id and not t.dead:
+			made += t.jobless() * farm * Defs.PEASANT_FOOD_YEAR_PRODUCTION
+			eat += t.population * Defs.UNIT_FOOD_YEAR_CONSUMPTION
+	eat += g.units.filter(func(u): return u.nation_id == n.id and not u.dead and u.is_human() and u.rank != Defs.Rank.KING).size() * Defs.UNIT_FOOD_YEAR_CONSUMPTION
+	return made - eat
+
+
 static func _yearly_food_use(g: Game, n: Nation) -> float:
 	return Goals.score(g, n, 1) * Defs.UNIT_FOOD_YEAR_CONSUMPTION
 
@@ -348,6 +361,8 @@ static func reply(g: Game, m: Dictionary, accept: bool) -> void:
 		_apply(g, m)
 	else:
 		a.reject_day["%s:%d" % [m["id"], m["to"]]] = g.day
+	if a.ai is NationAI and a.id != g.player_id:
+		AIDiplomacy.notify_reply(a.ai, m, accept)
 	var to_name := _name(g, m["to"])
 	var what: String = TALKS[m["id"]][0].to_lower()
 	_tell(g, m, "The %s %s: %s." % [to_name, "accepts" if accept else "rejects", what])
@@ -591,8 +606,13 @@ static func consider(g: Game, me: Nation, m: Dictionary) -> bool:
 static func consider_cease_war(g: Game, me: Nation, other: Nation) -> int:
 	if me.relation(other.id) != Defs.Relation.WAR:
 		return -1
-	if me.ai and me.ai.war_target == other.id and military_rank(g, me) > military_rank(g, other):
-		return -1
+	# not while we are attacking it or about to take one of its towns
+	if me.ai is NationAI:
+		var nai: NationAI = me.ai
+		if nai.attack_target_nation == other.id:
+			return -1
+		if nai.capture_town and is_instance_valid(nai.capture_town) and nai.capture_town.nation_id == other.id:
+			return -1
 	if g.day < int(me.status_day.get(other.id, 0)) + 60 + (100 - _pref(me, "peace")):
 		return -1
 	var r := _alliance_rating(g, me, other)
@@ -635,84 +655,3 @@ static func _ai_send(g: Game, me: Nation, to: int, id: String, p1 = 0, p2 = 0) -
 	me.sent_day["%s:%d" % [id, to]] = g.day
 	send(g, me.id, to, id, p1, p2)
 	return true
-
-
-## Nation::think_diplomacy, every month or so.
-static func ai_think(g: Game, me: Nation) -> void:
-	var others := g.nations.filter(func(o): return o.alive and o.id != me.id)
-	_think_buy_food(g, me, others)
-	# cease-fire
-	for o in others:
-		if me.relation(o.id) == Defs.Relation.WAR and _may_retry(g, me, "CEASE_WAR", o.id):
-			if consider_cease_war(g, me, o) > 0:
-				if _ai_send(g, me, o.id, "CEASE_WAR"):
-					return
-			else:
-				change_ai_rel(me, o.id, 1)
-	# trade treaty
-	for o in others:
-		if same_kind(me, o) and not has_trade(me, o.id) and me.relation(o.id) != Defs.Relation.WAR \
-				and trade_with_rating(g, me, o) > 0 and _may_retry(g, me, "TRADE", o.id):
-			if _ai_send(g, me, o.id, "TRADE"):
-				return
-	# alliance, then friendly treaty: the best candidate
-	for id in ["ALLIANCE", "FRIENDLY"]:
-		var best: Nation = null
-		var best_r := 0
-		for o in others:
-			if not same_kind(me, o) or not _may_retry(g, me, id, o.id) or not can_send(g, me.id, o.id, id):
-				continue
-			if ai_rel(me, o.id) < (40 if id == "ALLIANCE" else 20) or not _should_consider_friendly(g, me, o):
-				continue
-			var need := 80 - _pref(me, "allying") / 4 - _pref(me, "peace") / 8 if id == "ALLIANCE" else 60 - _pref(me, "allying") / 8 - _pref(me, "peace") / 4
-			var r := _alliance_rating(g, me, o) - need
-			if r > best_r:
-				best_r = r
-				best = o
-		if best and _ai_send(g, me, best.id, id):
-			return
-	# end a treaty with a kingdom it has come to dislike
-	if _pref(me, "honesty") >= 30:
-		for o in others:
-			var rel := me.relation(o.id)
-			if rel >= Defs.Relation.PEACE and ai_rel(me, o.id) < 30 and trade_rating(g, me, o) < 50 \
-					and g.day >= int(me.status_day.get(o.id, 0)) + 60 + _pref(me, "honesty") / 2:
-				if _ai_send(g, me, o.id, "END_FRIENDLY" if rel == Defs.Relation.PEACE else "END_ALLIANCE"):
-					return
-	# exchange technology, one time in ten
-	if g.rng.randi() % 10 == 0:
-		for o in others:
-			if me.relation(o.id) == Defs.Relation.WAR or not same_kind(me, o) or not _may_retry(g, me, "EXCHANGE_TECH", o.id):
-				continue
-			var pairs := tech_pairs(me, o)
-			if not pairs.is_empty():
-				var pr: Array = pairs[g.rng.randi() % pairs.size()]
-				if _ai_send(g, me, o.id, "EXCHANGE_TECH", pr[0], pr[1]):
-					return
-
-
-## Nation::think_request_buy_food
-static func _think_buy_food(g: Game, me: Nation, others: Array) -> void:
-	var need := _yearly_food_use(g, me) * (100 + _pref(me, "food_reserve")) / 50.0
-	if me.food > 0 and me.food > need * 0.25:
-		return
-	var best: Nation = null
-	var best_r := 0
-	for o in others:
-		if o.food < 1500 or me.relation(o.id) == Defs.Relation.WAR or not _may_retry(g, me, "BUY_FOOD", o.id):
-			continue
-		var r := me.relation(o.id) * 20 + int(o.food) / 100
-		if r > best_r:
-			best_r = r
-			best = o
-	if best == null:
-		return
-	var qty := 0
-	for q in FOOD_QTY:
-		if best.food / 2 > q:
-			qty = q
-	if qty == 0:
-		return
-	var price := 30 if me.food < need / 4 else (20 if me.food < need / 3 else 10)
-	if me.cash >= qty * price / 10.0:
-		_ai_send(g, me, best.id, "BUY_FOOD", qty, price)

@@ -790,7 +790,8 @@ func _update_top() -> void:
 ## Rebuilds the info panel when the selection changes, updates text otherwise.
 func refresh_selection(force := false) -> void:
 	var sel: Array = game.selected.filter(func(o): return is_instance_valid(o) and not o.dead)
-	var key := ",".join(sel.map(func(o): return str(o.obj_id))) + "|" + str(build_menu_open)
+	# a unit's buttons follow its rank and kingdom (promotion, demotion, betrayal)
+	var key := ",".join(sel.map(func(o): return "%d:%d:%d" % [o.obj_id, o.rank if o is Unit else 0, o.nation_id])) + "|" + str(build_menu_open)
 	if sel.size() == 1 and sel[0] is Firm and Training.is_train_firm(sel[0]):
 		key += "|" + Training.signature(sel[0])     # the buttons follow the trainees
 	var rebuild := force or key != _last_sel_key
@@ -1053,12 +1054,17 @@ func _unit_actions(sel: Array) -> void:
 				"The troop keeps this formation wherever it stops. Use the number pad to set the direction it faces.")
 		if cur > 0:
 			_add_action("No formation", func(): _do(game, "form_troop", [own, 0, Vector2.ZERO]))
+	if own.size() > 1 and own.any(func(u): return u.home_town == null and (u.is_human() or u.is_wagon()) and u.rank != Defs.Rank.KING):
+		_add_action("Settle in town", func():
+			for u in own:
+				if u.home_town == null and (u.is_human() or u.is_wagon()) and u.rank != Defs.Rank.KING and u.can_settle():
+					_do(u, "order_settle"), true, "Each walks to the nearest own town of the same race and joins its population. Or right-click one of your towns.")
 	if own.size() == 1:
 		var u: Unit = own[0]
-		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian():
+		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian() and u.leadership > 0.0:
 			var promote := func(): _do(u, "promote")
 			_add_action("Promote to General", promote, true, "A general can command a camp, extending the kingdom's influence over nearby towns.")
-		if u.rank == Defs.Rank.GENERAL and not u.is_hero:
+		if u.rank == Defs.Rank.GENERAL:      # of any general, heroes too (oun_if.cpp)
 			_add_action("Demote to Soldier", func(): _do(u, "demote"))
 		if u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
 			_add_action("Reward (%d)" % int(Unit.REWARD_COST), func(): _do(u, "reward", [game.player_id]), game.player().cash >= Unit.REWARD_COST,
@@ -1249,7 +1255,13 @@ func _build_menu() -> void:
 				build_requested.emit(c), p.cash >= fcost and p.live_points >= flive, Defs.FIRM_HELP.get(code, ""))
 		_add_action("Cancel", func(): build_menu_open = false)
 		return
+	# FirmInfo::can_build: soldiers build military buildings, civilians the rest
+	var builders: Array = game.selected.filter(func(o): return o is Unit and o.nation_id == p.id and not o.dead and o.is_human())
+	var buildable := func(code: String) -> bool:
+		return builders.any(func(u): return Defs.unit_can_build(u, code))
 	for code in Defs.HUMAN_FIRMS:
+		if not buildable.call(code):
+			continue
 		var ft: Dictionary = Defs.firm_types.get(code, {})
 		var cost: int = ft.get("cost", 0)
 		# one Seat of Power per Greater Being whose Scroll of Power the kingdom holds
@@ -1266,7 +1278,7 @@ func _build_menu() -> void:
 			_add_action("%s (%d)" % [label, cost], pick, p.cash >= cost and known,
 				Defs.FIRM_HELP.get(code, "") if known else "Research %s at a Tower of Science first." % Defs.tech_def(Defs.spu_structure_tech(p.race)).get("name", "the training centre"))
 	for code in Defs.OFFENSIVE_FIRMS:
-		if not Defs.knows_firm(p, code):
+		if not Defs.knows_firm(p, code) or not buildable.call(code):
 			continue
 		var c2: String = code
 		var ocost: int = Defs.firm_types.get(code, {}).get("cost", 0)
@@ -1330,6 +1342,10 @@ func _show_town(t: Town, rebuild: bool) -> void:
 	s += "Population %d (%d employed, %d jobless)\n" % [t.population, t.employed, t.jobless()]
 	if t.nation_id > 0:
 		s += "Loyalty %d → %d  %s\n" % [int(t.loyalty), int(t.target_loyalty), _bar(t.loyalty, 100, "#e0c040")]
+		if t.nation_id == game.player_id or GameOptions.get_opt("show_ai_info"):
+			# how the target is made up (Town::update_target_loyalty, every 15 days)
+			var parts := t.target_loyalty_parts()
+			s += "[color=#b0a890]%s[/color]\n" % ", ".join(parts.slice(0, -1).map(func(pt): return "%s %+d" % [pt[0], pt[1]]))
 		s += "Quality of life %d\n" % t.quality_of_life
 		if t.wall_level > 0:
 			s += "%s: %d / %d\n" % ["Wall" if t.wall_level == 1 else "Fortified wall", int(t.wall_hp), int(t.wall_max_hp())]
@@ -1735,6 +1751,29 @@ func _sortie_button(f: Firm, label: String) -> void:
 	b.text = "⚔ " + ["all", "no ★", "healthy"][patrol_state]
 
 
+## What the occupant buttons show under the sprites: Alt+1 combat, Alt+2
+## leadership, Alt+3 loyalty, Alt+4 hit points.
+const OCCUPANT_STATS := ["combat", "leadership", "loyalty", "hit points"]
+var occupant_stat := 0
+
+
+func set_occupant_stat(i: int) -> void:
+	occupant_stat = clampi(i, 0, OCCUPANT_STATS.size() - 1)
+	game.notify("Occupants show their %s (Alt+1 combat, Alt+2 leadership, Alt+3 loyalty, Alt+4 hit points)." % OCCUPANT_STATS[occupant_stat], Vector2(-1, -1))
+	refresh_selection(true)
+
+
+func _occupant_value(u: Unit) -> String:
+	match occupant_stat:
+		1:
+			return str(int(u.lead_skill()))
+		2:
+			return "—" if u.rank == Defs.Rank.KING or not u.is_human() else str(int(u.loyalty))
+		3:
+			return "%d/%d" % [int(u.hp), int(u.max_hp)]
+	return str(int(u.combat))
+
+
 func _occupant_buttons(f: Firm) -> void:
 	var occupants: Array = ([f.overseer] if f.overseer else []) + f.soldiers
 	for su in occupants:
@@ -1750,15 +1789,21 @@ func _occupant_buttons(f: Firm) -> void:
 		var promote := func():
 			if who != f.overseer and f.overseer == null:
 				_do(f, "make_overseer", [who])
-		var b := _add_action(lbl, out, true, "Left-click: send out. Right-click a soldier while there is no commander: promote him to general and commander.", promote)
-		# the unit's own standing sprite in its kingdom's colour (not all are human)
+		var b := _add_action(lbl, out, true, "Left-click: send out. Right-click a soldier while there is no commander: promote him to general and commander. Alt+1..4: show combat, leadership, loyalty or hit points.", promote)
+		# the unit's own standing sprite in its kingdom's colour (not all are
+		# human), with the chosen figure underneath
 		var fr := Assets.sprite_frame(who.sprite_code, "S", Iso.dir_map[4], 0, who.nation_color())
 		var mark := "👑" if who.rank == Defs.Rank.KING else ("★" if who.rank >= Defs.Rank.GENERAL else "")
-		b.text = (mark + " " if mark != "" else "") + str(int(who.combat))
+		b.text = (mark if mark != "" else "") + _occupant_value(who)
+		b.tooltip_text = lbl + " — combat %d, leadership %d, loyalty %s, hit points %d/%d" % [int(who.combat), int(who.lead_skill()),
+			"—" if who.rank == Defs.Rank.KING or not who.is_human() else str(int(who.loyalty)), int(who.hp), int(who.max_hp)]
+		b.add_theme_font_size_override("font_size", 13)
 		if not fr.is_empty():
 			b.icon = fr[0]
 			b.expand_icon = true
-			b.custom_minimum_size = Vector2(64, 48)
+			b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+			b.custom_minimum_size = Vector2(64, 68)
 
 
 func _fryhtan_tech_tip(t: Dictionary) -> String:

@@ -120,6 +120,12 @@ static func _trees(g: Game) -> Array:
 	return out
 
 
+## The ids of the units of a list still alive (dead ones wait there for the
+## AI's next validate_patrol_unit and are not worth saving).
+static func _live_ids(a: Array) -> Array:
+	return a.filter(func(u): return is_instance_valid(u) and not u.dead).map(func(u): return _id(u)).filter(func(i): return i > 0)
+
+
 static func _id(o) -> int:
 	if o == null or not is_instance_valid(o) or not (o is GameObj):
 		return 0
@@ -178,7 +184,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
 		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "repair": f.repair, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress], "upgrade": [f.upgrading, f.upgrade_percent],
-		"ai": [f.should_close, f.no_neighbor_space, f.setup_day, f.patrol_units.map(func(u): return _id(u)).filter(func(i): return i > 0), f.coming_units.map(func(u): return _id(u)).filter(func(i): return i > 0),
+		"ai": [f.should_close, f.no_neighbor_space, f.setup_day, _live_ids(f.patrol_units), _live_ids(f.coming_units),
 			f.ai_recruiting, _id(f.ai_capture_town), f.is_attack_camp, f.factory_count, f.last_import_day, f.no_town_since],
 	}
 

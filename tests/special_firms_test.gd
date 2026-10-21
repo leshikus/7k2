@@ -75,6 +75,11 @@ func _ready() -> void:
 		check(foe.hp < hp0 or foe.dead, "the Fortress shoots at an enemy (%d -> %d)" % [hp0, foe.hp])
 		check(g.frame < fort.shown_until or foe.dead, "firing reveals it for a while")
 
+	# keep the human kingdom out of the long breeding runs below, so the
+	# human-side checks have a kingdom to work with whatever the Fryhtans do
+	for fn in g.nations.filter(func(n): return n.is_fryhtan):
+		Diplomacy.set_status(g, fn.id, human.id, Defs.Relation.NEUTRAL)
+		fn.never_until["DECLARE_WAR:%d" % human.id] = 100000
 	# ---- breeding grounds and the Vapngart
 	p.tech["FBEE"] = 1
 	var bee_at := open_spot(g, Vector2i(home) + Vector2i(-14, 0), 5, 5)
@@ -127,6 +132,7 @@ func _ready() -> void:
 	var mag_at := open_spot(g, Vector2i(home) + Vector2i(0, -14), 5, 5)
 	var mag := g.spawn_firm("MAGIC", p.id, "", mag_at, true)
 	check(not SpecialFirms.can_cast(mag, "WOUND"), "Wound Units needs its tech")
+	g.declare_war(p.id, human.id)
 	var foes: Array = []
 	for k in 3:
 		foes.append(g.spawn_unit(Defs.unit_sprite(human.race, "INF"), human.id, Vector2i(mag.x1 + mag.w + 6 + k, mag.y1 + 2), 10.0))
@@ -136,6 +142,7 @@ func _ready() -> void:
 	check(foes.all(func(u): return u.frozen_until > g.frame + Defs.FRAMES_PER_DAY * 10), "enemies around the target are frozen for 12 days")
 	check(p.live_points < life0 and mag.cast_charge == Defs.MAX_CAST_DELAY - 30, "the spell costs life points and charge")
 	check(not SpecialFirms.can_cast(mag, "TELEPORT"), "no second spell until recharged")
+	Diplomacy.set_status(g, p.id, human.id, Defs.Relation.NEUTRAL)
 	days(g, 31)
 	check(SpecialFirms.can_cast(mag, "TELEPORT"), "recharged after 30 days")
 	var alive: Array = (bees + [jag]).filter(func(u): return u != null and not u.dead and u.inside_firm == null)
@@ -168,6 +175,8 @@ func _ready() -> void:
 	# ---- human side: offensive building, Porcupine, berserk
 	human.cash = 10000.0
 	human.is_ai = true
+	check(human.alive, "the human kingdom has survived")
+	g.declare_war(p.id, human.id)
 	var hf: Firm = g.firms.filter(func(f): return f.nation_id == human.id)[0]
 	var arch_at := open_spot(g, Vector2i(hf.center_loc()) + Vector2i(12, 0), 5, 5)
 	var arch := g.spawn_firm("OFF_BLD4", human.id, human.race, arch_at, true)

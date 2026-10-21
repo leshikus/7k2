@@ -33,8 +33,13 @@ func _ready() -> void:
 	wf.set_rally(rp)
 	wf.queue_weapon("CATAPULT")
 	g.fast_build = true
-	for i in Defs.FRAMES_PER_DAY * 60:
+	# 60 days of a full factory; fewer workers take longer
+	for i in Defs.FRAMES_PER_DAY * 90:
 		g.sim_frame()
+		if g.units.any(func(x): return x.sprite_code == "CATAPULT" and x.nation_id == p.id) and i % Defs.FRAMES_PER_DAY == 0:
+			for k in Defs.FRAMES_PER_DAY * 5:      # a few days to reach the rally point
+				g.sim_frame()
+			break
 	var cats := g.units.filter(func(x): return x.sprite_code == "CATAPULT" and x.nation_id == p.id)
 	check(not cats.is_empty(), "a catapult was built")
 	if not cats.is_empty():

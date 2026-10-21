@@ -173,13 +173,28 @@ static func influence_adjustment(f: Firm) -> int:
 ## another kingdom's (only while we have none of our own linked) lower it for
 ## the people of their commander's race, less a sound wall's protection.
 func update_target_loyalty() -> void:
+	var parts := target_loyalty_parts()
+	if not parts.is_empty():
+		target_loyalty = float(parts[-1][1])
+
+
+## The terms of Town::update_target_loyalty, as [label, points] pairs; the
+## last pair is the resulting target.
+func target_loyalty_parts() -> Array:
 	var n := nation()
 	if n == null:
-		return
-	var t := 10 + int(bonus_loyalty) + int(n.reputation / 2.0) + quality_of_life / 4
+		return []
+	var parts := [["base", 10]]
+	if int(bonus_loyalty) != 0:
+		parts.append(["recent change of kingdom", int(bonus_loyalty)])
+	parts.append(["reputation / 2", int(n.reputation) / 2])
+	parts.append(["quality of life / 4", quality_of_life / 4])
+	var t := 10 + int(bonus_loyalty) + int(n.reputation) / 2 + quality_of_life / 4
 	if population > 0:
+		parts.append(["employment", 30 - 30 * jobless() / population])
 		t += 30 - 30 * jobless() / population
 	if race == n.race:
+		parts.append(["the ruler's race", 20])
 		t += 20
 	t = clampi(t, 0, 100)
 	var own_camp := has_linked_camp(nation_id)
@@ -197,13 +212,17 @@ func update_target_loyalty() -> void:
 			inf += 8
 		if fnat and fnat.race == race:
 			inf += 8
+		var who := "%s %s (%s)" % [Defs.firm_types.get(f.code, {}).get("name", f.code), o.display_name(), "leadership %d" % int(o.lead_skill())]
 		if f.nation_id == nation_id:
 			t += inf * influence_adjustment(f) / 100
+			parts.append([who, inf * influence_adjustment(f) / 100])
 		elif o.race == race:
 			if wall_level > 0:
 				inf -= int(20 * wall_level * wall_hp / maxf(1.0, wall_max_hp()))
 			t -= inf * influence_adjustment(f) / 100
-	target_loyalty = clampf(t, 0, 100)
+			parts.append(["enemy " + who, -(inf * influence_adjustment(f) / 100)])
+	parts.append(["target", clampi(t, 0, 100)])
+	return parts
 
 
 func wall_max_hp() -> float:

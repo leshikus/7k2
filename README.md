@@ -71,7 +71,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
   with gold and life points, build lairs beside independent villages and
   terrorise them until they pay tribute, and raid human kingdoms. An enslaved
   village cannot join you while its lair stands.
-* **Lead a Fryhtan kingdom** yourself: buy your species' technologies at its
+* **Lead a Fryhtan kingdom** yourself ("Play as: Fryhtans" on the start screen): buy your species' technologies at its
   lairs with life points, and build its special buildings: Lishorr (camouflaged
   shooting plants), Wilde Lishorr (spreads wild), Bheema Hyfe and Tarmes Mownd
   (insects), Keraal (beasts for hire), Alchemist Tor (gold, life points and
@@ -151,7 +151,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | Input | Action |
 |---|---|
 | Left click / drag | Select / box-select your units (Shift adds) |
-| Right click | Move, attack, garrison a camp, or resume construction |
+| Right click | Move, attack, garrison a camp, resume construction, or settle in one of your towns |
 | Shift + right click | Add a waypoint: the units go there after their current move |
 | Ctrl + right click | Attack a kingdom you are not at war with |
 | Arrows / screen edge | Scroll (Options: speed, and Comfort or Speed scrolling) |
@@ -159,6 +159,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | `[` / `]`, Ctrl+Up/Down | Turn the view a quarter turn / tilt it |
 | Space, P | Pause; `+` / `-` change speed |
 | Ctrl+1–9, 1–9 | Assign / recall unit groups |
+| Alt+1–4 | A fort's occupants show combat, leadership, loyalty or hit points |
 | Tab | Stop the selected units |
 | Number pad | Face a general's troop that way (formations) |
 | A, C, G, K, R, W, Y, Z | Find an artifact, a caravan, a general, the king, a royal, a wagon, a spy, a Greater Being (Z again: cast) |

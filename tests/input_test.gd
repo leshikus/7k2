@@ -133,7 +133,7 @@ func _run() -> void:
 			for dy in [-r, r]:
 				var c := gen.cell() + Vector2i(dx, dy)
 				var rr := Rect2i(c, Vector2i(b["loc_w"], b["loc_h"]))
-				if spot.x < 0 and game.world.can_place(c.x, c.y, b["loc_w"], b["loc_h"]) and not game._overlaps_site(rr) and game.is_loc_explored(rr.get_center()) and game.is_loc_explored(rr.position) and game.is_loc_explored(rr.end - Vector2i.ONE):
+				if spot.x < 0 and game.can_build_firm("CAMP", c, b["loc_w"], b["loc_h"]) and game.is_loc_explored(rr.get_center()) and game.is_loc_explored(rr.position) and game.is_loc_explored(rr.end - Vector2i.ONE):
 					spot = c
 	var firms_before := game.firms.size()
 	var center := Vector2(spot) + Vector2(b["loc_w"], b["loc_h"]) * 0.5

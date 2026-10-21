@@ -257,6 +257,7 @@ static func load_from_assets() -> void:
 			"code": f["CODE"], "name": f["NAME"], "hp": maxi(100, f["HITPOINTS"].to_int()),
 			"cost": f["SETUP_COST"].to_int(), "year_cost": f["YEAR_COST"].to_int(), "live_cost": f["SETUP_LIVE"].to_int(),
 			"overseer": f["OVERTITLE"], "worker": f["WORKTITLE"],
+			"military": f.get("MILITARY", "") == "Y",      # FirmInfo::is_military
 		}
 	for m in Assets.table("MONSTER"):
 		monsters.append({"unit": m["UNIT"], "name": m["NAME"], "level": m["LEVEL"].to_int()})
@@ -436,6 +437,17 @@ static func firm_techs(code: String) -> Array:
 
 
 ## Whether a kingdom knows how to build this Fryhtan or offensive building.
+## FirmInfo::can_build (the unit's part): a human soldier builds only military
+## buildings; a civilian builds anything but the offensive structures;
+## Fryhtans build whatever their kingdom can.
+static func unit_can_build(u, code: String) -> bool:
+	if code == "LAIR" or not u.is_human():
+		return true
+	if bool(firm_types.get(code, {}).get("military", code in ["CAMP", "FORT"])):
+		return not (code in OFFENSIVE_FIRMS and u.is_civilian())
+	return u.is_civilian()
+
+
 static func knows_firm(n, code: String) -> bool:
 	var ts := firm_techs(code)
 	if ts.is_empty():

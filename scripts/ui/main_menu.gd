@@ -16,6 +16,8 @@ const RACE_IMAGES := {
 var path_edit: LineEdit
 var status: Label
 var race_opt: OptionButton
+var side_opt: OptionButton      # a human kingdom or a Fryhtan one
+var race_label: Label
 var size_opt: OptionButton
 var setup_pages: SetupPages
 const SIZES := [120, 160, 200]      # the original's world is 200 x 200 (MAX_MAP_WIDTH)
@@ -87,7 +89,12 @@ func _ready() -> void:
 	var vb := VBoxContainer.new()
 	vb.custom_minimum_size = Vector2(540, 0)
 	vb.add_theme_constant_override("separation", 8)
-	scroll.add_child(vb)
+	# room on the right for the scroll bar, so it never covers the buttons
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(margin)
+	margin.add_child(vb)
 	var title := Label.new()
 	title.text = "Seven Kingdoms II"
 	title.add_theme_font_size_override("font_size", 34)
@@ -149,7 +156,16 @@ func _ready() -> void:
 	kingdom_box.columns = 2
 	setup_box.add_child(kingdom_box)
 	name_edit = _row(kingdom_box, "Kingdom name", LineEdit.new())
+	side_opt = _row(kingdom_box, "Play as", OptionButton.new())
+	side_opt.add_item("A human kingdom")
+	side_opt.add_item("Fryhtans")
+	side_opt.tooltip_text = "Fryhtans live in lairs instead of towns, breed with gold and life points, and terrorise villages into paying tribute."
+	side_opt.item_selected.connect(func(_i):
+		_fill_races()
+		_update_picture()
+		_show_mode())
 	race_opt = _row(kingdom_box, "Nationality", OptionButton.new())
+	race_label = kingdom_box.get_child(race_opt.get_index() - 1)
 	race_opt.item_selected.connect(func(_i): _update_picture())
 
 	# the map and the opponents (new game, network game, editor)
@@ -505,13 +521,7 @@ func _on_loaded() -> void:
 	status.text = "Game data loaded from " + Assets.install_path
 	status.add_theme_color_override("font_color", Color(0.6, 0.9, 0.6))
 	setup_box.visible = true
-	race_opt.clear()
-	for r in Defs.races:
-		race_opt.add_item(r["name"])
-	# Fryhtan species follow the human nationalities, as in the original's list
-	for m in Defs.monsters:
-		race_opt.add_item("Fryhtans: " + m["name"])
-	race_opt.select(0)
+	_fill_races()
 	_update_picture()
 	scenarios = ScenarioFile.list_premade()
 	scn_opt.clear()
@@ -532,21 +542,38 @@ func _update_picture() -> void:
 		name_edit.text = (nm + " Fryhtans") if _is_fryhtan_pick() else ("Kingdom of " + nm)
 
 
+## The nationalities, or the Fryhtan species, for the side chosen.
+func _fill_races() -> void:
+	race_opt.clear()
+	if _is_fryhtan_pick():
+		race_label.text = "Species"
+		for m in Defs.monsters:
+			race_opt.add_item(m["name"])
+	else:
+		race_label.text = "Nationality"
+		for r in Defs.races:
+			race_opt.add_item(r["name"])
+	if race_opt.item_count > 0:
+		race_opt.select(0)
+
+
 func _is_fryhtan_pick() -> bool:
-	return race_opt.selected >= Defs.races.size()
+	return side_opt != null and side_opt.selected == 1
 
 
 ## Race code of the chosen nationality, or the species' unit code for Fryhtans.
 func _race_code() -> String:
+	var i := maxi(0, race_opt.selected)
 	if _is_fryhtan_pick():
-		return Defs.monsters[race_opt.selected - Defs.races.size()]["unit"]
-	return Defs.races[race_opt.selected]["code"]
+		return Defs.monsters[i]["unit"]
+	return Defs.races[i]["code"]
 
 
 func _race_name() -> String:
+	var i := maxi(0, race_opt.selected)
 	if _is_fryhtan_pick():
-		return Defs.monsters[race_opt.selected - Defs.races.size()]["name"]
-	return Defs.races[race_opt.selected]["name"]
+		return Defs.monsters[i]["name"]
+	return Defs.races[i]["name"]
 
 
 func _update_scenario() -> void:

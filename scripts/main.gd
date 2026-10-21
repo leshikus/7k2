@@ -943,14 +943,14 @@ func _placement() -> Dictionary:
 		var s := game.site_at_rect(Rect2i(Vector2i(floori(loc.x), floori(loc.y)), Vector2i.ONE))
 		if s:
 			pos = Vector2i(s.x1, s.y1)
-			ok = s.mine == null and game.world.can_place(pos.x, pos.y, w, h, true)
+			ok = s.mine == null and game.can_build_firm(build_code, pos, w, h)
 	else:
 		var r := Rect2i(pos, Vector2i(w, h))
-		var site_ok := not game._overlaps_site(r)
+		var site_ok := true
 		if build_code == "ALCHEMY":
 			var st := game.site_at_rect(r)
 			site_ok = st == null or st.mine == null
-		ok = game.world.can_place(pos.x, pos.y, w, h) and site_ok and game.is_loc_explored(r.get_center())
+		ok = game.can_build_firm(build_code, pos, w, h) and site_ok and game.is_loc_explored(r.get_center())
 	return {"build": b, "pos": pos, "ok": ok}
 
 
@@ -978,9 +978,9 @@ func _place_building() -> void:
 	if not p.can_afford(cost):
 		game.notify("Not enough gold.", Vector2(-1, -1))
 		return
-	var builders: Array = game.selected.filter(func(o): return o is Unit and o.nation_id == p.id and (o.is_human() or p.is_fryhtan) and not o.dead and not o.is_god)
+	var builders: Array = game.selected.filter(func(o): return o is Unit and o.nation_id == p.id and (o.is_human() or p.is_fryhtan) and not o.dead and not o.is_god and Defs.unit_can_build(o, build_code))
 	if builders.is_empty():
-		game.notify("Select a unit to construct the building.", Vector2(-1, -1))
+		game.notify("Select a unit that can construct this building: soldiers build only military buildings, and civilians all others.", Vector2(-1, -1))
 		_cancel_build()
 		return
 	var b := pl["build"] as Dictionary
@@ -1169,7 +1169,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					save_game("quick")
 				elif k.keycode >= KEY_A and k.keycode <= KEY_Z and not k.ctrl_pressed and not k.alt_pressed:
 					_letter_key(k.keycode, k.shift_pressed)
-				if k.keycode >= KEY_1 and k.keycode <= KEY_9:
+				if k.alt_pressed and k.keycode >= KEY_1 and k.keycode <= KEY_4:
+					# Alt+1..4: what the occupants of a fort show under their sprites
+					hud.set_occupant_stat(k.keycode - KEY_1)
+				elif k.keycode >= KEY_1 and k.keycode <= KEY_9:
 					var gi := k.keycode - KEY_1
 					if k.ctrl_pressed:
 						_groups[gi] = game.selected.filter(func(o): return o is Unit)
@@ -1387,6 +1390,22 @@ func _command(force_attack: bool) -> void:
 			if f.is_military() or f.code == "FORTRESS":
 				for u in own:
 					Net.cmd(u, "order_enter", [f])
+				return
+		elif target is Town and target.nation_id == game.player_id:
+			# Unit::assign to an own town: the people settle in it, the rest walk there
+			var t := target as Town
+			var settling: Array = own.filter(func(u): return u.home_town == null and (u.is_human() or u.is_wagon()) and u.rank != Defs.Rank.KING and u.settler_race() == t.race)
+			var room := Defs.MAX_TOWN_POPULATION - t.population
+			var sent := 0
+			for u in settling:
+				if u.settlers() <= room and not t.under_construction:
+					room -= u.settlers()
+					sent += 1
+					Net.cmd(u, "order_settle_into", [t])
+			if sent < settling.size():
+				game.notify("%s has no room for everyone." % t.town_name, t.center_loc())
+			own = own.filter(func(u): return not settling.has(u))
+			if own.is_empty():
 				return
 		elif target.nation_id != game.player_id:
 			var hostile := game.is_hostile(own[0], target) or target.is_monster()

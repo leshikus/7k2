@@ -25,13 +25,20 @@ func _ready() -> void:
 	g.message.connect(func(t, _l): if args.has("verbose"): print("  msg: ", t))
 	var days := int(args.get("days", "1200"))
 	var t0 := Time.get_ticks_msec()
+	var talks := {}
 	for d in days:
+		for e in g.talk_log:
+			if not e.has("_counted"):
+				e["_counted"] = true
+				var k: String = "%s %s" % [e["id"], e["result"]]
+				talks[k] = int(talks.get(k, 0)) + 1
 		for f in Defs.FRAMES_PER_DAY:
 			g.sim_frame()
 		if d % 300 == 299:
 			_report(g, d + 1)
 		if g.over: break
 	print("simulated ", days, " days in ", Time.get_ticks_msec() - t0, " ms")
+	print("talks: ", talks)
 	_report(g, days)
 	get_tree().quit(0)
 

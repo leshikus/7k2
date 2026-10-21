@@ -353,6 +353,32 @@ func _shuffle(a: Array) -> void:
 		a[j] = t
 
 
+const INTER_PLACE_SPACE := 2       # gamedef.h: free cells kept between places
+
+
+## World::can_build_firm: the ground is free, and a band of INTER_PLACE_SPACE
+## cells around it is free of buildings, towns and raw deposits (trees
+## there are fine), so a way stays open between places. A mine (or an
+## Alchemist Tor) stands on its deposit.
+func can_build_firm(code: String, pos: Vector2i, w: int, h: int) -> bool:
+	var on_raw := code in ["MINE", "ALCHEMY"]
+	if not world.can_place(pos.x, pos.y, w, h, code == "MINE"):
+		return false
+	var r := Rect2i(pos, Vector2i(w, h))
+	var outer := r.grow(INTER_PLACE_SPACE).intersection(Rect2i(0, 0, world.w, world.h))
+	for y in range(outer.position.y, outer.end.y):
+		for x in range(outer.position.x, outer.end.x):
+			if not r.has_point(Vector2i(x, y)) and world.occupant[y * world.w + x] != null:
+				return false
+	for s in sites:
+		var sf: Rect2i = s.footprint()
+		if not sf.intersects(outer):
+			continue
+		if not (on_raw and sf.intersects(r)):       # its own deposit
+			return false
+	return true
+
+
 func _overlaps_site(r: Rect2i) -> bool:
 	for s in sites:
 		if s.footprint().intersects(r):
@@ -2141,7 +2167,9 @@ func cmd_place_building(nid: int, code: String, race: String, pos: Vector2i, bui
 	if n == null or n.cash < cost or n.live_points < live:
 		return
 	var b := Assets.firm_build(code, race)
-	if not world.can_place(pos.x, pos.y, b.get("loc_w", 3), b.get("loc_h", 3), code == "MINE"):
+	if not can_build_firm(code, pos, b.get("loc_w", 3), b.get("loc_h", 3)):
+		return
+	if builder and is_instance_valid(builder) and not Defs.unit_can_build(builder, code):
 		return
 	var f := spawn_firm(code, nid, race, pos, false)
 	if f == null:

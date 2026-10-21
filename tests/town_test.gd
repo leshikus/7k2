@@ -279,5 +279,63 @@ func _ready() -> void:
 	_check(ScenarioFile.fix_caps("FRY IN BOOTS") == "Fry in Boots" and ScenarioFile.fix_caps("GAUL: SECOND TIME LUCKY") == "Gaul: Second Time Lucky"
 		and ScenarioFile.fix_caps("ALEXANDER THE NOT SO GREAT (by Nick)") == "Alexander the Not So Great (by Nick)" and ScenarioFile.fix_caps("I Spy: DarkManX") == "I Spy: DarkManX",
 		"scenario names in capitals are shown in title case")
+	# --- a general's influence on a linked town (Town::update_target_loyalty):
+	# leadership / 3, +8 for his race and +8 for the kingdom's being the
+	# town's; a fort counts fully, a camp 80%
+	home = g.spawn_town(p.race, p.id, g._random_free_rect(Defs.TOWN_SIZE + 16, Defs.TOWN_SIZE + 16, 2, [], 0.0) + Vector2i(8, 8), 30)
+	home.loyalty = 60.0
+	var fb := Assets.firm_build("FORT", p.race)
+	var lfort := g.spawn_firm("FORT", p.id, p.race, g._place_near(home.footprint(), fb.get("loc_w", 4), fb.get("loc_h", 4), 6, [home.center_loc()]), true)
+	g.update_links()
+	_check(home.linked_firms.has(lfort), "the new fort is linked to the town")
+	var lgen := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, lfort.door(), 40.0)
+	lgen.rank = Defs.Rank.GENERAL
+	lgen.leadership = 60.0
+	lfort.accept_unit(lgen)
+	var gen_part := func() -> int:
+		for pt in home.target_loyalty_parts():
+			if str(pt[0]).contains(lgen.display_name()):
+				return int(pt[1])
+		return -999
+	_check(gen_part.call() == 60 / 3 + 8 + 8, "a general of leadership 60 adds 36 to his town's target loyalty (%d)" % gen_part.call())
+	lfort.code = "CAMP"
+	_check(gen_part.call() == 36 * 80 / 100, "in a camp, 80%% of it (%d)" % gen_part.call())
+	lfort.code = "FORT"
+	var parts := home.target_loyalty_parts()
+	var total := 0
+	for pt in parts.slice(0, -1):
+		total += int(pt[1])
+	home.update_target_loyalty()
+	_check(int(home.target_loyalty) == clampi(total, 0, 100) or total > 100, "the target is the sum of its terms (%d)" % int(home.target_loyalty))
+
+	# --- promotion and demotion (Unit::set_rank)
+	lfort.release_unit(lgen)
+	lgen.loyalty = 70.0
+	lgen.demote()
+	_check(lgen.rank == Defs.Rank.SOLDIER and lgen.loyalty == 30.0, "a demoted general loses 40 loyalty (%.0f)" % lgen.loyalty)
+	lgen.promote()
+	_check(lgen.rank == Defs.Rank.GENERAL and lgen.loyalty == 50.0, "a promoted soldier gains 20 (%.0f)" % lgen.loyalty)
+
+	# --- who builds what (FirmInfo::can_build) and the free band around buildings
+	var civ := g.spawn_unit(Defs.unit_sprite(p.race, "CIV"), p.id, g.free_unit_cell(lfort.door()), 10.0)
+	_check(civ != null and civ.is_civilian(), "a villager")
+	_check(Defs.unit_can_build(lgen, "CAMP") and not Defs.unit_can_build(lgen, "MARKET") and Defs.unit_can_build(lgen, "WAR") and Defs.unit_can_build(lgen, "OFF_BLD1"),
+		"a soldier builds military buildings only")
+	_check(Defs.unit_can_build(civ, "MARKET") and Defs.unit_can_build(civ, "CAMP") and not Defs.unit_can_build(civ, "OFF_BLD1"),
+		"a villager builds the rest, and camps, but no offensive structure")
+	var fp := lfort.footprint()
+	_check(not g.can_build_firm("MARKET", Vector2i(fp.end.x + 1, fp.position.y), 3, 3), "no building one cell from another")
+	var far := Vector2i(fp.end.x + Game.INTER_PLACE_SPACE, fp.position.y)
+	_check(g.can_build_firm("MARKET", far, 3, 3) or not g.world.can_place(far.x, far.y, 3, 3), "two cells apart is allowed")
+
+	# --- settling a group into a town of their race
+	var settlers: Array = []
+	for i in 2:
+		settlers.append(g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(6, 0)), 20.0))
+	home.population = 20
+	for su in settlers:
+		su.order_settle_into(home)
+	_days(g, 20)
+	_check(home.population == 22, "soldiers ordered into their town join it (%d)" % home.population)
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit(0 if fails == 0 else 2)
