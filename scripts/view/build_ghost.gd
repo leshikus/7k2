@@ -41,6 +41,15 @@ func render(cv) -> void:
 	cv.draw_colored_polygon(pts, Color(tint.r, tint.g, tint.b, 0.25))
 	pts.append(pts[0])
 	cv.draw_polyline(pts, tint, 2.0)
+	# the free band kept around every building (World::can_build_firm,
+	# INTER_PLACE_SPACE): nothing may stand there
+	var sp := Game.INTER_PLACE_SPACE
+	var band := PackedVector2Array([
+		o + Iso.to_screen(Vector2(pos.x - sp, pos.y - sp)), o + Iso.to_screen(Vector2(pos.x + w + sp, pos.y - sp)),
+		o + Iso.to_screen(Vector2(pos.x + w + sp, pos.y + h + sp)), o + Iso.to_screen(Vector2(pos.x - sp, pos.y + h + sp))])
+	band.append(band[0])
+	for i in 4:
+		Game.draw_dashes(cv, band[i], band[i + 1], Color(tint.r, tint.g, tint.b, 0.8), 1.5, 5.0)
 	# Link lines to the towns and buildings this site would connect to.
 	var g := Game.inst
 	if g:
@@ -49,8 +58,11 @@ func render(cv) -> void:
 		var code: String = build.get("firm", "")
 		var camp := code in ["CAMP", "FORT", "LAIR"]
 		var work := code in Firm.WORK_FIRMS
+		var race: String = Game.inst.player().race if Game.inst.player() else ""
 		for t in g.towns:
 			if not t.visible or Game._center_dist(c, t.center_loc()) > Defs.effective_distance(code, ""):
+				continue
+			if not Defs.firm_links_town(code, race, t.race):
 				continue
 			if t.nation_id == 0 and not (work or code == "MARKET" or camp):
 				continue
@@ -58,7 +70,7 @@ func render(cv) -> void:
 				continue
 			cv.draw_line(sc, o + Iso.to_screen(t.center_loc()), Color(1, 0.9, 0.3, 0.8), 2.0)
 		for f in g.firms:
-			if f.nation_id == g.player_id and Game._center_dist(c, f.center_loc()) <= Defs.effective_distance(f.code, code):
+			if code != "INN" and f.nation_id == g.player_id and Defs.firms_linkable(code, f.code) and Game._center_dist(c, f.center_loc()) <= Defs.effective_distance(f.code, code):
 				cv.draw_line(sc, o + Iso.to_screen(f.center_loc()), Color(0.5, 0.8, 1.0, 0.8), 2.0)
 	var frames: Array = build.get("frames", [])
 	if frames.is_empty():

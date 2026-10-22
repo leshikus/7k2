@@ -78,6 +78,15 @@ var rebel_id := 0                # member of a rebel band (Unit::unit_mode REBEL
 var frozen_until := -1           # Amaterasu's freeze (frame)
 var waypoints: Array = []       # further places to go after this move (Shift+right-click)
 var weapon_version := 0          # war machine / Fryhtan unit: tech level it was built at (get_weapon_version)
+enum Behavior { AGGRESSIVE = 1, DEFENSIVE, STAND_GROUND }
+var spy_notify := false         # Spy::notify_cloaked_nation_flag: a disguised spy keeps up his cover against his own side
+var auto_retreat := 0            # Unit::auto_retreat_hit_point: % of hit points to go home at (0 off; any fighting unit here, generals only in the original)
+var auto_reward := 0             # not in the original: rewarded automatically below this loyalty (0 off)
+const AUTO_RETREAT_LEVELS := [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
+const AUTO_REWARD_LEVELS := [0, 30, 40, 50, 60, 70, 80]
+var behavior_mode := Behavior.AGGRESSIVE    # Unit::behavior_mode
+var hero_id := 0                  # HeroRes: which hero of the list he is (0: none)
+var max_combat := 0               # Skill::max_combat_level (heroes and powerful units)
 var item_id := 0                  # the item carried (Items.TABLE), 0 = none
 var item_para := 0                # its charges, uses or time (Item::para)
 var death_frames := 0
@@ -103,6 +112,8 @@ func setup(sprite: String, nation: int, at: Vector2i, skill := 20.0) -> void:
 	var vt := sprite if is_weapon and Defs.unit_tech(sprite) == "" else Defs.unit_tech(sprite)
 	if n and vt != "":
 		weapon_version = maxi(1, n.tech_level(vt))
+	# Unit::init: a unit that dies with its blow starts defensive
+	behavior_mode = Behavior.DEFENSIVE if is_die_after_attack() else Behavior.AGGRESSIVE
 	unit_name = Defs.random_person_name(race, Game.inst.rng) if race != "" else utype.get("name", sprite)
 	# Skill::init: one in fifteen has a talent of 50-100, one 25-50, one 10-25
 	match Game.inst.rng.randi() % 15:
@@ -297,11 +308,11 @@ func order_move(dest: Vector2i) -> void:
 
 ## A disguised spy is judged by its cloak (see Game.is_hostile).
 func seen_nation() -> int:
-	return cloak_id if cloak_id > 0 else nation_id
+	return Espionage.cloak_nation(self) if is_spy else nation_id
 
 
 func order_attack(obj: GameObj) -> void:
-	if cloak_id > 0 and obj and obj.nation_id != nation_id:
+	if cloak_id != 0 and obj and obj.nation_id != nation_id:
 		Espionage.drop_cloak(self)     # attacking gives a disguised spy away
 	if dead or inside_firm or obj == null or obj == self or not can_attack():
 		return
@@ -369,6 +380,58 @@ func reward(from_nation: int) -> void:
 	n.add_cash(-REWARD_COST, "Rewards")
 
 
+## UnitArray::process (auto_retreat_hit_point) and the automatic reward,
+## once a day for a unit in the field (rewards in buildings too).
+func auto_orders() -> void:
+	if dead or rank == Defs.Rank.KING:
+		return
+	if auto_reward > 0 and loyalty < auto_reward and is_human() and not is_civilian() and nation_id > 0:
+		var n := nation()
+		if n and n.cash >= REWARD_COST:
+			reward(nation_id)
+	if auto_retreat > 0 and inside_firm == null and not has_meta("hidden") and hp < max_hp * auto_retreat / 100.0 \
+			and order != Order.ENTER and can_attack():
+		return_to_base()
+
+
+## Unit::resign: the unit is disbanded. People let go wander the land (two
+## for one, so that it shows); Fryhtans give their life to the other Fryhtan
+## kingdoms.
+func resign() -> void:
+	var g := Game.inst
+	if dead or rank == Defs.Rank.KING:
+		return
+	if is_human():
+		g.race_wanderers[race] = int(g.race_wanderers.get(race, 0)) + 2
+	var n := nation()
+	if n and n.is_fryhtan:
+		var others: Array = g.nations.filter(func(o): return o.alive and o.is_fryhtan and o.id != nation_id)
+		for o in others:
+			o.live_points += (10.0 if is_human() else 4.0) / others.size()
+	if inside_firm:
+		inside_firm.release_unit(self)
+	g._drop_item(self)
+	for m in g.units:
+		if m.leader == self:
+			m.leader = null
+	g.remove_unit(self)
+
+
+## Spy::drop_spy_identity: no longer a spy - an ordinary unit of the side he
+## now passes for.
+func drop_spy_identity() -> void:
+	if not is_spy or dead or inside_firm != null or has_meta("hidden"):
+		return
+	var to := Espionage.cloak_nation(self)
+	is_spy = false
+	spy_skill = 0.0
+	camouflage_days = 0
+	cloak_id = 0
+	if to != nation_id:
+		Game.inst.defect_unit(self, to)
+	queue_redraw()
+
+
 ## Unit::can_succeed_king: while the throne is empty, any soldier or general
 ## of a human kingdom, or a Fryhtan of the kingdom's own species.
 func can_succeed_king() -> bool:
@@ -396,6 +459,11 @@ func demote() -> void:
 ## "Return": back into the nearest building of the kingdom that has room for
 ## him (a fort or camp, a lair or Fortress for Fryhtans).
 func return_to_base() -> bool:
+	# Unit::return_camp: the home camp first, if it still has room
+	if home_firm and is_instance_valid(home_firm) and not home_firm.dead and home_firm.nation_id == nation_id \
+			and home_firm.soldiers.size() < home_firm.capacity() and (home_firm.is_military() or home_firm.code == "FORTRESS"):
+		order_enter(home_firm)
+		return true
 	var best: Firm = null
 	var bd := INF
 	for f in Game.inst.firms:
@@ -623,7 +691,7 @@ func _idle() -> void:
 	if not can_attack() or sprite_code == "EXPCART":
 		return      # a Porcupine waits for its orders
 	var enemy := Game.inst.find_enemy_near(self, float(utype.get("vis", 5)))
-	if enemy:
+	if enemy and will_engage(enemy):
 		order_attack(enemy)
 		return
 	if home_firm and (not is_instance_valid(home_firm) or home_firm.dead):
@@ -1003,6 +1071,11 @@ func _deliver_hit() -> void:
 		if att.get("fire", 0) > 0:
 			Game.inst.set_fire(target.cell() if target is Unit else Vector2i(target.center_loc()), att["fire"])
 	gain_experience()
+	# Unit::attack_consume_power: a Bheema dies with its sting
+	if att.get("die", false):
+		hp = 0.0
+		die(null)
+		return
 	attack_cooldown = int(att["delay"]) * 2
 	# Unit::set_remain_attack_delay: Raptorsclaw strikes sooner
 	var quick := item_ability(Items.Ability.ATTACK_SPEED)
@@ -1030,12 +1103,65 @@ func _item_strike(dmg: float) -> void:
 const MAX_NATION_CONTRIBUTION := 10000
 
 
+## Unit::is_die_after_attack: one of its attacks costs its life (it starts
+## defensive, so as not to waste it).
+func is_die_after_attack() -> bool:
+	return attack_list().any(func(a): return a.get("die", false))
+
+
+## Unit::get_behavior_mode: a troop in formation always stands its ground.
+func get_behavior_mode() -> int:
+	if formation > 0 or (leader and is_instance_valid(leader) and not leader.dead and leader.formation > 0):
+		return Behavior.STAND_GROUND
+	return behavior_mode
+
+
+## Unit::max_attack_range
+func max_attack_range() -> int:
+	var r := 1
+	for a in attack_list():
+		r = maxi(r, int(a["range"]))
+	return r
+
+
+## Whether this unit takes on `o` of its own accord (Unit::can_attack_target's
+## behaviour test): aggressive units anything in sight; defensive and
+## stand-ground units only what is within reach of their weapons. Town
+## defenders and rebels always fight.
+func will_engage(o: GameObj) -> bool:
+	if get_behavior_mode() == Behavior.AGGRESSIVE or home_town != null or rebel_id > 0:
+		return true
+	return not is_die_after_attack() and distance_to(o) <= max_attack_range()
+
+
+## Skill::max_combat_level: 200 for a living being (MAX_COMBAT_BATTLE),
+## a hero's own; Skill::max_skill_level 100 (a hero keeps more if he has it).
+func combat_cap() -> float:
+	return float(maxi(200, max_combat))
+
+
+## Unit::gain_experience, at every blow struck: the unit's contribution to
+## the kingdom and its combat level grow (more under the Celtic Greater
+## Being); the general leading it, if near, gains leadership, and a man with
+## a talent for it learns some by watching him.
 func gain_experience() -> void:
-	# Unit::gain_experience: the unit's contribution to the kingdom grows
+	var g := Game.inst
 	if is_human() and not is_weapon and nation_contribution < MAX_NATION_CONTRIBUTION:
 		nation_contribution += 1
-	if is_human() and combat < Defs.MAX_COMBAT_TRAIN:
-		combat = maxf(combat, minf(Defs.MAX_COMBAT_TRAIN, combat + 0.06))
+	var living := not is_weapon and not is_caravan and not is_god and not is_wagon() and race != ""
+	if living:
+		var inc := 0.10
+		if nation_id > 0 and g.god_worshipped(nation_id, "CELTIC"):
+			inc += 0.10 if race == "CELTIC" else 0.04
+		combat = maxf(combat, minf(combat_cap(), combat + inc))
+	var l := leading_general()
+	if l:
+		l.leadership = minf(maxf(100.0, l.leadership), l.leadership + 0.06)
+		if l.potential > 0 and g.rng.randi() % maxi(1, 10 - l.potential / 10) == 0:
+			l.leadership = minf(maxf(100.0, l.leadership), l.leadership + 0.12)
+	if leader and is_instance_valid(leader) and not leader.dead and is_human() and potential > 0:
+		if g.rng.randi() % maxi(1, 10 - potential / 10) == 0:
+			leadership = minf(100.0, leadership + 0.12)
 
 
 func _do_enter() -> bool:
@@ -1252,6 +1378,17 @@ func _japanese_kill_spy(rng_: int) -> void:
 func on_attacked(attacker: GameObj) -> void:
 	if attacker == null or not is_instance_valid(attacker) or attacker.dead:
 		return
+	# Unit::auto_react_attack: standing ground, a moving unit does not turn;
+	# defensive or standing ground, only an idle or fighting one fights back;
+	# standing ground, only against an enemy within reach
+	var mode := get_behavior_mode()
+	var idle_or_fighting := order == Order.IDLE or order == Order.ATTACK or attacking
+	if mode != Behavior.AGGRESSIVE and not idle_or_fighting:
+		Game.inst.call_for_help(self, attacker)
+		return
+	if mode == Behavior.STAND_GROUND and distance_to(attacker) > max_attack_range():
+		Game.inst.call_for_help(self, attacker)
+		return
 	if (order == Order.IDLE or order == Order.RETURN) and can_attack() and not attacking:
 		order_attack(attacker)
 	elif order == Order.ATTACK and can_attack() and attacker is Unit and not (is_instance_valid(target) and target is Unit) and Game.inst.is_hostile(self, attacker):
@@ -1377,7 +1514,7 @@ func render(cv) -> void:
 		cv.draw_colored_polygon(flag, col)
 		if rank == Defs.Rank.KING:
 			cv.draw_circle(top + Vector2(0, -16), 3, Color(1, 0.85, 0.2))
-	if cloak_id > 0 and nation_id == Game.inst.player_id:
+	if cloak_id != 0 and nation_id == Game.inst.player_id:
 		# your disguised spy: its true colours in a little diamond over its head
 		var c := Vector2(0, -50)
 		var own := Game.inst.nation(nation_id)

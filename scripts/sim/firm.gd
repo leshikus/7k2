@@ -77,7 +77,8 @@ var research_points: float:
 var weapon := ""
 var weapon_progress := 0.0
 var weapon_queue := 0
-var heroes: Array = []              # inn: heroes for hire
+var heroes: Array = []              # inn: its guests for hire (FirmInn::inn_unit_array; see Inn)
+var inn_policy := 0                 # inn: Inn.Policy, the player's standing hiring orders
 var trainees: Array = []            # training ground, espionage college: Training records (FirmTrain::trainee_array)
 var monster_code := ""              # lair: monster unit sprite
 var raid_timer := 0
@@ -258,6 +259,8 @@ func defense() -> Array:
 
 ## A unit arrives at the building (Unit::ENTER order).
 func accept_unit(u: Unit) -> bool:
+	if code == "INN" and not dead:
+		return Inn.assign_unit(self, u)       # FirmInn::assign_unit: a spy among the guests
 	if under_construction or u.nation_id != nation_id or dead:
 		return false
 	if code == "FORTRESS":
@@ -761,7 +764,7 @@ func next_day(day: int) -> void:
 		"WAR":
 			_war_factory()
 		"INN":
-			_inn(day)
+			Inn.next_day(self, day)
 		"STABLE", "SPY":
 			Training.next_day(self, day)
 		"BASE":
@@ -934,40 +937,9 @@ func queue_weapon(unit_code: String) -> void:
 	weapon_queue += 1
 
 
-func _inn(day: int) -> void:
-	for hdef in heroes:
-		hdef["days"] -= 1
-	heroes = heroes.filter(func(x): return x["days"] > 0)
-	if day % 30 == obj_id % 30 and heroes.size() < 4:
-		var rng := Game.inst.rng
-		var r: Dictionary = Defs.races[rng.randi() % Defs.races.size()]
-		var hl: Array = Defs.heroes.filter(func(x): return x["race"] == r["code"])
-		var hname: String = hl[rng.randi() % hl.size()]["name"] if not hl.is_empty() else Defs.random_person_name(r["code"], rng)
-		var cmb := float(rng.randi_range(30, 90))
-		var lead := float(rng.randi_range(20, 90))
-		heroes.append({"name": hname, "race": r["code"], "combat": cmb, "leadership": lead,
-			"cost": int(80 + cmb * 4 + lead * 4), "days": 150, "special": rng.randf() < 0.3})
-
-
+## FirmInn::hire (see Inn).
 func hire_hero(i: int) -> Unit:
-	if i < 0 or i >= heroes.size():
-		return null
-	var hdef: Dictionary = heroes[i]
-	var n := nation()
-	if n == null or not n.can_afford(hdef["cost"]):
-		return null
-	n.add_cash(-float(hdef["cost"]), "Hiring")
-	heroes.remove_at(i)
-	var sprite := Defs.unit_sprite(hdef["race"], "SPU" if hdef["special"] else "INF")
-	var c := Game.inst.exit_cell(footprint(), door())
-	var u := Game.inst.spawn_unit(sprite, nation_id, c, hdef["combat"])
-	send_to_rally(u)
-	if u:
-		u.unit_name = hdef["name"]
-		u.leadership = hdef["leadership"]
-		u.is_hero = true
-		u.rank = Defs.Rank.GENERAL
-	return u
+	return Inn.hire(self, i)
 
 
 ## Seat of Power: linked people pray, building up the kingdom's prayer points.
@@ -1113,11 +1085,12 @@ func render(cv) -> void:
 	var o := _origin()
 	if selected:
 		_draw_footprint(cv, col.lightened(0.3))
-		for t in linked_towns:
-			cv.draw_line(Vector2.ZERO, Iso.to_screen(t.center_loc()) - position, Color(1, 0.9, 0.3, 0.7), 2.0)
-		for f in linked_firms:
-			if f.nation_id == nation_id:
-				cv.draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, Color(0.5, 0.8, 1.0, 0.7), 2.0)
+		if code != "INN":       # an inn's links (to other inns) are not shown
+			for t in linked_towns:
+				Game.draw_link(cv, Vector2.ZERO, Iso.to_screen(t.center_loc()) - position, Color(1, 0.9, 0.3, 0.8), Game.inst.link_on(self, t))
+			for f in linked_firms:
+				if f.nation_id == nation_id:
+					Game.draw_link(cv, Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, Color(0.5, 0.8, 1.0, 0.8), Game.inst.link_on(self, f))
 	var frames: Array = build.get("frames", [])
 	if frames.is_empty() or Game.inst.hide_buildings:
 		# Hide Buildings: a square in the owner's colour with the building's name

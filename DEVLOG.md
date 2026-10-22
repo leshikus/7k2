@@ -949,3 +949,30 @@ The compact AI of our own design is replaced by a port of the original's:
   king's race gains 30 rather than losing it. No king and no candidate loses
   the game; a computer kingdom in that state surrenders or is defeated.
 
+## Heroes, the inn, unit orders, links
+
+- HeroRes (heroes.gd): the HERO.DBF heroes and fictional ones (ten a
+  nationality), half for hire; wandering heroes come out of towns
+  (think_generate_hero), can be hired in the field, and may join a kingdom
+  that slays a Fryhtan All-high (induce_hero_join_nation);
+  create_powerful_unit's combat, leadership, maximums and items; hire_cost.
+- The inn (inn.gd) as FirmInn: soldiers and spies of every nationality, one
+  in twenty a hero; stays of 10-14 updates, slower as the years pass; 24
+  guests among neighbouring inns; items bought; hit points recovered; spies
+  disguised as independents slip in, move between inns and come out to
+  their masters. Recruiting policies are an addition (DIFFERENCES.md).
+- Spies may pass for independents; "keep cover" (notify_cloaked_nation_flag)
+  and "drop spy identity"; own units leave an own disguised spy alone.
+- Behaviour modes (aggressive / defensive / stand ground; formation stands
+  ground); the Bheema dies with its sting and starts defensive.
+- Unit::gain_experience: combat up to 200 (a hero's maximum), the leading
+  general's leadership grows with his men's blows; squad shown in the panel.
+- Disband (Del) as Unit::resign; auto retreat (all fighting units) and auto
+  reward (additions).
+- Links as Firm::setup_link: firm-to-firm only factory/mine/market, inn/inn,
+  lair/wild lair; town links by LINKTOTOWN and same-race for Seats and
+  training centres; switched-off links drawn dashed; the free band shown in
+  the placement preview.
+- Saved games listed newest first; a new game starts paused; the tax button
+  waits for the penalty (auto tax and grant wait as in the original).
+

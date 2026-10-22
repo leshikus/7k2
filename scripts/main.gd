@@ -596,6 +596,11 @@ func _start(cfg: Dictionary) -> void:
 			(" and " if game.goals.require_all else " or ").join(goals)], Vector2(-1, -1))
 	else:
 		game.notify("Welcome, ruler of the %s. Expand your realm and defeat the rival kingdoms!" % game.player().name, Vector2(-1, -1))
+	# a new game waits for the player: it starts paused
+	var automated := Array(OS.get_cmdline_user_args()).any(func(a): return a.begins_with("--shot") or a.begins_with("--demo") or a.begins_with("--bench") or a == "--autostart")
+	if cfg.get("start_paused", true) and not automated and not cfg.get("autoplay", false) and not cfg.has("mp") and not cfg.get("editor", false):
+		game.set_paused(true)
+		game.notify("The game is paused. Press P or Space (or the ▶ button) to begin.", Vector2(-1, -1))
 
 
 ## Loads a saved game ("quick", "autosave" ...) and resumes play.
@@ -705,8 +710,11 @@ func _attach_game() -> void:
 		if not own.is_empty():
 			sfx.play_event("S", own[0].sprite_code, "ACK")
 			_formation_move(own, Vector2i(l.floor())))
-	hud.save_requested.connect(func(): save_game("quick"))
-	hud.load_requested.connect(func(): load_game.call_deferred("quick"))
+	hud.save_requested.connect(func(): save_game(SaveGame.new_slot()))
+	hud.load_slot_requested.connect(func(slot): load_game.call_deferred(slot))
+	hud.load_requested.connect(func():
+		var saves := SaveGame.list_saves()        # F9: the newest saved game
+		load_game.call_deferred(saves[0]["slot"] if not saves.is_empty() else "quick"))
 	select_layer = CanvasLayer.new()
 	select_layer.layer = 5
 	add_child(select_layer)
@@ -1125,8 +1133,13 @@ func _unhandled_input(event: InputEvent) -> void:
 					KEY_F5: "Military", KEY_F6: "Technology", KEY_F8: "Kingdoms"}[k.keycode])
 			KEY_F7:
 				hud.toggle_spies()
+			KEY_DELETE:
+				# Unit::detect_unit_profile: Del disbands the selected units
+				for o in game.selected.duplicate():
+					if o is Unit and o.nation_id == game.player_id and o.rank != Defs.Rank.KING and not o.dead:
+						Net.cmd(o, "resign")
 			KEY_F9:
-				load_game.call_deferred("quick")
+				hud.load_requested.emit()       # the newest saved game
 			KEY_ESCAPE:
 				if build_code != "":
 					_cancel_build()
@@ -1216,7 +1229,7 @@ func _letter_key(key: int, shift: bool) -> void:
 		KEY_J:
 			_locate(key, game.sites.filter(func(s): return game.is_loc_explored(Vector2i(s.x1, s.y1))))
 		KEY_L:
-			load_game.call_deferred("quick")
+			hud.load_requested.emit()
 		KEY_O:
 			hud.toggle_options()
 		KEY_Q:
@@ -1366,6 +1379,15 @@ func _command(force_attack: bool) -> void:
 	var target := _pick()
 	# spies slip into towns, forts and camps (their own ones to hunt enemy spies)
 	var spies_sel: Array = own.filter(func(u): return u.is_spy)
+	# FirmInn::assign_unit: a military spy passing for an independent joins an inn's guests
+	if target is Firm and target.code == "INN":
+		var guests: Array = spies_sel.filter(func(u): return u.seen_nation() == 0 and not u.is_civilian())
+		for u in guests:
+			Net.cmd(u, "order_enter", [target])
+		own = own.filter(func(u): return not guests.has(u))
+		spies_sel = spies_sel.filter(func(u): return not guests.has(u))
+		if own.is_empty():
+			return
 	if target and not spies_sel.is_empty() and (target is Town or Espionage.is_camp(target)):
 		var refused := 0
 		for u in spies_sel:

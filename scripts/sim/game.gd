@@ -67,6 +67,8 @@ var talk_log: Array = []             # the latest messages and their answers
 var fog_of_war := true             # Config::fog_of_war: what is out of sight goes dark again
 var last_new_nation_day := -1000    # NationArray::last_new_nation_date
 var last_del_nation_day := -1000    # NationArray::last_del_nation_date
+var hero_info: Array = []          # HeroRes::hero_info_array (HeroRes.init)
+var hero_appear := true            # HeroRes::hero_appear_flag
 var race_wanderers := {}            # TownArray::race_wander_pop_array: race -> people
 var std_raw_sites := 0              # SiteArray::std_raw_site_count (0: not a set-up game)
 var fast_build := false              # tutorial lessons: building and training ten times faster (config.fast_build)
@@ -97,6 +99,7 @@ func start(cfg: Dictionary) -> void:
 	Defs.load_from_assets()
 	config = cfg.duplicate()
 	rng.seed = cfg.get("seed", randi())
+	HeroRes.init(self)
 	if cfg.get("campaign_battle") != null:
 		var cb = cfg["campaign_battle"]
 		var csize: int = cb.WORLD
@@ -1784,8 +1787,18 @@ func player() -> Nation:
 ## (Unit::nation_recno is the cloaked nation in the original); its own side
 ## always knows it.
 func is_hostile(a: GameObj, b: GameObj) -> bool:
-	if a == null or b == null or a.nation_id == b.nation_id:
+	if a == null or b == null:
 		return false
+	# Unit::can_attack_target: a disguised spy and his true side leave each
+	# other alone unless he keeps up his cover (Spy::notify_cloaked_nation_flag);
+	# keeping it, he is what he passes for
+	if a.nation_id == b.nation_id:
+		var cover := false
+		for o in [a, b]:
+			if o is Unit and o.is_spy and o.cloak_id != 0 and o.spy_notify:
+				cover = true
+		if not cover:
+			return false
 	if a.is_monster() or b.is_monster():
 		return true
 	var sa := a.seen_nation()
@@ -2014,6 +2027,8 @@ func next_day() -> void:
 			Espionage.update_unit_loyalty(u)
 		if day % 15 == u.obj_id % 15:
 			Espionage.think_betray(self, u)
+		if u.auto_retreat > 0 or u.auto_reward > 0:
+			u.auto_orders()
 	_pay_units()
 	if day % 15 == 0:
 		Economy.distribute_demand(self)
@@ -2035,6 +2050,7 @@ func next_day() -> void:
 	if campaign_battle != null:
 		campaign_battle.next_day()
 	RandomEvents.next_day(self)
+	HeroRes.think_generate_hero(self)
 	_quake_next_day()
 	_natural_tornado()
 	Rebels.next_day(self)
@@ -2237,6 +2253,8 @@ func update_links() -> void:
 					continue
 			elif t.nation_id != f.nation_id and not camp:
 				continue
+			if not Defs.firm_links_town(f.code, f.race, t.race):
+				continue
 			if _center_dist(fc, t.center_loc()) <= town_reach:
 				f.linked_towns.append(t)
 				t.linked_firms.append(f)
@@ -2245,6 +2263,10 @@ func update_links() -> void:
 				continue
 			if g.nation_id != f.nation_id and not (f.code == "LAIR" and g.code == "LAIR"):
 				continue
+			if not Defs.firms_linkable(f.code, g.code):
+				continue
+			if f.code == "LAIR" and g.code == "LAIR" and not ((f.nation_id == 0) != (g.nation_id == 0)):
+				continue       # FirmRes::is_linkable_to_firm: a kingdom's lair to a wild one only
 			if _center_dist(fc, g.center_loc()) <= Defs.effective_distance(g.code, f.code):
 				f.linked_firms.append(g)
 
@@ -2268,6 +2290,31 @@ func link_side(x: GameObj, y: GameObj) -> bool:
 	var k := _link_key(x, y)
 	var st: Array = link_state.get(k[0], _default_link(x, y) if k[1] else _default_link(y, x))
 	return st[0] if k[1] else st[1]
+
+
+## A link line: a working link solid and bright, one switched off dashed
+## and dim, so the two are told apart at a glance.
+static func draw_link(cv, from: Vector2, to: Vector2, col: Color, on: bool) -> void:
+	if on:
+		cv.draw_line(from, to, col, 2.0)
+		return
+	var dim := Color(col.r * 0.6, col.g * 0.6, col.b * 0.6, 0.6)
+	draw_dashes(cv, from, to, dim, 1.5, 6.0)
+	var mid := (from + to) * 0.5
+	cv.draw_line(mid + Vector2(-4, -4), mid + Vector2(4, 4), Color(1, 0.3, 0.3, 0.8), 2.0)
+	cv.draw_line(mid + Vector2(-4, 4), mid + Vector2(4, -4), Color(1, 0.3, 0.3, 0.8), 2.0)
+
+
+## A dashed line out of plain segments (the 3D view's recorder knows only lines).
+static func draw_dashes(cv, from: Vector2, to: Vector2, col: Color, width: float, dash: float) -> void:
+	var len := from.distance_to(to)
+	if len <= 0.0:
+		return
+	var d := (to - from) / len
+	var t := 0.0
+	while t < len:
+		cv.draw_line(from + d * t, from + d * minf(len, t + dash), col, width)
+		t += dash * 2.0
 
 
 func link_on(x: GameObj, y: GameObj) -> bool:
@@ -2550,6 +2597,9 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 			if u.is_monster():
 				kn.change_reputation(0.2)
 			kn.kill_monster_score += [1.0, 5.0, 20.0][clampi(u.rank, 0, 2)]
+			# a Fryhtan All-high slain may bring a wandering hero to the victor
+			if u.rank == Defs.Rank.KING:
+				HeroRes.induce_hero_join_nation(self, kn.id, (int(u.lead_skill()) + int(u.combat) / 2) / 2)
 	# Fryhtan kingdoms absorb the life of what they kill (Unit::calc_live_points_bonus).
 	if killer and is_instance_valid(killer):
 		var kn := nation(killer.nation_id)
@@ -2844,6 +2894,9 @@ func call_for_help(victim: GameObj, attacker: GameObj) -> void:
 			continue
 		var sieging := u.order == Unit.Order.ATTACK and u.target != null and is_instance_valid(u.target) and not (u.target is Unit)
 		if u.order != Unit.Order.IDLE and not sieging:
+			continue
+		# Unit::ask_team_help: one standing its ground helps only within reach
+		if u.get_behavior_mode() == Unit.Behavior.STAND_GROUND and u.distance_to(attacker) > u.max_attack_range():
 			continue
 		if u.center_loc().distance_to(c) <= 8.0 and is_hostile(u, attacker):
 			var building: GameObj = u.target if sieging else null

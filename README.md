@@ -238,9 +238,9 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 ## Differences from the original
 
 Every module of the original game has a counterpart here (see DEVLOG.md for the
-review). The original's player profiles carry code for keeping heroes and items
-between games that no menu of the original uses; here it is the start screen's "Bring the heroes and items of your profile" option.
-Network play uses Godot's ENet instead of DirectPlay; IPX and modem play are gone.
+review). Where this edition departs from the original - additions such as the
+inn's recruiting policies, interface changes, approximations - and which of the
+original's quirks are kept on purpose, see [DIFFERENCES.md](DIFFERENCES.md).
 
 ## Project layout
 

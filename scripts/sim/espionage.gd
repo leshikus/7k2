@@ -58,8 +58,10 @@ static func cloak_needed(u: Unit, place: GameObj) -> int:
 static func can_change_cloak(u: Unit, to_nation: int) -> bool:
 	if not u.is_spy or u.dead or u.inside_firm or u.has_meta("hidden"):
 		return false
-	if to_nation == 0 or to_nation == u.nation_id:
+	if to_nation == u.nation_id:
 		return true
+	if to_nation == 0:
+		return not enemy_near(u)
 	var g := Game.inst
 	var n := g.nation(to_nation)
 	if n == null or not n.alive or n.is_fryhtan:
@@ -85,7 +87,7 @@ static func enemy_near(u: Unit) -> bool:
 static func set_cloak(u: Unit, to_nation: int) -> bool:
 	if not can_change_cloak(u, to_nation):
 		return false
-	u.cloak_id = 0 if to_nation == u.nation_id else to_nation
+	u.cloak_id = 0 if to_nation == u.nation_id else (INDEPENDENT_CLOAK if to_nation == 0 else to_nation)
 	if u.cloak_id == 0:
 		stop_camouflage(u)
 	u.queue_redraw()
@@ -99,12 +101,25 @@ static func drop_cloak(u: Unit) -> void:
 
 
 ## The kingdoms a spy can pass for, its own first.
+## The colours a spy can put on (oun_if.cpp disp_spy_cloak): its own, an
+## independent's (0), or those of a kingdom its own has met.
 static func cloak_choices(u: Unit) -> Array:
-	var out := [u.nation_id]
+	var out := [u.nation_id, 0]
+	var own := Game.inst.nation(u.nation_id)
 	for n in Game.inst.nations:
-		if n.alive and not n.is_fryhtan and n.id != u.nation_id:
+		if n.alive and not n.is_fryhtan and n.id != u.nation_id and (own == null or own.contact.has(n.id)):
 			out.append(n.id)
 	return out
+
+
+const INDEPENDENT_CLOAK := -1     # cloak_id of a spy passing for an independent
+
+
+## The kingdom a spy now passes for (0: independent).
+static func cloak_nation(u: Unit) -> int:
+	if u.cloak_id == INDEPENDENT_CLOAK:
+		return 0
+	return u.cloak_id if u.cloak_id > 0 else u.nation_id
 
 
 # ----------------------------------------------------------- camouflage ---
@@ -117,7 +132,7 @@ static func max_camouflage(u: Unit) -> int:
 static func can_camouflage(u: Unit) -> bool:
 	var n := Game.inst.nation(u.nation_id)
 	return u.is_spy and u.camouflage_days <= 0 and u.camouflage_power >= MIN_CAMOUFLAGE_POWER \
-		and n != null and n.tech_level("CAMOUFLG") > 0 and u.cloak_id > 0
+		and n != null and n.tech_level("CAMOUFLG") > 0 and u.cloak_id != 0
 
 
 static func start_camouflage(u: Unit) -> void:
@@ -193,7 +208,7 @@ static func next_day(g: Game) -> void:
 		if not u.is_spy or u.dead or u.has_meta("hidden"):
 			continue
 		if u.camouflage_days > 0:
-			if u.cloak_id > 0:
+			if u.cloak_id != 0:
 				u.camouflage_days -= 1
 			else:
 				stop_camouflage(u)

@@ -53,6 +53,7 @@ func _ready() -> void:
 	# rain puts fires out sooner
 	var dry := Vector2i(10, 10)
 	g.fires.clear()
+	g.weather.cloud_str = 0       # a dry day, whatever the weather has been
 	g.set_fire(dry, 1)
 	var dry_scans := 0
 	while g.fires.has(dry) and dry_scans < 200:

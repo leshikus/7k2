@@ -1,0 +1,200 @@
+extends Node
+## Heroes and the inn (oherores.cpp, of_inn.cpp), the inn's recruiting
+## policies, behaviour modes, the Bheema's sting, squads, auto retreat and
+## reward, disbanding, spies' cover, links and taxes.
+
+var fails := 0
+
+
+func _check(cond: bool, what: String) -> void:
+	print(("  ok   " if cond else "  FAIL ") + what)
+	if not cond:
+		fails += 1
+
+
+func _days(g: Game, n: int) -> void:
+	for d in n:
+		for f in Defs.FRAMES_PER_DAY:
+			g.sim_frame()
+
+
+func _ready() -> void:
+	Assets.load_install()
+	var g := Game.new()
+	add_child(g)
+	g.start({"seed": 21, "size": 100, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "lairs": 0, "reveal": true})
+	for n in g.nations:
+		n.ai = null
+	var p := g.player()
+	p.cash = 50000.0
+	var home: Town = g.towns.filter(func(x): return x.nation_id == p.id)[0]
+
+	# --- heroes: ten a nationality, half for hire, none seen yet
+	_check(g.hero_info.size() == Defs.races.size() * HeroRes.HERO_COUNT_PER_RACE, "ten heroes a nationality (%d)" % g.hero_info.size())
+	_check(g.hero_info.all(func(h): return not h["appeared"]), "none has appeared")
+	var hire_n := g.hero_info.filter(func(h): return h["for_hire"]).size()
+	_check(hire_n > g.hero_info.size() / 4 and hire_n < g.hero_info.size() * 3 / 4, "about half can be hired (%d)" % hire_n)
+	_check(HeroRes.hire_cost(50, 0, 50, 0, 0) == (50 + 100 + 100 + 50 + 2 + 6) * 2, "HeroRes::hire_cost (%d)" % HeroRes.hire_cost(50, 0, 50, 0, 0))
+	var hu := HeroRes.generate_hero(g)
+	_check(hu != null and hu.nation_id == 0 and hu.hero_id > 0 and HeroRes.info(g, hu.hero_id)["appeared"], "a hero comes out of a town")
+	_check(hu.combat >= 20 and hu.leadership >= 20, "with the powers of a hero (combat %d, leadership %d)" % [hu.combat, hu.leadership])
+	_check(not g.is_hostile(hu, home) and not g.is_hostile(g.units.filter(func(u): return u.nation_id == p.id)[0], hu), "a wandering hero is nobody's enemy")
+	HeroRes.info(g, hu.hero_id)["for_hire"] = true
+	var cost := HeroRes.unit_hire_cost(hu)
+	var c0 := p.cash
+	_check(HeroRes.hire(g, hu, p.id) and hu.nation_id == p.id and hu.rank == Defs.Rank.GENERAL and is_equal_approx(c0 - p.cash, float(cost)),
+		"hired for %d, he joins as a general" % cost)
+
+	# --- the inn
+	var inn := g.spawn_firm("INN", p.id, p.race, g._place_near(home.footprint(), 4, 4, 10), true)
+	g.update_links()
+	_check(inn.linked_towns.is_empty(), "an inn links to no town")
+	for i in 8:
+		Inn.add_inn_unit(inn, Defs.races[i % Defs.races.size()]["code"])
+	_check(inn.heroes.size() >= 6, "guests come by (%d)" % inn.heroes.size())
+	_check(inn.heroes.any(func(h): return int(h["spy_skill"]) > 0) and inn.heroes.any(func(h): return int(h["spy_skill"]) == 0), "soldiers and spies")
+	_check(inn.heroes.all(func(h): return int(h["stay"]) >= 10 and int(h["stay"]) <= 14), "each stays 10-14 updates")
+	var si := -1
+	for i in inn.heroes.size():
+		if int(inn.heroes[i]["spy_skill"]) == 0:
+			si = i
+			break
+	var s_cost := int(inn.heroes[si]["cost"])
+	c0 = p.cash
+	var su := Inn.hire(inn, si)
+	_check(su != null and su.rank == Defs.Rank.SOLDIER and su.nation_id == p.id and is_equal_approx(c0 - p.cash, float(s_cost)), "a soldier is hired for %d, as a soldier" % s_cost)
+	_check(su.loyalty >= 40.0, "at a loyalty of at least 40 (%.0f)" % su.loyalty)
+	var spi := -1
+	for i in inn.heroes.size():
+		if int(inn.heroes[i]["spy_skill"]) > 0:
+			spi = i
+			break
+	var spu := Inn.hire(inn, spi)
+	_check(spu != null and spu.is_spy and spu.spy_skill >= 30, "a spy for hire becomes our spy (skill %d)" % int(spu.spy_skill))
+
+	# --- recruiting policy: soldiers go to the nearest fort with room
+	var fort: Firm = g.firms.filter(func(f): return f.nation_id == p.id and f.code == "FORT")[0]
+	while fort.soldiers.size() > 2:
+		fort.release_unit(fort.soldiers[-1])
+	inn.heroes.clear()
+	inn.heroes.append({"sprite": Defs.unit_sprite(p.race, "SPU"), "race": p.race, "name": "Test Brute", "combat": 80, "max_combat": 0,
+		"leadership": 10, "spy_skill": 0, "hp": -1, "item_id": 0, "item_para": 0, "hero_id": 0, "spy_of": 0, "spy_loyalty": 0, "stay": 12, "cost": 300})
+	inn.heroes.append({"sprite": Defs.unit_sprite(p.race, "INF"), "race": p.race, "name": "Test Thinker", "combat": 30, "max_combat": 0,
+		"leadership": 60, "spy_skill": 0, "hp": -1, "item_id": 0, "item_para": 0, "hero_id": 0, "spy_of": 0, "spy_loyalty": 0, "stay": 12, "cost": 300})
+	inn.inn_policy = Inn.Policy.SOLDIERS
+	Inn.run_policy(inn)
+	var brute: Array = g.units.filter(func(u): return u.unit_name == "Test Brute")
+	_check(brute.size() == 1 and brute[0].order_firm == fort and brute[0].order == Unit.Order.ENTER, "the soldiers policy hires a fighter and sends him to the fort")
+	_check(inn.heroes.size() == 1 and inn.heroes[0]["name"] == "Test Thinker", "and leaves the thinker")
+	inn.inn_policy = Inn.Policy.GENERALS
+	var camp := g.spawn_firm("CAMP", p.id, p.race, g._place_near(home.footprint(), 4, 4, 12, [home.center_loc()]), true)
+	Inn.run_policy(inn)
+	var thinker: Array = g.units.filter(func(u): return u.unit_name == "Test Thinker")
+	_check(thinker.size() == 1 and thinker[0].rank == Defs.Rank.GENERAL and thinker[0].order_firm == camp, "the generals policy sends a leader to command the empty camp")
+	p.cash = Inn.POLICY_RESERVE + 100.0
+	inn.heroes.append({"sprite": Defs.unit_sprite(p.race, "SPU"), "race": p.race, "name": "Test Dear", "combat": 80, "max_combat": 0,
+		"leadership": 10, "spy_skill": 0, "hp": -1, "item_id": 0, "item_para": 0, "hero_id": 0, "spy_of": 0, "spy_loyalty": 0, "stay": 12, "cost": 300})
+	inn.inn_policy = Inn.Policy.BOTH
+	Inn.run_policy(inn)
+	_check(inn.heroes.size() == 1, "the reserve is kept: nobody hired below %d gold" % int(Inn.POLICY_RESERVE))
+	p.cash = 50000.0
+
+	# --- a spy passing for an independent slips in among the guests
+	_check(Espionage.cloak_choices(spu).has(0), "a spy can pass for an independent")
+	spu.cloak_id = Espionage.INDEPENDENT_CLOAK
+	_check(spu.seen_nation() == 0, "and is then seen as one")
+	if spu.is_civilian():
+		spu.combat = 30.0
+	var sneaked := Inn.can_accept(inn, spu) and Inn.assign_unit(inn, spu)
+	_check(sneaked or spu.is_civilian(), "a military spy disguised as an independent joins the guests")
+
+	# --- behaviour modes and the Bheema
+	var foe: Nation = g.nations.filter(func(n): return n.id != p.id)[0]
+	var a := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(14, 0)), 40.0)
+	var e := g.spawn_unit(Defs.unit_sprite("GREEK", "INF"), foe.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(26, 0)), 40.0)
+	g.declare_war(p.id, foe.id)
+	_check(a.behavior_mode == Unit.Behavior.AGGRESSIVE and a.will_engage(e), "aggressive by default: takes on an enemy in sight")
+	a.behavior_mode = Unit.Behavior.DEFENSIVE
+	_check(not a.will_engage(e), "defensive: not one out of reach (%d cells, reach %d)" % [int(a.distance_to(e)), a.max_attack_range()])
+	a.behavior_mode = Unit.Behavior.STAND_GROUND
+	a.order = Unit.Order.MOVE
+	a.on_attacked(e)
+	_check(a.target != e, "standing ground, a moving unit does not turn on an attacker out of reach")
+	a.behavior_mode = Unit.Behavior.AGGRESSIVE
+	if Defs.unit_types.has("BEE") and Assets.has_sprite("BEE"):
+		var bee := g.spawn_unit("BEE", p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-14, 0)), 40.0)
+		_check(bee.is_die_after_attack() and bee.behavior_mode == Unit.Behavior.DEFENSIVE, "a Bheema starts defensive")
+
+	# --- squads: the general learns from his men's blows
+	var gen := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(a.cell()), 40.0)
+	gen.rank = Defs.Rank.GENERAL
+	gen.leadership = 50.0
+	a.leader = gen
+	var l0 := gen.leadership
+	var c1 := a.combat
+	a.gain_experience()
+	_check(gen.leadership > l0 and a.combat > c1, "a blow raises the man's combat and his general's leadership (%.2f -> %.2f)" % [l0, gen.leadership])
+	_check(a.leading_general() == gen, "a man near his general is led by him")
+
+	# --- auto reward and auto retreat
+	a.loyalty = 35.0
+	a.auto_reward = 50
+	c0 = p.cash
+	a.auto_orders()
+	_check(a.loyalty == 45.0 and is_equal_approx(c0 - p.cash, Unit.REWARD_COST), "below the level, the unit is rewarded (%.0f)" % a.loyalty)
+	a.home_firm = fort
+	a.auto_retreat = 50
+	a.hp = a.max_hp * 0.3
+	a.order = Unit.Order.IDLE
+	a.auto_orders()
+	_check(a.order == Unit.Order.ENTER and a.order_firm == fort, "below half its hit points, the unit goes home")
+
+	# --- disbanding and dropping a spy's identity
+	var w0 := int(g.race_wanderers.get(p.race, 0))
+	var dis := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(0, 12)), 30.0)
+	dis.resign()
+	_check(not g.units.has(dis) and int(g.race_wanderers.get(p.race, 0)) == w0 + 2, "a disbanded man adds two wanderers")
+	var spy2 := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(2, 12)), 30.0)
+	spy2.is_spy = true
+	spy2.spy_skill = 40.0
+	spy2.cloak_id = foe.id
+	_check(not g.is_hostile(a, spy2), "our units leave our disguised spy alone")
+	spy2.spy_notify = true
+	_check(g.is_hostile(a, spy2), "unless he keeps up his cover")
+	spy2.drop_spy_identity()
+	_check(not spy2.is_spy and spy2.nation_id == foe.id, "dropping his identity, he is one of those he passed for")
+
+	# --- links follow FirmInfo::is_linkable_to_firm
+	var mine_site := g.sites.filter(func(s): return s.mine == null)
+	var fac := g.spawn_firm("FACTORY", p.id, p.race, g._place_near(home.footprint(), 5, 5, 10, [home.center_loc()]), true)
+	var mk := g.spawn_firm("MARKET", p.id, p.race, g._place_near(fac.footprint(), 4, 4, 6), true)
+	g.update_links()
+	_check(fac.linked_firms.has(mk) and not fac.linked_firms.has(fort) and not fort.linked_firms.has(camp), "a factory links to a market, not to forts; forts not to camps")
+
+	# --- tax: the player waits for the penalty to wear off
+	home.population = 40
+	home.loyalty = 80.0
+	if fort.overseer == null:
+		fort.accept_unit(gen)
+	g.update_links()
+	home.tax_penalty = 0
+	home.collect_tax_cmd()
+	var l1 := home.loyalty
+	home.collect_tax_cmd()
+	_check(l1 == 70.0 and home.loyalty == l1, "a collection takes 10, and the next must wait (%.0f, %.0f)" % [l1, home.loyalty])
+	_days(g, 11)
+	home.loyalty = 80.0
+	home.collect_tax_cmd()
+	_check(home.loyalty == 70.0, "after the wait, 10 again")
+
+	# --- saves listed newest first
+	SaveGame.save(g, "test_a")
+	OS.delay_msec(1100)
+	SaveGame.save(g, "test_b")
+	var saves := SaveGame.list_saves()
+	_check(saves.size() >= 2 and saves[0]["slot"] == "test_b", "saved games are listed newest first")
+	DirAccess.remove_absolute(SaveGame.path_for("test_a"))
+	DirAccess.remove_absolute(SaveGame.path_for("test_b"))
+
+	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
+	get_tree().quit()

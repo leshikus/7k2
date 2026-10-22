@@ -1260,14 +1260,14 @@ static func _inn_think_del(ai: NationAI, f: Firm) -> bool:
 	return true
 
 
-## FirmInn::think_hire_spy: our inns offer no spies (heroes only), so this
-## finds nothing, as with an inn of the original that has no spy for hire.
+## FirmInn::think_hire_spy: a civilian spy of an independent town's race,
+## sent to lower its resistance where we have no spy yet.
 static func _inn_think_hire_spy(ai: NationAI, f: Firm) -> bool:
 	if not ai.should_spend(ai.pref("spy") / 2):
 		return false
 	for i in f.heroes.size():
 		var h: Dictionary = f.heroes[i]
-		if int(h.get("spy_skill", 0)) == 0:
+		if int(h.get("spy_skill", 0)) == 0 or not Inn.is_civilian(h):
 			continue
 		for t in ai.g.towns:
 			if t.race == h["race"] and t.nation_id == 0 and int(t.target_resistance.get(ai.n.id, -1)) == int(t.resistance_to(ai.n.id)):
@@ -1284,6 +1284,8 @@ static func _inn_think_hire_general(ai: NationAI, f: Firm) -> bool:
 		return false
 	for i in f.heroes.size():
 		var h: Dictionary = f.heroes[i]
+		if Inn.is_civilian(h):
+			continue        # only military men, spies or not
 		var best: Firm = null
 		var best_r := 10
 		for c in ai.camps():

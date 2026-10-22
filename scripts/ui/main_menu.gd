@@ -289,10 +289,10 @@ func _ready() -> void:
 	setup_box.add_child(saved_box)
 	saved_opt = OptionButton.new()
 	saved_box.add_child(saved_opt)
-	for slot in [["quick", "Saved game"], ["autosave", "Autosave"]]:
-		if SaveGame.exists(slot[0]):
-			saved_opt.add_item("%s: %s" % [slot[1], SaveGame.describe(slot[0])])
-			saved_opt.set_item_metadata(saved_opt.item_count - 1, slot[0])
+	# every saved game, the newest first
+	for sv in SaveGame.list_saves():
+		saved_opt.add_item(sv["text"])
+		saved_opt.set_item_metadata(saved_opt.item_count - 1, sv["slot"])
 
 	start_btn = Button.new()
 	start_btn.text = "Start game"

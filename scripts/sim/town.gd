@@ -714,7 +714,11 @@ func collect_tax() -> float:
 
 
 ## The player's "Collect tax" (reports the sum to the town's ruler).
+## The player waits until the last collection's penalty has worn off, so
+## each takes the plain 10 points.
 func collect_tax_cmd() -> void:
+	if tax_penalty > 0:
+		return
 	var tax := collect_tax()
 	if nation_id == Game.inst.player_id:
 		Game.inst.notify("Collected %d gold from %s." % [int(tax), town_name], center_loc())
@@ -733,9 +737,11 @@ const AUTO_GRANT_LEVELS := [0, 30, 40, 50, 60, 70]
 func _auto_tax_and_grant() -> void:
 	if nation_id <= 0:
 		return
-	if auto_tax_loyalty > 0 and loyalty >= auto_tax_loyalty and has_linked_camp(nation_id):
+	# Town::next_day: automatically only once the last collection's (or
+	# grant's) penalty has worn off
+	if auto_tax_loyalty > 0 and tax_penalty == 0 and loyalty >= auto_tax_loyalty and has_linked_camp(nation_id):
 		collect_tax()
-	if auto_grant_loyalty > 0 and loyalty < auto_grant_loyalty:
+	if auto_grant_loyalty > 0 and grant_penalty == 0 and loyalty < auto_grant_loyalty and nation() and nation().cash > 0:
 		grant(nation_id)
 
 
@@ -957,7 +963,7 @@ func render(cv) -> void:
 			Iso.to_screen(Vector2(x1 + 6, y1 + 6)) - position, Iso.to_screen(Vector2(x1, y1 + 6)) - position, base])
 		cv.draw_polyline(p, col.lightened(0.3), 2.0)
 		for f in linked_firms:
-			cv.draw_line(Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, f.nation_color().lightened(0.3), 1.5)
+			Game.draw_link(cv, Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, f.nation_color().lightened(0.3), Game.inst.link_on(f, self))
 	var slots: Array = layout.get("slots", [])
 	_pick_layout()
 	var wall_origin := Iso.to_screen(Vector2(x1, y1)) - position

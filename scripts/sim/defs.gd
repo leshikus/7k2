@@ -86,7 +86,7 @@ const FIRM_HELP := {
 	"MARKET": "Sells goods from linked factories to linked towns.",
 	"RESEARCH": "Scientists research new technologies.",
 	"WAR": "Builds siege weapons once researched.",
-	"INN": "Heroes for hire visit here.",
+	"INN": "Soldiers, spies and now and then a hero come by to be hired.",
 	"STABLE": "Trains your race's special unit from volunteers of linked loyal towns.",
 	"SPY": "Espionage College. Trains spies to infiltrate enemy and independent towns and buildings.",
 	"BASE": "Seat of Power. Linked people of the kingdom's race pray to summon their Greater Being.",
@@ -244,6 +244,7 @@ static func load_from_assets() -> void:
 				"pierce": ar["PIERCE_DMG"].to_int(), "bullet": ar["BUL_SPRITE"], "consume": ar["CONSUME_P"].to_int(),
 				"bullet_speed": maxi(4, ar["BUL_SPEED"].to_int()), "action": "A%d" % ar["ATTK_ID"].to_int(),
 				"radius": ar.get("BUL_RADIUS", "0").to_int(), "fire": ar.get("FL_RADIUS", "0").to_int(),
+				"die": ar.get("DIE_ATTACK", "") == "Y",      # AttackInfo::die_after_attack (the Bheema's sting)
 				# AttackAttribute: sturdiness, explosiveness, heat, wood favour
 				"att": [ar.get("STURDINESS", "0").to_int(), ar.get("EXPLOSIVE", "0").to_int(), ar.get("HEAT", "0").to_int(), ar.get("WOOD_FAVOR", "0").to_int()],
 			})
@@ -258,11 +259,12 @@ static func load_from_assets() -> void:
 			"cost": f["SETUP_COST"].to_int(), "year_cost": f["YEAR_COST"].to_int(), "live_cost": f["SETUP_LIVE"].to_int(),
 			"overseer": f["OVERTITLE"], "worker": f["WORKTITLE"],
 			"military": f.get("MILITARY", "") == "Y",      # FirmInfo::is_military
+			"link_town": f.get("LINKTOTOWN", "") == "1",    # FirmInfo::is_linkable_to_town
 		}
 	for m in Assets.table("MONSTER"):
 		monsters.append({"unit": m["UNIT"], "name": m["NAME"], "level": m["LEVEL"].to_int()})
 	for h in Assets.table("HERO"):
-		heroes.append({"name": h["NAME"], "race": h["RACE"]})
+		heroes.append({"name": h["NAME"], "race": h["RACE"], "infantry": h.get("INFANTRY", "") == "1", "special": h.get("SPECIAL", "") == "1"})
 	for g in Assets.table("GOD"):
 		gods[g["RACE"]] = {"unit": g["UNIT"], "exist_pray": g["EXISTPRAY"].to_int(),
 			"power_pray": maxi(10, g["POWERPRAY"].to_int()), "can_cast": g["CANCAST"] == "1",
@@ -446,6 +448,34 @@ static func unit_can_build(u, code: String) -> bool:
 	if bool(firm_types.get(code, {}).get("military", code in ["CAMP", "FORT"])):
 		return not (code in OFFENSIVE_FIRMS and u.is_civilian())
 	return u.is_civilian()
+
+
+## FirmInfo::is_linkable_to_firm: factories, mines and markets link to one
+## another, an inn to inns (to count the guests about; the link is not
+## shown), a lair to lairs.
+static func firms_linkable(a: String, b: String) -> bool:
+	match a:
+		"FACTORY":
+			return b in ["MINE", "MARKET"]
+		"MINE":
+			return b in ["FACTORY", "MARKET"]
+		"MARKET":
+			return b in ["MINE", "FACTORY"]
+		"INN":
+			return b == "INN"
+		"LAIR":
+			return b == "LAIR"
+	return false
+
+
+## FirmInfo::is_linkable_to_town and FirmRes::is_linkable_to_town: a Seat of
+## Power or a training centre only to towns of its own race.
+static func firm_links_town(code: String, firm_race: String, town_race: String) -> bool:
+	if not bool(firm_types.get(code, {}).get("link_town", code in ["CAMP", "FORT", "LAIR", "MINE", "FACTORY", "MARKET", "RESEARCH", "WAR", "BASE", "STABLE", "SPY"])):
+		return false
+	if code in ["BASE", "STABLE"]:
+		return firm_race == town_race
+	return true
 
 
 static func knows_firm(n, code: String) -> bool:
