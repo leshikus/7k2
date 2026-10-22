@@ -140,7 +140,7 @@ static func _nation(n: Nation) -> Dictionary:
 	var d := {
 		"id": n.id, "name": n.name, "race": n.race, "color": n.color.to_html(false), "is_ai": n.is_ai,
 		"is_player": n.is_player, "alive": n.alive, "join_day": n.last_independent_join_day, "cash": n.cash, "food": n.food, "reputation": n.reputation,
-		"king": _id(n.king), "tech": n.tech, "research_progress": n.research_progress, "research_tech": n.research_tech,
+		"king": _id(n.king), "king_lead": n.king_leadership, "tech": n.tech, "research_progress": n.research_progress, "research_tech": n.research_tech,
 		"relations": _int_keys_to_str(n.relations), "prayer_points": n.prayer_points,
 		"income_year": n.income_year, "expense_year": n.expense_year,
 		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year,
@@ -297,6 +297,7 @@ static func load_path(g: Game, path: String) -> String:
 		n.last_independent_join_day = int(nd.get("join_day", -1000))
 		n.food = float(nd["food"])
 		n.reputation = float(nd["reputation"])
+		n.king_leadership = int(nd.get("king_lead", 0))
 		for k in nd["tech"]:
 			n.tech[k] = int(nd["tech"][k])
 		n.research_progress = nd["research_progress"]

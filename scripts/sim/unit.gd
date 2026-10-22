@@ -369,6 +369,19 @@ func reward(from_nation: int) -> void:
 	n.add_cash(-REWARD_COST, "Rewards")
 
 
+## Unit::can_succeed_king: while the throne is empty, any soldier or general
+## of a human kingdom, or a Fryhtan of the kingdom's own species.
+func can_succeed_king() -> bool:
+	var n := nation()
+	if n == null or dead or rank == Defs.Rank.KING:
+		return false
+	if n.king != null and is_instance_valid(n.king) and not n.king.dead:
+		return false
+	if n.is_fryhtan:
+		return sprite_code == n.monster_code
+	return is_human() and not is_civilian()
+
+
 ## Unit::set_rank(RANK_SOLDIER): loyalty -40, and the men he led have no
 ## general any more.
 func demote() -> void:

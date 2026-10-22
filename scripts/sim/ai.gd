@@ -210,7 +210,10 @@ func next_day(day: int) -> void:
 	if n.king == null or not is_instance_valid(n.king) or n.king.dead:
 		if think_succeed_king():
 			return
-		AIGrand.think_surrender(self)
+		if AIGrand.think_surrender(self):
+			return
+		if n.had_king():
+			g.defeat_nation(n)       # Nation::defeated
 		return
 	if n.research_tech == "":
 		think_new_research()
@@ -285,7 +288,7 @@ func think_succeed_king() -> bool:
 	for u in g.units:
 		if u.nation_id != n.id or u.dead or u.is_civilian() or u.is_spy:
 			continue
-		if not (u.is_human() or (n.is_fryhtan and SpecialFirms.is_fryhtan_unit(u))):
+		if not u.can_succeed_king():
 			continue
 		if u.inside_firm != null and u.inside_firm.overseer != u and not (u in u.inside_firm.soldiers):
 			continue

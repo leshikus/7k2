@@ -792,6 +792,8 @@ func refresh_selection(force := false) -> void:
 	var sel: Array = game.selected.filter(func(o): return is_instance_valid(o) and not o.dead)
 	# a unit's buttons follow its rank and kingdom (promotion, demotion, betrayal)
 	var key := ",".join(sel.map(func(o): return "%d:%d:%d" % [o.obj_id, o.rank if o is Unit else 0, o.nation_id])) + "|" + str(build_menu_open)
+	var pl := game.player()
+	key += "|" + str(pl != null and pl.king != null and is_instance_valid(pl.king))     # Succeed King appears when the throne is empty
 	if sel.size() == 1 and sel[0] is Firm and Training.is_train_firm(sel[0]):
 		key += "|" + Training.signature(sel[0])     # the buttons follow the trainees
 	var rebuild := force or key != _last_sel_key
@@ -1061,10 +1063,15 @@ func _unit_actions(sel: Array) -> void:
 					_do(u, "order_settle"), true, "Each walks to the nearest own town of the same race and joins its population. Or right-click one of your towns.")
 	if own.size() == 1:
 		var u: Unit = own[0]
-		if u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian() and u.leadership > 0.0:
+		if u.can_succeed_king():
+			# the throne is empty: this one can be crowned, in place of the
+			# promote/demote buttons (oun_if.cpp button_succeed_king)
+			_add_action("Succeed King", func(): _do(game, "cmd_succeed_king", [game.player_id, u]), true,
+				"Crown this unit. Loyalty falls if he leads less well than the old king, or was not a general; his race is pleased if it differs from the old king's.")
+		elif u.is_human() and u.rank == Defs.Rank.SOLDIER and not u.is_civilian() and u.leadership > 0.0:
 			var promote := func(): _do(u, "promote")
 			_add_action("Promote to General", promote, true, "A general can command a camp, extending the kingdom's influence over nearby towns.")
-		if u.rank == Defs.Rank.GENERAL:      # of any general, heroes too (oun_if.cpp)
+		elif u.rank == Defs.Rank.GENERAL:      # of any general, heroes too (oun_if.cpp)
 			_add_action("Demote to Soldier", func(): _do(u, "demote"))
 		if u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
 			_add_action("Reward (%d)" % int(Unit.REWARD_COST), func(): _do(u, "reward", [game.player_id]), game.player().cash >= Unit.REWARD_COST,

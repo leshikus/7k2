@@ -2024,6 +2024,10 @@ func next_day() -> void:
 			continue
 		if n.food < 0 and day % 30 == 0 and n.is_player:
 			notify("Your people are starving! Build up food by keeping villagers unemployed or researching farming.", Vector2(-1, -1))
+		# Nation::next_day: while looking for a successor, a point of
+		# everyone's loyalty is lost every 3 days
+		if n.had_king() and (n.king == null or not is_instance_valid(n.king) or n.king.dead) and day % 3 == n.id % 3:
+			change_all_people_loyalty(n, -1.0)
 		if n.ai:
 			n.ai.next_day(day)
 		if day % 365 == 0:
@@ -2554,33 +2558,114 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 	_drop_item(u)
 	var n := nation(u.nation_id)
 	if n and n.king == u:
+		# the throne stays empty until a successor is chosen (the player's
+		# Succeed King button, the computer's think_succeed_king)
+		if n.king_leadership == 0:
+			n.king_leadership = maxi(1, int(u.lead_skill()))     # a first king's, set at the start
 		n.king = null
 		n.change_reputation(-10.0)
 		_drop_scroll(n, u.cell())
 		_drop_mega_plans(n, u.cell())
-		var heir := _best_heir(n)
-		if heir:
-			heir.rank = Defs.Rank.KING
-			n.king = heir
-			notify_nation(n.id, "Your king has died. %s takes the throne." % heir.unit_name, u.center_loc())
-			if n.id != player_id or observer():
-				notify("The king of the %s has fallen; %s takes the throne." % [n.name, heir.unit_name], u.center_loc())
+		if has_king_successor_candidate(n):
+			notify_nation(n.id, "Your king has died! Select a soldier or general and press Succeed King to crown a successor. Until then your people lose loyalty.", u.center_loc())
 		else:
-			notify_nation(n.id, "Your king has died and there is no heir!", u.center_loc())
-			if observer():
-				notify("The king of the %s has fallen, leaving no heir." % n.name, u.center_loc())
+			notify_nation(n.id, "Your king has died and there is no one to succeed him!", u.center_loc())
+		if n.id != player_id or observer():
+			notify("The king of the %s has fallen." % n.name, u.center_loc())
 
 
-## Nation::succeed_king: the chosen unit becomes king.
+## NationBase::succeed_king: the chosen unit becomes king. Everyone's loyalty
+## falls by a third of what the new king lacks in leadership (at least 20
+## is assumed), and by 20 more unless he was a general; if he is of another
+## race, his race gains 20 - and, as in the original, the old king's race
+## gains 30 too (DIFFERENT_RACE_LOYALTY_DEC is added, not subtracted). The
+## kingdom takes the new king's race.
 func succeed_king(n: Nation, u: Unit) -> void:
-	if u == null or u.dead or u.nation_id != n.id:
+	if u == null or u.dead or u.nation_id != n.id or not u.can_succeed_king():
 		return
 	if u.inside_firm:
 		u.inside_firm.release_unit(u)
+	var lead := maxi(20, int(u.lead_skill()))
+	var change := 0
+	if lead < n.king_leadership:
+		change = (lead - n.king_leadership) / 3
+	if u.rank != Defs.Rank.GENERAL:
+		change -= 20
+	var old_race := n.race
+	var race_change := func(r: String) -> int:
+		if u.race != old_race and not n.is_fryhtan:
+			if r == u.race:
+				return 20
+			elif r == old_race:
+				return 30
+		return 0
+	for m in units:
+		if m == u or m.dead or m.nation_id != n.id or not m.is_human():
+			continue
+		m.loyalty = clampf(m.loyalty + change + race_change.call(m.race), 0.0, 100.0)
+	for t in towns:
+		if t.nation_id == n.id and not t.dead and t.population > 0:
+			t.loyalty = clampf(t.loyalty + change + race_change.call(t.race), 0.0, 100.0)
 	u.rank = Defs.Rank.KING
+	u.leader = null
 	u.loyalty = 100.0
 	n.king = u
+	n.king_leadership = int(u.lead_skill())
+	if not n.is_fryhtan:
+		n.race = u.race
 	notify_nation(n.id, "%s takes the throne." % u.unit_name, u.center_loc())
+	if n.id != player_id or observer():
+		notify("%s is the new ruler of the %s." % [u.unit_name, n.name], u.center_loc())
+
+
+func cmd_succeed_king(nid: int, u: Unit) -> void:
+	var n := nation(nid)
+	if n and u and is_instance_valid(u):
+		succeed_king(n, u)
+
+
+## NationBase::has_king_successor_candidate
+func has_king_successor_candidate(n: Nation) -> bool:
+	return units.any(func(m): return m.nation_id == n.id and not m.dead and m.can_succeed_king())
+
+
+## NationBase::change_all_people_loyalty
+func change_all_people_loyalty(n: Nation, v: float) -> void:
+	for m in units:
+		if m.nation_id == n.id and not m.dead and m != n.king and m.is_human():
+			m.loyalty = clampf(m.loyalty + v, 0.0, 100.0)
+	for t in towns:
+		if t.nation_id == n.id and not t.dead:
+			t.loyalty = clampf(t.loyalty + v, 0.0, 100.0)
+
+
+## NationBase::defeated: a kingdom with no king, nobody to succeed him and
+## no surrender is gone - its people try to go over to another kingdom (else
+## they leave), its buildings close down and its towns become independent.
+func defeat_nation(n: Nation) -> void:
+	if not n.alive:
+		return
+	for m in units.duplicate():
+		if m.nation_id != n.id or m.dead:
+			continue
+		if m.inside_firm != null and m.inside_firm.overseer != m:
+			continue
+		m.loyalty = 0.0
+		if m.is_human():
+			Espionage.think_betray(self, m)
+		if m.nation_id == n.id and not m.dead:
+			if m.inside_firm:
+				m.inside_firm.release_unit(m)
+			remove_unit(m)
+	for f in firms.duplicate():
+		if f.nation_id == n.id and not f.dead:
+			f.die(null)
+	for t in towns.duplicate():
+		if t.nation_id == n.id and not t.dead:
+			t.surrender(0)
+	n.alive = false
+	last_del_nation_day = day
+	notify("The %s is no more." % n.name, Vector2(-1, -1))
 
 
 func _best_heir(n: Nation) -> Unit:

@@ -14,6 +14,7 @@ var cash := 0.0
 var food := 0.0
 var reputation := 20.0        # -100..100
 var king: Unit = null
+var king_leadership := 0         # NationBase::king_leadership: the leadership of the king when he came to the throne
 var tech := {}                # code -> level
 var research_progress := {}   # code -> percent done toward its next level (kept when switching)
 var research_tech := ""       # NationBase::research_tech_id: what the Towers of Science work on
@@ -93,6 +94,12 @@ func progress_research(points: float, at: Vector2) -> void:
 	if tech[research_tech] >= int(t.get("max", 1)):
 		research_progress.erase(research_tech)
 		research_tech = ""
+
+
+## Whether the kingdom has had a king (scenario invaders and the like may
+## start without one; they are not "looking for a successor").
+func had_king() -> bool:
+	return king_leadership > 0 or (king != null and is_instance_valid(king))
 
 
 func tech_level(code: String) -> int:

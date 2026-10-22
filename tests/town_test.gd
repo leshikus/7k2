@@ -337,5 +337,31 @@ func _ready() -> void:
 		su.order_settle_into(home)
 	_days(g, 20)
 	_check(home.population == 22, "soldiers ordered into their town join it (%d)" % home.population)
+	# --- the king dies: the throne stays empty until a successor is chosen
+	var old_king := p.king
+	old_king.leadership = 90.0
+	var heir := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-6, 0)), 40.0)
+	heir.leadership = 30.0
+	var witness := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-6, 2)), 40.0)
+	witness.loyalty = 80.0
+	old_king.die(null)
+	_check(p.king == null and heir.rank == Defs.Rank.SOLDIER, "nobody is crowned by himself")
+	_check(heir.can_succeed_king() and not civ.can_succeed_king() and g.has_king_successor_candidate(p), "a soldier can succeed him, a villager not")
+	var hl := home.loyalty
+	_days(g, 9)
+	_check(witness.loyalty <= 77.0 and home.loyalty < hl, "with the throne empty, loyalty falls a point every 3 days (%.0f)" % witness.loyalty)
+	witness.loyalty = 80.0
+	home.loyalty = 60.0
+	g.cmd_succeed_king(p.id, heir)
+	# 40 leadership taken as at least 20... 30 < 90: (30 - 90) / 3 = -20, and -20 more for a soldier
+	_check(p.king == heir and heir.rank == Defs.Rank.KING, "the chosen soldier is king")
+	_check(witness.loyalty == 40.0 and home.loyalty == 20.0, "loyalty falls by a third of the lost leadership and 20 for a soldier (%.0f, town %.0f)" % [witness.loyalty, home.loyalty])
+	_check(not heir.can_succeed_king() and not witness.can_succeed_king(), "no one else can succeed while there is a king")
+	# no king and no candidate: the kingdom is lost
+	heir.die(null)
+	for m in g.units.duplicate():
+		if m.nation_id == p.id and not m.dead and m.can_succeed_king():
+			m.die(null)
+	_check(not g.has_king_successor_candidate(p), "nobody left to succeed")
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit(0 if fails == 0 else 2)

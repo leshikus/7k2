@@ -942,4 +942,10 @@ The compact AI of our own design is replaced by a port of the original's:
   leadership.
 - Fort occupants show their sprite with a figure under it; Alt+1-4 picks
   combat, leadership, loyalty or hit points.
+- Succession as the original: a dead king's throne stays empty (everyone
+  loses a loyalty point every 3 days) until the player presses Succeed King
+  on a soldier or general, or the computer picks one (think_succeed_king);
+  NationBase::succeed_king's loyalty changes, with its quirk that the old
+  king's race gains 30 rather than losing it. No king and no candidate loses
+  the game; a computer kingdom in that state surrenders or is defeated.
 

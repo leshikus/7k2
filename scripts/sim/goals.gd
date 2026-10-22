@@ -181,7 +181,8 @@ func _true(c: Dictionary, g: Game, n: Nation) -> bool:
 		DEFEAT_ALL_OTHER_KINGDOMS:
 			return n.alive and g.nations.all(func(o): return o == n or not o.alive)
 		DEFEAT_OWN_KINGDOM:
-			return not n.alive
+			# EndCondition: gone, or no king and nobody who could succeed him
+			return not n.alive or ((n.king == null or not is_instance_valid(n.king) or n.king.dead) and not g.has_king_successor_candidate(n))
 		DEFEAT_KINGDOM:
 			var o := g.nation(tgt)
 			return o == null or not o.alive
