@@ -156,6 +156,9 @@ func _ready() -> void:
 	vt.resistance[foe.id] = 80.0
 	var raider := g.spawn_unit(Defs.unit_sprite(foe.race, "INF"), foe.id, g.free_unit_cell(Vector2i(vt.center_loc()) + Vector2i(5, 0)), 30.0)
 	vt.aggressors[foe.id] = g.frame       # it has attacked the village
+	vt.return_fire(raider)                # Town::return_fire: the villagers mark their attacker
+	var bystander: Town = g.towns.filter(func(x): return x != vt and not x.dead)[0]
+	_check(not bystander.fire_targets.has(raider), "another village does not throw at a raider who never attacked it")
 	g.unit_grid.clear()
 	g.sim_frame()
 	var nb := g.bullets.size()

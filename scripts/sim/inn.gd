@@ -355,7 +355,18 @@ static func fits_general(h: Dictionary) -> bool:
 static func run_policy(f: Firm) -> void:
 	var g := Game.inst
 	var n := f.nation()
-	if f.inn_policy == Policy.OFF or n == null or f.under_construction or n.is_fryhtan:
+	if n == null or f.under_construction or n.is_fryhtan:
+		return
+	var policy := f.inn_policy
+	# the computer hires good soldiers for its forts when its military budget
+	# allows (an addition, beside the original's think_hire_general/spy)
+	var ai_hire := policy == Policy.OFF and n.ai is NationAI and f.nation_id != g.player_id
+	if ai_hire:
+		var nai: NationAI = n.ai
+		if not nai.should_spend(nai.pref("military_development") / 2):
+			return
+		policy = Policy.SOLDIERS
+	if policy == Policy.OFF:
 		return
 	for i in range(f.heroes.size() - 1, -1, -1):
 		if i >= f.heroes.size():
@@ -363,8 +374,8 @@ static func run_policy(f: Firm) -> void:
 		var h: Dictionary = f.heroes[i]
 		if n.cash - float(h["cost"]) < POLICY_RESERVE:
 			continue
-		var as_soldier: bool = f.inn_policy in [Policy.SOLDIERS, Policy.BOTH] and fits_soldier(h)
-		var as_general: bool = f.inn_policy in [Policy.GENERALS, Policy.BOTH] and fits_general(h)
+		var as_soldier: bool = policy in [Policy.SOLDIERS, Policy.BOTH] and fits_soldier(h) and (not ai_hire or int(h["combat"]) >= 40)
+		var as_general: bool = policy in [Policy.GENERALS, Policy.BOTH] and fits_general(h)
 		if not as_soldier and not as_general:
 			continue
 		var dest := _general_post(f, h) if as_general else _soldier_post(f)
@@ -376,6 +387,8 @@ static func run_policy(f: Firm) -> void:
 		if as_general:
 			u.rank = Defs.Rank.GENERAL
 		u.order_enter(dest)
+		if ai_hire:
+			return        # one at a time for the computer
 		g.notify_nation(f.nation_id, "The inn hired %s and sent him to the %s." % [u.unit_name, dest.display_name()], f.center_loc(), true)
 
 

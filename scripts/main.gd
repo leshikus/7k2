@@ -1240,9 +1240,18 @@ func _letter_key(key: int, shift: bool) -> void:
 				_locate(key, game.firms.filter(func(f): return own.call(f) and f.code in LOCATE_FIRMS[key]))
 		KEY_C:
 			_locate(key, game.units.filter(func(u): return own.call(u) and u.is_caravan))
-		KEY_G, KEY_K:
-			var rank := Defs.Rank.GENERAL if key == KEY_G else Defs.Rank.KING
-			_locate(key, game.units.filter(func(u): return own.call(u) and u.rank == rank))
+		KEY_G:
+			# the squads in turn: each general in the field with the men he
+			# leads, then the commanders in their forts
+			var gens: Array = game.units.filter(func(u): return own.call(u) and u.rank == Defs.Rank.GENERAL)
+			gens.sort_custom(func(a, b): return (a.inside_firm == null) and (b.inside_firm != null))
+			_locate(key, gens)
+			var sel = game.selected[0] if game.selected.size() == 1 else null
+			if sel is Unit and sel.rank == Defs.Rank.GENERAL and sel.inside_firm == null:
+				var squad: Array = [sel] + game.units.filter(func(m): return own.call(m) and m.leader == sel and m.inside_firm == null)
+				_set_selection(squad)
+		KEY_K:
+			_locate(key, game.units.filter(func(u): return own.call(u) and u.rank == Defs.Rank.KING))
 		KEY_J:
 			_locate(key, game.sites.filter(func(s): return game.is_loc_explored(Vector2i(s.x1, s.y1))))
 		KEY_L:

@@ -531,6 +531,14 @@ func _do_build_firm(a: Dictionary) -> int:
 	var at := Vector2i(a["x"], a["y"])
 	if code == "MINE":
 		at = Vector2i(a["rx"], a["ry"])
+	# an addition: a fort or camp must still reach some town's people, a
+	# market a town of ours (the town it was meant for may be gone)
+	if code in ["CAMP", "FORT", "MARKET"]:
+		var bd := Assets.firm_build(code, race)
+		var fc := Vector2(at) + Vector2(bd.get("loc_w", 4), bd.get("loc_h", 4)) * 0.5
+		var reach := Defs.effective_distance(code, "")
+		if not g.towns.any(func(t): return not t.dead and (code != "MARKET" or t.nation_id == n.id) and Game._center_dist(fc, t.center_loc()) <= reach):
+			return -1
 	var f := g.spawn_firm(code, n.id, race, at, false)
 	if f == null:
 		return -1
@@ -854,6 +862,10 @@ func find_best_place(code: String, ref: GameObj, distance := IDEAL_INTER_PLACE_S
 	for y in range(ry1, ry2 - ph + 2):
 		for x in range(rx1, rx2 - pw + 2):
 			if code != "" and not g.can_build_firm(code, Vector2i(x, y), pw, ph):
+				continue
+			# a building for a town must be linked to it: a fort or camp must reach
+			# its villagers, a market its buyers
+			if code != "" and ref is Town and Defs.firm_links_town(code, n.race, ref.race) 					and Game._center_dist(Vector2(x, y) + Vector2(pw, ph) * 0.5, ref.center_loc()) > Defs.effective_distance(code, ""):
 				continue
 			if code == "" and (not g.world.can_place(x, y, pw, ph) or g._overlaps_site(Rect2i(x, y, pw, ph))):
 				continue

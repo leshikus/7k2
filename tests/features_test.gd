@@ -208,6 +208,13 @@ func _ready() -> void:
 		g._take(tr, tu)
 		_check(p.mega_plans.has("M_CANNON") and p.tech_level("M_CANNON") == 0 and Defs.can_research(p, mt), "its plans found, it can be researched (not given)")
 
+	# --- Fryhtans have loyalty (UnitClassInfo::has_loyalty); insects do not
+	if Defs.unit_types.has("GITH") and Defs.unit_types.has("BEE"):
+		var gk := g.spawn_unit("GITH", p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-12, 0)), 30.0)
+		var bz := g.spawn_unit("BEE", p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-12, 2)), 30.0)
+		_check(gk.has_loyalty() and not bz.has_loyalty(), "a Fryhtan has loyalty, a Bheema not")
+		_check(gk.can_garrison(), "a Fryhtan can man a fort")
+
 	# --- saves listed newest first
 	SaveGame.save(g, "test_a")
 	OS.delay_msec(1100)

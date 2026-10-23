@@ -1042,7 +1042,7 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 		if u.camouflage_days > 0:
 			s += "Camouflaged: unseen for %d days\n" % u.camouflage_days
 		s += "[color=#b0a890]Right-click a town, fort or camp to infiltrate it. A kingdom's place needs its colours, put on automatically when no enemy is near. In your own places spies hunt enemy spies.[/color]\n"
-	elif (u.nation_id == game.player_id or GameOptions.get_opt("show_ai_info")) and u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
+	elif (u.nation_id == game.player_id or GameOptions.get_opt("show_ai_info")) and u.has_loyalty() and not u.is_civilian() and u.rank != Defs.Rank.KING:
 		s += "Loyalty %d\n" % int(u.loyalty)
 	if u.item_id > 0:
 		s += "[color=#ffd860]%s[/color]: %s\n" % [Items.item_name(u.item_id), Items.description(u.item_id, u.item_para)]
@@ -1115,7 +1115,7 @@ func _unit_actions(sel: Array) -> void:
 					_do(u, "set", ["auto_retreat", ar])
 				game.notify("Auto retreat for all your units: %s." % ("off" if ar == 0 else "%d%%" % ar), Vector2(-1, -1)))
 		rb.text = "↩ " + ("—" if ar == 0 else "%d%%" % ar)
-	var loyal: Array = own.filter(func(u): return u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING)
+	var loyal: Array = own.filter(func(u): return u.has_loyalty() and not u.is_civilian() and u.rank != Defs.Rank.KING)
 	if not loyal.is_empty():
 		var aw: int = loyal[0].auto_reward
 		var naw: int = Unit.AUTO_REWARD_LEVELS[(Unit.AUTO_REWARD_LEVELS.find(aw) + 1) % Unit.AUTO_REWARD_LEVELS.size()]
@@ -1124,7 +1124,7 @@ func _unit_actions(sel: Array) -> void:
 				_do(u, "set", ["auto_reward", naw]), true,
 			"Reward (%d gold, +%d loyalty) automatically whenever loyalty falls below this. Click: the next level for the selected units. Right-click: this level for all your soldiers and generals." % [int(Unit.REWARD_COST), int(Unit.REWARD_LOYALTY_INCREASE)],
 			func():
-				for u in game.units.filter(func(x): return x.nation_id == game.player_id and not x.dead and x.is_human() and not x.is_civilian() and x.rank != Defs.Rank.KING):
+				for u in game.units.filter(func(x): return x.nation_id == game.player_id and not x.dead and x.has_loyalty() and not x.is_civilian() and x.rank != Defs.Rank.KING):
 					_do(u, "set", ["auto_reward", aw])
 				game.notify("Auto reward for all your soldiers and generals: %s." % ("off" if aw == 0 else "below %d" % aw), Vector2(-1, -1)))
 		wb.text = "💰 " + ("—" if aw == 0 else "<%d" % aw)
@@ -1165,7 +1165,7 @@ func _unit_actions(sel: Array) -> void:
 			_add_action("Promote to General", promote, true, "A general can command a camp, extending the kingdom's influence over nearby towns.")
 		elif u.rank == Defs.Rank.GENERAL:      # of any general, heroes too (oun_if.cpp)
 			_add_action("Demote to Soldier", func(): _do(u, "demote"))
-		if u.is_human() and not u.is_civilian() and u.rank != Defs.Rank.KING:
+		if u.has_loyalty() and not u.is_civilian() and u.rank != Defs.Rank.KING:
 			_add_action("Reward (%d)" % int(Unit.REWARD_COST), func(): _do(u, "reward", [game.player_id]), game.player().cash >= Unit.REWARD_COST,
 				"Give %d gold to raise this unit's loyalty by %d." % [int(Unit.REWARD_COST), int(Unit.REWARD_LOYALTY_INCREASE)])
 		if u.home_town == null and (u.is_human() or u.is_wagon()):
@@ -1535,7 +1535,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:
 					s += "Commander: %s (leadership %d%s)\n" % [f.overseer.display_name(), int(f.overseer.lead_skill()),
-						", loyalty %d" % int(f.overseer.loyalty) if f.overseer.rank != Defs.Rank.KING and f.code != "LAIR" else ""]
+						", loyalty %d" % int(f.overseer.loyalty) if f.overseer.rank != Defs.Rank.KING and f.overseer.has_loyalty() else ""]
 					# FirmCamp::advanced_train: his leadership grows monthly with the men under him
 					var om := f.soldiers.filter(func(x): return x != f.overseer).size()
 					if f.code != "LAIR" and f.overseer.leadership < 100.0:
@@ -1550,7 +1550,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					s += "Archers %d%s\n" % [f.archers, (" (training %d of %d days)" % [f.archer_progress, Firm.MAX_TRAIN_ARCHER_PROGRESS]) if f.target_archers > f.archers else ""]
 				for u in f.soldiers:
 					s += "  %s — combat %d, leadership %d, HP %d%s\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.lead_skill()), int(u.hp),
-						", loyalty %d" % int(u.loyalty) if u.is_human() else ""]
+						", loyalty %d" % int(u.loyalty) if u.has_loyalty() else ""]
 				if f.code != "LAIR":
 					var towns := f.linked_towns.map(func(t): return t.town_name)
 					s += "Influences: %s\n" % (", ".join(towns) if not towns.is_empty() else "no towns in range")
@@ -1680,7 +1680,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				_add_action("Reward (%d)" % int(Unit.REWARD_COST), func(): _do(f, "reward_least_loyal"), p.cash >= Unit.REWARD_COST,
 					"Give %d gold to the least loyal man here: %d more loyalty." % [int(Unit.REWARD_COST), int(Unit.REWARD_LOYALTY_INCREASE)])
 			# the men inside: automatic rewards (not in the original)
-			var men: Array = ([f.overseer] if f.overseer and f.overseer.rank != Defs.Rank.KING else []) + f.soldiers.filter(func(x): return x.is_human())
+			var men: Array = ([f.overseer] if f.overseer and f.overseer.rank != Defs.Rank.KING else []) + f.soldiers.filter(func(x): return x.has_loyalty())
 			if not men.is_empty():
 				var aw: int = men[0].auto_reward
 				var naw: int = Unit.AUTO_REWARD_LEVELS[(Unit.AUTO_REWARD_LEVELS.find(aw) + 1) % Unit.AUTO_REWARD_LEVELS.size()]
@@ -1922,7 +1922,7 @@ func _occupant_value(u: Unit) -> String:
 		1:
 			return str(int(u.lead_skill()))
 		2:
-			return "—" if u.rank == Defs.Rank.KING or not u.is_human() else str(int(u.loyalty))
+			return "—" if u.rank == Defs.Rank.KING or not u.has_loyalty() else str(int(u.loyalty))
 		3:
 			return "%d/%d" % [int(u.hp), int(u.max_hp)]
 	return str(int(u.combat))
@@ -1950,7 +1950,7 @@ func _occupant_buttons(f: Firm) -> void:
 		var mark := "👑" if who.rank == Defs.Rank.KING else ("★" if who.rank >= Defs.Rank.GENERAL else "")
 		b.text = (mark if mark != "" else "") + _occupant_value(who)
 		b.tooltip_text = lbl + " — combat %d, leadership %d, loyalty %s, hit points %d/%d" % [int(who.combat), int(who.lead_skill()),
-			"—" if who.rank == Defs.Rank.KING or not who.is_human() else str(int(who.loyalty)), int(who.hp), int(who.max_hp)]
+			"—" if who.rank == Defs.Rank.KING or not who.has_loyalty() else str(int(who.loyalty)), int(who.hp), int(who.max_hp)]
 		b.add_theme_font_size_override("font_size", 13)
 		if not fr.is_empty():
 			b.icon = fr[0]

@@ -162,7 +162,7 @@ soldiers. Grow your kingdom the Seven Kingdoms way:
 | Alt+1–4 | A fort's occupants show combat, leadership, loyalty or hit points |
 | Tab | Stop the selected units |
 | Number pad | Face a general's troop that way (formations) |
-| A, C, G, K, R, W, Y, Z | Find an artifact, a caravan, a general, the king, a royal, a wagon, a spy, a Greater Being (Z again: cast) |
+| A, C, G, K, R, W, Y, Z | Find an artifact, a caravan, a general with his squad (each in turn), the king, a royal, a wagon, a spy, a Greater Being (Z again: cast) |
 | B, D, E, F, H, I, M, N, T, U, V | Find a factory (B with bees selected: only the bees; Shift+B: drop them), Seat of Power, college, fort or lair, training ground, inn, market, offensive building, tower of science, mine, war factory |
 | J | Find a natural resource |
 | Page Up / Down, Home / End | The previous / next object of the selected kind, of any kingdom / of the same |

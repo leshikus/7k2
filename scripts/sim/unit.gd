@@ -255,6 +255,17 @@ func is_civilian() -> bool:
 	return sprite_code.ends_with("_CIV")
 
 
+## UnitClassInfo::has_loyalty: people and Fryhtans (MONSTER class) have
+## loyalty; insects, beasts, machines and caravans do not.
+func has_loyalty() -> bool:
+	return race != "" and not is_weapon and utype.get("class", "") in ["HUMAN", "MONSTER"]
+
+
+## The race a kingdom counts as its own: its people's, or its Fryhtans' species.
+static func kingdom_race(n) -> String:
+	return n.monster_code if n != null and n.is_fryhtan and n.monster_code != "" else (n.race if n else "")
+
+
 func can_lead() -> bool:
 	return is_human() and (rank >= Defs.Rank.GENERAL)
 
@@ -374,7 +385,7 @@ const REWARD_LOYALTY_INCREASE := 10.0
 ## Unit::reward: 30 gold for 10 more loyalty; not the king, not a war machine.
 func reward(from_nation: int) -> void:
 	var n := Game.inst.nation(from_nation)
-	if n == null or n.cash < REWARD_COST or rank == Defs.Rank.KING or not is_human():
+	if n == null or n.cash < REWARD_COST or rank == Defs.Rank.KING or not has_loyalty():
 		return
 	if nation_id == from_nation:
 		total_reward += int(REWARD_COST)
@@ -399,7 +410,7 @@ func retreat_level() -> int:
 func auto_orders() -> void:
 	if dead or rank == Defs.Rank.KING:
 		return
-	if auto_reward > 0 and loyalty < auto_reward and is_human() and not is_civilian() and nation_id > 0:
+	if auto_reward > 0 and loyalty < auto_reward and has_loyalty() and not is_civilian() and nation_id > 0:
 		var n := nation()
 		if n and n.cash >= REWARD_COST:
 			reward(nation_id)

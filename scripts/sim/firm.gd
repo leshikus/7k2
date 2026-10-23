@@ -303,8 +303,8 @@ func reward_least_loyal() -> void:
 	var n := nation()
 	if n == null or n.cash < Unit.REWARD_COST:
 		return
-	var men: Array = soldiers.filter(func(s): return s.is_human())
-	if overseer and overseer.rank != Defs.Rank.KING and overseer.is_human():
+	var men: Array = soldiers.filter(func(s): return s.has_loyalty())
+	if overseer and overseer.rank != Defs.Rank.KING and overseer.has_loyalty():
 		men.append(overseer)
 	if men.is_empty():
 		return

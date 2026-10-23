@@ -14,6 +14,10 @@ of the original that are kept on purpose are listed at the end.
     units too) go to the nearest fort or camp with room;
   - *generals*: men who lead better than they fight (leadership 40 or more)
     go to command a camp without a commander or with a weaker one.
+  Units of combat 100 or more are left to the player. The computer, besides
+  the original's hiring of generals and spies, hires good soldiers (combat
+  40-99, leadership at most half of it) for its forts when its military
+  budget allows.
 - **Auto reward.** Soldiers and generals (selected units, all units with a
   right-click, or the men of a fort) can be rewarded automatically, 30 gold
   for +10 loyalty, whenever their loyalty falls below a chosen level.
@@ -64,9 +68,11 @@ of the original that are kept on purpose are listed at the end.
   figures are set smaller to fit.
 
 ### Other
-- **The computer builds markets only for buyers**: never where none of its
-  towns would be linked to the market (the original builds one beside every
-  busy mine and factory).
+- **The computer builds markets only for buyers, forts only for subjects**:
+  a market only where a town of its own would be linked to it, a fort or camp
+  only within reach of a town's people (the original builds a market beside
+  every busy mine and factory, and may lay out a fort for a town that has
+  since gone).
 - **Generals are marked by a star** over their heads (gold for the king)
   instead of a flag.
 - **Mega weapons are researched.** Finding a mega weapon's plans (the

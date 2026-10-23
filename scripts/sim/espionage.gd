@@ -278,7 +278,8 @@ static func catch_spy(g: Game, place: GameObj) -> void:
 ## FirmCamp::update_loyalty and Unit::update_loyalty for a fort's men: loyalty
 ## rises gradually toward its target and falls a point a day.
 static func update_camp_loyalty(f: Firm) -> void:
-	if f.code == "LAIR":
+	# FirmLair::next_day calls FirmCamp's: a Fryhtan kingdom's lair too
+	if f.code == "LAIR" and (f.nation_id <= 0 or f.nation_id == GameObj.MONSTER_NATION):
 		return
 	for s in f.soldiers:
 		_approach(s, soldier_target_loyalty(f, s))
@@ -318,7 +319,7 @@ static func general_target_loyalty(f: Firm, o: Unit) -> float:
 	if n == null:
 		return o.loyalty
 	var t := float(commander_power(f))
-	if n.race == o.race:
+	if Unit.kingdom_race(n) == o.race:
 		t += 20.0
 	t += n.reputation / 4.0
 	if n.king and is_instance_valid(n.king) and not n.king.dead:
@@ -343,13 +344,13 @@ static func contribution_penalty(o: Unit) -> float:
 ## general drifts to nothing; villagers keep theirs.
 static func update_unit_loyalty(u: Unit) -> void:
 	var n := u.nation()
-	if n == null or u.rank == Defs.Rank.KING or not u.is_human() or u.is_civilian() or u.is_weapon:
+	if n == null or u.rank == Defs.Rank.KING or not u.has_loyalty() or u.is_civilian() or u.is_weapon:
 		return
 	var t := 0.0
 	if u.rank >= Defs.Rank.GENERAL:
 		var led := Game.inst.units.filter(func(m): return m.leader == u and not m.dead and m.inside_firm == null).size()
 		t = led * 3.0
-		if n.race == u.race:
+		if Unit.kingdom_race(n) == u.race:
 			t += 20.0
 		t += n.reputation / 4.0
 		if n.king and is_instance_valid(n.king) and not n.king.dead:
@@ -377,7 +378,7 @@ static func update_unit_loyalty(u: Unit) -> void:
 ## commander of a camp with his whole camp, goes over to the kingdom with
 ## the best reputation and standing; with none and no loyalty left, he leaves.
 static func think_betray(g: Game, u: Unit) -> void:
-	if u.dead or u.is_spy or u.sleeper_for > 0 or u.rank == Defs.Rank.KING or not u.is_human() or u.is_civilian():
+	if u.dead or u.is_spy or u.sleeper_for > 0 or u.rank == Defs.Rank.KING or not u.has_loyalty() or u.is_civilian():
 		return
 	if u.nation_id <= 0 or u.home_town != null or u.home_firm != null or u.loyalty >= Defs.UNIT_BETRAY_LOYALTY:
 		return
@@ -427,7 +428,7 @@ static func betray(g: Game, u: Unit, to: int) -> void:
 	u.loyalty = float(Defs.UNIT_BETRAY_LOYALTY + 10 + g.rng.randi() % 20)
 	if n.reputation > 0.0:
 		u.loyalty += n.reputation
-	if n.race == u.race:
+	if Unit.kingdom_race(n) == u.race:
 		u.loyalty += 30.0
 	u.loyalty = clampf(u.loyalty, 0.0, 100.0)
 	g.notify_nation(old, "%s has betrayed you and gone over to the %s." % [u.display_name(), n.name], u.center_loc())

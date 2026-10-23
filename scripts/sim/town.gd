@@ -289,26 +289,57 @@ func build_wall() -> void:
 		target_wall_level = wall_level + 1
 
 
-## Town::process_attack_target: villagers shoot at hostile units near the town.
+const MAX_TOWN_TARGETS := 6
+const TOWN_TARGET_RANGE := 6
+var fire_targets: Array = []       # Town::target_base_obj_recno: those who attacked it
+
+
+## Town::return_fire: whoever hits the town is marked for its villagers'
+## stones (not while loyalty, or resistance to his kingdom, is gone).
+func return_fire(attacker: GameObj) -> void:
+	if attacker == null or not is_instance_valid(attacker) or not (attacker is Unit):
+		return
+	if nation_id > 0:
+		if loyalty < 1.0:
+			return
+	elif attacker.nation_id > 0 and attacker.nation_id != GameObj.MONSTER_NATION and resistance_to(attacker.nation_id) < 1.0:
+		return
+	if fire_targets.has(attacker):
+		return
+	if fire_targets.size() < MAX_TOWN_TARGETS:
+		fire_targets.append(attacker)
+	elif Game.inst.rng.randi() % 100 < 20:
+		fire_targets[Game.inst.rng.randi() % MAX_TOWN_TARGETS] = attacker
+
+
+## Town::process_scan_target (daily): targets gone, hidden, out of range or
+## no longer enemies are dropped.
+func scan_fire_targets() -> void:
+	var g := Game.inst
+	var kept := []
+	for u in fire_targets:
+		if not is_instance_valid(u) or u.dead or u.inside_firm != null or u.has_meta("hidden") or u.hidden_from(nation_id):
+			continue
+		if distance_to(u) > TOWN_TARGET_RANGE or not g.is_hostile(self, u):
+			continue
+		if nation_id == 0 and u.nation_id > 0 and u.nation_id != GameObj.MONSTER_NATION and resistance_to(u.nation_id) < 1.0:
+			continue
+		kept.append(u)
+	fire_targets = kept
+
+
+## Town::process_attack_target: the villagers throw at one of those who
+## attacked the town, if still within reach.
 func town_shoot() -> void:
 	_shoot_timer -= 1
-	if _shoot_timer > 0 or archer_energy <= 0 or population <= 0:
+	if _shoot_timer > 0 or archer_energy <= 0 or population <= 0 or fire_targets.is_empty():
 		return
 	_shoot_timer = 6 + (obj_id % 5)
 	var g := Game.inst
-	var c := center_loc()
-	var best: Unit = null
-	var best_d := 6.0 + 3.0
-	for u in g.units_near(c, best_d + 4.0):
-		if u.dead or u.inside_firm or not g.is_hostile(self, u):
-			continue
-		if nation_id == 0 and u.nation_id > 0 and resistance_to(u.nation_id) < 1.0:
-			continue
-		var d := distance_to(u)
-		if d < best_d:
-			best_d = d
-			best = u
-	if best == null:
+	var best: Unit = fire_targets[g.rng.randi() % fire_targets.size()]
+	if not is_instance_valid(best) or best.dead or best.inside_firm or distance_to(best) > TOWN_TARGET_RANGE + 4 or not g.is_hostile(self, best):
+		return
+	if nation_id == 0 and best.nation_id > 0 and best.nation_id != GameObj.MONSTER_NATION and resistance_to(best.nation_id) < 1.0:
 		return
 	var dmg: float
 	if nation_id > 0:
@@ -463,6 +494,7 @@ func next_day(day: int) -> void:
 		if dead:
 			return
 	var n := nation()
+	scan_fire_targets()
 	_update_quality_of_life()
 	if day % 30 == obj_id % 30:
 		_grow()
@@ -860,6 +892,7 @@ func take_damage(amount: float, attacker: GameObj) -> void:
 			return
 		anid = attacker.nation_id if attacker.nation_id != GameObj.MONSTER_NATION else 0
 	last_attacked_frame = g.frame
+	return_fire(attacker)
 	on_attacked(attacker)
 	defenders = defenders.filter(func(d): return is_instance_valid(d) and not d.dead)
 	if attacker and is_instance_valid(attacker) and wall_hp <= 0.0 and attacker.center_loc().distance_to(center_loc()) <= EFFECTIVE_DEFEND_DISTANCE:
