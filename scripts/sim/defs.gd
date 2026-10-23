@@ -363,7 +363,11 @@ static func unit_sprite(race: String, kind: String) -> String:
 
 ## Whether a nation may research the next level of a technology now.
 static func can_research(n, t: Dictionary) -> bool:
-	if n.tech_level(t["code"]) >= t["max"] or t.get("mega", false):
+	if n.tech_level(t["code"]) >= t["max"]:
+		return false
+	# a mega weapon only once its plans have been found (in the original it
+	# cannot be researched at all: the plans give it outright)
+	if t.get("mega", false) and not n.mega_plans.has(t["code"]):
 		return false
 	# a campaign unveils technologies stage by stage (TechInfo::available_level)
 	if Game.inst and Game.inst.tech_available != null and n.tech_level(t["code"]) >= int(Game.inst.tech_available.get(t["code"], 0)):

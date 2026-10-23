@@ -89,7 +89,10 @@ func _ready() -> void:
 			break
 	_check(fac.raw == mine.raw and fac.raw_stock > fac_raw0, "the caravan carries %s to the factory, which takes it up (%d)" % [mine.raw, int(fac.raw_stock)])
 
-	# --- clone
+	# --- clone: hired at a market linked to one of its stops
+	if not fac.linked_firms.any(func(x): return x.code == "MARKET" and x.nation_id == 1) and not mine.linked_firms.any(func(x): return x.code == "MARKET" and x.nation_id == 1):
+		g.spawn_firm("MARKET", 1, "NORMAN", g._place_near(fac.footprint(), 5, 5, 8, [fac.center_loc()]), true)
+		g.update_links()
 	var c3 := c2.duplicate_caravan()
 	_check(c3 != null and c3.stops.size() == 2 and c3.stops[0]["firm"] == mine and c3.stops[1]["firm"] == fac, "a clone has the same stops")
 

@@ -143,11 +143,11 @@ func _ready() -> void:
 	a.auto_orders()
 	_check(a.loyalty == 45.0 and is_equal_approx(c0 - p.cash, Unit.REWARD_COST), "below the level, the unit is rewarded (%.0f)" % a.loyalty)
 	a.home_firm = fort
-	a.auto_retreat = 50
-	a.hp = a.max_hp * 0.3
+	a.auto_retreat = 30
+	a.hp = a.max_hp * 0.2
 	a.order = Unit.Order.IDLE
 	a.auto_orders()
-	_check(a.order == Unit.Order.ENTER and a.order_firm == fort, "below half its hit points, the unit goes home")
+	_check(a.order == Unit.Order.ENTER and a.order_firm == fort, "below 30% of its hit points, the unit goes home")
 
 	# --- disbanding and dropping a spy's identity
 	var w0 := int(g.race_wanderers.get(p.race, 0))
@@ -171,6 +171,13 @@ func _ready() -> void:
 	g.update_links()
 	_check(fac.linked_firms.has(mk) and not fac.linked_firms.has(fort) and not fort.linked_firms.has(camp), "a factory links to a market, not to forts; forts not to camps")
 
+	# --- a factory's goods of another product still reach the market
+	fac.raw = "Copper"
+	fac.backup["Iron"] = [0.0, 50.0]
+	var iron0 := float(mk.goods.get("Iron", 0.0))
+	Economy._input_stored_products(mk, fac)
+	_check(float(mk.goods.get("Iron", 0.0)) - iron0 > 0.0 and float(fac.backup["Iron"][1]) < 50.0, "goods stored before a switch go to the market too")
+
 	# --- tax: the player waits for the penalty to wear off
 	home.population = 40
 	home.loyalty = 80.0
@@ -187,6 +194,20 @@ func _ready() -> void:
 	home.collect_tax_cmd()
 	_check(home.loyalty == 70.0, "after the wait, 10 again")
 
+	# --- a mega weapon is researchable only once its plans are found
+	var mt := Defs.tech_def("M_CANNON")
+	_check(not Defs.can_research(p, mt), "no mega weapon research without its plans")
+	var row := -1
+	var techs := Assets.table("TECH")
+	for i in techs.size():
+		if techs[i]["TECH"] == "M_CANNON":
+			row = i + 1
+	if row > 0:
+		var tu := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(0, 14)), 30.0)
+		var tr := g.spawn_treasure(Treasure.Kind.BLUEPRINT, row, 0, tu.cell())
+		g._take(tr, tu)
+		_check(p.mega_plans.has("M_CANNON") and p.tech_level("M_CANNON") == 0 and Defs.can_research(p, mt), "its plans found, it can be researched (not given)")
+
 	# --- saves listed newest first
 	SaveGame.save(g, "test_a")
 	OS.delay_msec(1100)
@@ -195,6 +216,32 @@ func _ready() -> void:
 	_check(saves.size() >= 2 and saves[0]["slot"] == "test_b", "saved games are listed newest first")
 	DirAccess.remove_absolute(SaveGame.path_for("test_a"))
 	DirAccess.remove_absolute(SaveGame.path_for("test_b"))
+
+	# --- a building is paid for when its builder arrives (Unit::execute_build_firm)
+	var civ := g.spawn_unit(Defs.unit_sprite(p.race, "CIV"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(0, -10)), 10.0)
+	var mb := Assets.firm_build("MARKET", p.race)
+	var site := Vector2i(-1, -1)
+	for r in range(6, 40):
+		for k in 64:
+			var cand := Vector2i(civ.cell()) + Vector2i(int(cos(k * 0.1) * r), int(sin(k * 0.1) * r))
+			if g.can_build_firm("MARKET", cand, mb.get("loc_w", 4), mb.get("loc_h", 4)):
+				site = cand
+				break
+		if site.x >= 0:
+			break
+	var c2 := p.cash
+	var nf := g.firms.size()
+	g.cmd_place_building(p.id, "MARKET", p.race, site, civ, 100.0, 0.0, "")
+	_check(is_equal_approx(p.cash, c2) and g.firms.size() == nf and not civ.build_plan.is_empty(), "nothing is paid or laid out while the builder walks")
+	var paid0 := p.cash
+	for k in 60:
+		var before := p.cash
+		_days(g, 1)
+		if g.firms.size() > nf:
+			paid0 = before
+			break
+	_check(g.firms.size() == nf + 1 and float(p.expense_by.get("Construction", 0.0)) >= 100.0, "on his arrival the site is laid out and paid for (%d gold)" % int(p.expense_by.get("Construction", 0.0)))
+	_check(not g.can_build_town(Vector2i(home.x1 + Defs.TOWN_SIZE + 1, home.y1)), "no town hard by another (the free band)")
 
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit()

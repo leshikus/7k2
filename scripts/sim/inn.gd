@@ -339,15 +339,17 @@ const POLICY_NAMES := ["off", "soldiers", "generals", "soldiers and generals"]
 const POLICY_RESERVE := 1000.0
 
 
+## (Units of combat 100 or more - heroes and their like, dear to hire - are
+## left to the player.)
 ## A fighting man whose leadership is far below his combat (at most half):
 ## a soldier to fill a fort, special units included.
 static func fits_soldier(h: Dictionary) -> bool:
-	return int(h["spy_skill"]) == 0 and not is_civilian(h) and int(h["leadership"]) * 2 <= int(h["combat"])
+	return int(h["combat"]) < 100 and int(h["spy_skill"]) == 0 and not is_civilian(h) and int(h["leadership"]) * 2 <= int(h["combat"])
 
 
 ## A man who leads better than he fights: a commander for a camp.
 static func fits_general(h: Dictionary) -> bool:
-	return int(h["spy_skill"]) == 0 and not is_civilian(h) and int(h["leadership"]) >= 40 and int(h["leadership"]) > int(h["combat"])
+	return int(h["combat"]) < 100 and int(h["spy_skill"]) == 0 and not is_civilian(h) and int(h["leadership"]) >= 40 and int(h["leadership"]) > int(h["combat"])
 
 
 static func run_policy(f: Firm) -> void:

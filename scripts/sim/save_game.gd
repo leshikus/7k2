@@ -169,7 +169,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year,
 		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
-		"known_gods": n.known_gods.keys(), "items_acquired": n.items_acquired.keys(),
+		"known_gods": n.known_gods.keys(), "mega_plans": n.mega_plans.keys(), "items_acquired": n.items_acquired.keys(),
 		"contact": n.contact.keys(), "imports": [_int_keys_to_str(n.import_year), _int_keys_to_str(n.last_import_year)], "trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
 		"status_day": _int_keys_to_str(n.status_day), "war_count": _int_keys_to_str(n.war_count),
 		"never_until": n.never_until, "reject_day": n.reject_day, "sent_day": n.sent_day,
@@ -224,7 +224,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"item": [u.item_id, u.item_para],
 		"stops": u.stops.map(func(st): return {"firm": _id(st["firm"]), "x": st["x"], "y": st["y"], "pick": st["pick"], "picks": st["picks"]}),
 		"caravan": [u.dest_stop, u.journey, u.wait, u.market_auto, u.last_load_day], "cargo": u.cargo,
-		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action], "merit": [u.nation_contribution, u.total_reward], "hero_id": [u.hero_id, u.max_combat], "behavior": u.behavior_mode, "auto": [u.auto_retreat, u.auto_reward], "spy_notify": u.spy_notify,
+		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action], "merit": [u.nation_contribution, u.total_reward], "hero_id": [u.hero_id, u.max_combat], "behavior": u.behavior_mode, "auto": [u.auto_retreat, u.auto_reward], "spy_notify": u.spy_notify, "plan": u.build_plan,
 	}
 
 
@@ -361,6 +361,9 @@ static func load_path(g: Game, path: String) -> String:
 			n.known_gods.clear()
 			for r in nd["known_gods"]:
 				n.known_gods[r] = true
+		n.mega_plans.clear()
+		for c in nd.get("mega_plans", []):
+			n.mega_plans[str(c)] = true
 		for i in nd.get("items_acquired", []):
 			n.items_acquired[int(i)] = true
 		n.is_fryhtan = nd.get("is_fryhtan", false)
@@ -532,6 +535,7 @@ static func load_path(g: Game, path: String) -> String:
 		u.dir = int(ud["dir"])
 		u.behavior_mode = int(ud.get("behavior", Unit.Behavior.AGGRESSIVE))
 		u.spy_notify = bool(ud.get("spy_notify", false))
+		u.build_plan = ud.get("plan", {})
 		var au: Array = ud.get("auto", [0, 0])
 		u.auto_retreat = int(au[0])
 		u.auto_reward = int(au[1])

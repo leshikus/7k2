@@ -729,8 +729,8 @@ func grant_cost() -> float:
 
 
 ## Grant money: raises loyalty of own towns, lowers resistance of independent ones.
-const AUTO_TAX_LEVELS := [0, 60, 70, 80, 90, 100]
-const AUTO_GRANT_LEVELS := [0, 30, 40, 50, 60, 70]
+const AUTO_TAX_LEVELS := [0, 40, 50, 60]
+const AUTO_GRANT_LEVELS := [0, 30, 40, 50]
 
 
 ## Town::auto_collect_tax / auto_grant: the right-click settings of the town's buttons.

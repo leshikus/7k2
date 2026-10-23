@@ -443,6 +443,18 @@ static func _factory_load(u: Unit, f: Firm, st: Dictionary) -> void:
 		_add(u, k, q)
 	if avail > 0.0:
 		u.last_load_day = Game.inst.day
+	# the goods of the factory's other products, kept since it switched (an
+	# addition: they would otherwise wait for it to switch back)
+	for r in f.backup.keys():
+		var b: Array = f.backup[r]
+		if r == f.raw or float(b[1]) <= 0.0:
+			continue
+		var bk: String = "P:" + str(r)
+		var bq := floorf(minf(CARRY - _qty(u, bk), float(b[1])))
+		if bq > 0.0:
+			b[1] = float(b[1]) - bq
+			_add(u, bk, bq)
+			u.last_load_day = Game.inst.day
 
 
 # ------------------------------------------------------------ duplicate ---

@@ -128,11 +128,13 @@ func _build_ui() -> void:
 	top_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	top_label.tooltip_text = "
 ".join(["Treasure", "Food", "Reputation", "Date", "Life Points"].map(func(k): return HelpText.area_text(k)).filter(func(x): return x != ""))
-	for s in [["⏸", 0.0, "Pause"], ["▶", 1.0, "Normal speed"], ["⏩", 2.0, "Double speed"], ["⏭", 4.0, "Four times as fast"]]:
+	# plain glyphs of one kind, so all four look alike (no coloured emoji)
+	for s in [["▮▮", 0.0, "Pause"], ["▶", 1.0, "Normal speed"], ["▶▶", 2.0, "Double speed"], ["▶▶▶", 4.0, "Four times as fast"]]:
 		var b := Button.new()
 		b.text = s[0]
 		b.tooltip_text = s[2]
 		b.toggle_mode = true
+		b.focus_mode = Control.FOCUS_NONE      # Space must reach the pause key, not press a focused button
 		b.custom_minimum_size = Vector2(34, 0)
 		var spd: float = s[1]
 		b.pressed.connect(func(): _set_speed(spd))
@@ -775,6 +777,14 @@ func _process(delta: float) -> void:
 	_refresh_timer = 0.25
 	_update_top()
 	refresh_selection()
+	# the speed buttons follow the game, however it was paused (P, Space, the start)
+	var st := [game.paused, game.speed]
+	if st != _speed_state:
+		_speed_state = st
+		_sync_speed_buttons()
+
+
+var _speed_state := []
 
 
 func _update_top() -> void:
@@ -932,6 +942,7 @@ func _clear_actions() -> void:
 
 ## A button that shows a symbol, its words as the tooltip.
 func _icon_button(b: Button, icon: String, words: String) -> void:
+	b.focus_mode = Control.FOCUS_NONE
 	b.text = icon
 	b.tooltip_text = words
 	b.set_meta("label", words)
@@ -941,6 +952,7 @@ func _icon_button(b: Button, icon: String, words: String) -> void:
 
 func _add_action(text: String, cb: Callable, enabled := true, tip := "", right_cb := Callable(), icon := "") -> Button:
 	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE        # keys (Space: pause) go to the game, not to the last button clicked
 	b.text = Icons.caption(text, icon)    # a symbol (and its figures); the words are the tooltip
 	b.tooltip_text = text
 	b.set_meta("label", text)
@@ -1168,9 +1180,11 @@ func _unit_actions(sel: Array) -> void:
 		if u.is_caravan:
 			for i in Caravans.MAX_STOPS:
 				var si: int = i
-				_add_action("Set stop %d" % (si + 1), func(): caravan_route_requested.emit(u, si), true,
-					"Click a market of yours or of a kingdom with a trade treaty, or a mine or factory of yours.",
+				var cur_stop: String = u.stops[si]["firm"].display_name() if si < u.stops.size() and not u.stops[si].is_empty() and is_instance_valid(u.stops[si]["firm"]) else "none"
+				var sb := _add_action("Set stop %d (now: %s)" % [si + 1, cur_stop], func(): caravan_route_requested.emit(u, si), true,
+					"Then click a market of yours or of a kingdom with a trade treaty, or a mine or factory of yours. The caravan travels between its two stops. Right-click: clear this stop.",
 					func(): _do(u, "del_caravan_stop", [si]), "①" if si == 0 else "②")
+				sb.text = ("①" if si == 0 else "②") + (" ＋" if cur_stop == "none" else " ✎")
 			_add_action("Clone caravan", func(): _do(u, "duplicate_caravan"), Caravans.duplicate_market(u) != null,
 				"Hire another caravan with the same stops and goods (your kingdom keeps one for every ten people).", Callable(), "🐫")
 			for i in u.stops.size():
@@ -1522,6 +1536,13 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				if f.overseer:
 					s += "Commander: %s (leadership %d%s)\n" % [f.overseer.display_name(), int(f.overseer.lead_skill()),
 						", loyalty %d" % int(f.overseer.loyalty) if f.overseer.rank != Defs.Rank.KING and f.code != "LAIR" else ""]
+					# FirmCamp::advanced_train: his leadership grows monthly with the men under him
+					var om := f.soldiers.filter(func(x): return x != f.overseer).size()
+					if f.code != "LAIR" and f.overseer.leadership < 100.0:
+						if om > 0:
+							s += "[color=#b0a890]Leadership grows by %.1f a month with his %d men[/color]\n" % [5.0 * om * f.overseer.hp / f.overseer.max_hp * (100.0 + f.overseer.potential * 2) / 10000.0, om]
+						else:
+							s += "[color=#b0a890]With soldiers under him his leadership would grow[/color]\n"
 				elif f.code != "LAIR":
 					s += "[color=#ff9060]No general. Send a general here to gain influence.[/color]\n"
 				s += "Soldiers %d / %d\n" % [f.soldiers.size(), f.capacity()]

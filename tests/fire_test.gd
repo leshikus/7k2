@@ -33,6 +33,10 @@ func _ready() -> void:
 
 	# a tree on fire burns away; the fire dies down
 	var tree: Vector2i = g._plants.keys()[0]
+	for t in g._plants.keys():
+		if not g.world.is_hill(t) and not (g.world.object_at(t) is Rock):
+			tree = t      # fire does not take on hills or rocks
+			break
 	g.set_fire(tree, 1)
 	check(g.fires.has(tree), "the fire bomb sets the ground alight")
 	frames(g, Game.FIRE_SCAN * 2)
@@ -105,12 +109,15 @@ func _ready() -> void:
 	check(not g.war_points.has(zone), "and fades")
 
 	# save and load keep the fires
-	g.set_fire(Vector2i(20, 20), 1)
+	var fc := Vector2i(20, 20)
+	while g.world.is_hill(fc) or g.world.object_at(fc) is Rock:
+		fc += Vector2i(1, 0)
+	g.set_fire(fc, 1)
 	SaveGame.save(g, "test_fire")
 	var g2 := Game.new()
 	add_child(g2)
 	SaveGame.load_into(g2, "test_fire")
 	DirAccess.remove_absolute(SaveGame.path_for("test_fire"))
-	check(g2.fires.has(Vector2i(20, 20)), "fires are saved")
+	check(g2.fires.has(fc), "fires are saved")
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit(0 if ok else 1)

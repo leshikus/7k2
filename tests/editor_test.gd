@@ -11,7 +11,7 @@ func _ready() -> void:
 	Defs.load_from_assets()
 	var g := Game.new()
 	add_child(g)
-	g.start({"editor": true, "seed": 3, "size": 90, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "indep_towns": 0, "lairs": 0, "reveal": true})
+	g.start({"editor": true, "seed": 7, "size": 90, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "indep_towns": 0, "lairs": 0, "reveal": true})
 	var ed := ScenarioEditorWindow.new()
 	ed.game = g
 	add_child(ed)
@@ -20,11 +20,12 @@ func _ready() -> void:
 		g._process(0.1)
 	check(g.frame == frame0, "time stands still in the editor")
 	var spot := Vector2i(-1, -1)
-	for k in 2000:
-		var c := Vector2i(g.rng.randi_range(2, g.world.w - 18), g.rng.randi_range(2, g.world.h - 18))
-		if g.world.can_place(c.x, c.y, 16, 16) and not g._overlaps_site(Rect2i(c, Vector2i(16, 16))):
-			spot = c
-			break
+	# every place on the map, not a random sample: the map may be rocky
+	for y in range(2, g.world.h - 18):
+		for x in range(2, g.world.w - 18):
+			var c := Vector2i(x, y)
+			if spot.x < 0 and g.world.can_place(c.x, c.y, 16, 16) and not g._overlaps_site(Rect2i(c, Vector2i(16, 16))):
+				spot = c
 	check(spot.x >= 0, "found flat open ground")
 	var towns0 := g.towns.size()
 	check(ed.place({"kind": "town", "race": "VIKING", "nation": 1}, spot + Vector2i(3, 3)), "place a Viking town for you")

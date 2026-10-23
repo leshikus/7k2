@@ -41,7 +41,7 @@ func _ready() -> void:
 	mine.raw = site.raw
 	mine.reserve = site.reserve
 	site.mine = mine
-	var fac := g.spawn_firm("FACTORY", p.id, "NORMAN", g._place_near(mine.footprint(), 5, 5, 6), true)
+	var fac := g.spawn_firm("FACTORY", p.id, "NORMAN", g._place_near(mine.footprint(), 5, 5, 8, [home.center_loc()]), true)
 	var mkt := g.spawn_firm("MARKET", p.id, "NORMAN", g._place_near(fac.footprint(), 5, 5, 6, [home.center_loc()]), true)
 	g.update_links()
 

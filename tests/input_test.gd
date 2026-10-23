@@ -128,12 +128,12 @@ func _run() -> void:
 	_check(main.build_code == "CAMP", "placement mode active")
 	var spot := Vector2i(-1, -1)
 	var b := Assets.firm_build("CAMP", p.race)
-	for r in range(3, 14):
+	for r in range(3, 24):
 		for dx in range(-r, r + 1):
 			for dy in [-r, r]:
 				var c := gen.cell() + Vector2i(dx, dy)
 				var rr := Rect2i(c, Vector2i(b["loc_w"], b["loc_h"]))
-				if spot.x < 0 and game.can_build_firm("CAMP", c, b["loc_w"], b["loc_h"]) and game.is_loc_explored(rr.get_center()) and game.is_loc_explored(rr.position) and game.is_loc_explored(rr.end - Vector2i.ONE):
+				if spot.x < 0 and game.can_build_firm("CAMP", c, b["loc_w"], b["loc_h"]) and game.is_loc_explored(rr.get_center()):
 					spot = c
 	var firms_before := game.firms.size()
 	var center := Vector2(spot) + Vector2(b["loc_w"], b["loc_h"]) * 0.5
@@ -148,10 +148,16 @@ func _run() -> void:
 	main._mouse_pos = mp
 	_check(main._placement()["ok"], "placement preview shows the spot as valid (spot %s)" % spot)
 	await _click(MOUSE_BUTTON_LEFT, mp)
-	_check(game.firms.size() == firms_before + 1, "left-click placed the camp")
+	# Unit::build_firm: he walks there; the site is laid out when he arrives
+	_check(gen.order == Unit.Order.BUILD and not gen.build_plan.is_empty() and game.firms.size() == firms_before, "left-click sends the general to build the camp")
+	for k in 60:
+		if game.firms.size() > firms_before:
+			break
+		await _sim(20)
+	_check(game.firms.size() == firms_before + 1, "on arrival he lays out the camp")
 	var camp: Firm = game.firms.back()
 	_check(camp.code == "CAMP" and camp.under_construction, "camp is under construction")
-	_check((gen.order == Unit.Order.BUILD and gen.order_firm == camp) or camp.builder == gen, "general sent to build it")
+	_check((gen.order == Unit.Order.BUILD and gen.order_firm == camp) or camp.builder == gen, "general builds it")
 	await _sim(500)
 	_check(not camp.under_construction, "camp completed")
 	_check(camp.overseer == gen, "general took command of the camp he built")

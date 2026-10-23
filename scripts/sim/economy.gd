@@ -207,9 +207,31 @@ static func _update_trade_link(f: Firm) -> void:
 
 
 ## FirmMarket::input_goods: from the mines and factories whose turn it is.
+## Goods a factory made of its other products before it switched (kept in
+## FirmFactory::backup_product_array) go to the market too, so a switch
+## strands nothing (an addition: in the original they wait until the
+## factory switches back).
+static func _input_stored_products(f: Firm, o: Firm) -> void:
+	for r in o.backup.keys():
+		var b: Array = o.backup[r]
+		if float(b[1]) <= 0.0 or r == o.raw:
+			continue
+		var cur := float(f.goods.get(r, 0.0))
+		var qty := _import(f, o, minf(minf(float(b[1]), MARKET_INPUT), MAX_STOCK - cur), Defs.PRODUCT_PRICE)
+		if qty <= 0.0:
+			continue
+		b[1] = float(b[1]) - qty
+		f.goods[r] = cur + qty
+		f.month_supply[r] = float(f.month_supply.get(r, 0.0)) + qty
+
+
 static func _input_goods(f: Firm) -> void:
 	for o in f.linked_firms:
-		if o.next_output != f or not trade_link(f, o) or o.stock <= 0.0:
+		if o.next_output != f or not trade_link(f, o):
+			continue
+		if o.code == "FACTORY":
+			_input_stored_products(f, o)
+		if o.stock <= 0.0:
 			continue
 		if o.code == "MINE" and o.raw != "":
 			var cur := float(f.raws.get(o.raw, 0.0))

@@ -20,7 +20,17 @@ of the original that are kept on purpose are listed at the end.
 - **Auto retreat for every unit.** The original's automatic retreat at a share
   of hit points (Unit::auto_retreat_hit_point) applies to generals only; here
   any fighting unit can be given it. It returns to its home fort, or the
-  nearest fort or camp with room.
+  nearest fort or camp with room. The computer's generals retreat at 30% and
+  its other fighting units at 20%.
+- **Automatic levels.** Auto tax at loyalty 40/50/60, auto grant (gift) below
+  30/40/50, auto reward below 30/40/50 and auto retreat at 10/20/30% of hit
+  points (the original offers auto tax from 60, grants up to 70 and retreat
+  from 10 to 90%).
+- **A factory's stored goods.** As in the original a factory keeps a raw and a
+  goods store for each product and switches product (by hand, or by itself
+  when its material runs out). Here markets and caravans also take the goods
+  of its other products, so a switch strands nothing; in the original they
+  wait until the factory switches back.
 - **Settling by right-click.** Right-clicking one of your towns settles the
   selected people of its race in it; a group of units gets a Settle button.
 
@@ -28,6 +38,8 @@ of the original that are kept on purpose are listed at the end.
 - **Start screen.** One Start button for every kind of game, on tabs; "Play
   as: a human kingdom / Fryhtans" chooses the side for a new game.
 - **A new game starts paused.**
+- **New towns** are previewed as a transparent town with its free band and the
+  links it would get, like buildings.
 - **Saved games.** "Save game" keeps every save (Ctrl+S is the quicksave); the
   load list shows them all, the newest first; F9 loads the newest.
 - **Tax collection waits.** The player's Collect Tax button is unavailable
@@ -52,6 +64,14 @@ of the original that are kept on purpose are listed at the end.
   figures are set smaller to fit.
 
 ### Other
+- **The computer builds markets only for buyers**: never where none of its
+  towns would be linked to the market (the original builds one beside every
+  busy mine and factory).
+- **Generals are marked by a star** over their heads (gold for the king)
+  instead of a flag.
+- **Mega weapons are researched.** Finding a mega weapon's plans (the
+  blueprint treasure) makes it researchable at a Tower of Science; in the
+  original it cannot be researched at all and the plans give it outright.
 - The player profiles' code for keeping heroes and items between games,
   which no menu of the original uses, is the start screen's "Bring the heroes
   and items of your profile" option.
@@ -83,3 +103,5 @@ of the original that are kept on purpose are listed at the end.
   builds a Fortress; `good_relation_duration_rating` is never raised.
 - Construction may be cancelled and restarted by the computer as in the
   original (now refunding half the cost).
+- A player's building is laid out and paid for when the builder reaches the
+  place (Unit::execute_build_firm); the computer's are still laid out at once.

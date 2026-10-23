@@ -694,7 +694,7 @@ func _attach_game() -> void:
 	hud.caravan_route_requested.connect(func(u, i):
 		_route_stop = i
 		_route_caravan = u
-		game.notify("Click the market this caravan should trade with; right-click to cancel.", Vector2(-1, -1)))
+		game.notify("Stop %d: click a market, mine or factory of yours (or a market of a kingdom you trade with); right-click to cancel." % (i + 1), Vector2(-1, -1)))
 	hud.rally_requested.connect(func(f):
 		_rally_firm = f
 		game.notify("Click where the units made here should gather; right-click to cancel.", Vector2(-1, -1)))
@@ -963,7 +963,21 @@ func _placement() -> Dictionary:
 
 
 func _update_ghost() -> void:
-	if build_code == "" or ghost == null:
+	if ghost == null:
+		return
+	if _found_town_unit != null and is_instance_valid(_found_town_unit):
+		# a new town's place: the town shown transparent, with its free band
+		var l := _mouse_loc()
+		var site := Vector2i(floori(l.x) - Defs.TOWN_SIZE / 2, floori(l.y) - Defs.TOWN_SIZE / 2)
+		ghost.visible = true
+		ghost.modulate = Color(1, 1, 1, 0.6)
+		ghost.set_town(_found_town_unit.settler_race(), site, game.can_build_town(site) and game.is_loc_explored(site + Vector2i(3, 3)), game.player().color)
+		return
+	if ghost.build.has("town"):
+		ghost.visible = false
+		ghost.build = {}
+		ghost.modulate = Color.WHITE
+	if build_code == "":
 		return
 	var pl := _placement()
 	ghost.set_state(pl["build"], pl["pos"], pl["ok"], game.player().color)
@@ -1052,7 +1066,10 @@ func _unhandled_input(event: InputEvent) -> void:
 					if _route_caravan != null:
 						var mk = game.object_at_screen(_world_mouse())
 						if mk is Firm and is_instance_valid(_route_caravan) and not _route_caravan.dead:
-							if Caravans.can_set_stop(_route_caravan, mk):
+							var other: int = 1 - _route_stop
+							if other < _route_caravan.stops.size() and not _route_caravan.stops[other].is_empty() and _route_caravan.stops[other]["firm"] == mk:
+								game.notify("%s is already stop %d; choose another place for stop %d." % [mk.display_name(), other + 1, _route_stop + 1], Vector2(-1, -1))
+							elif Caravans.can_set_stop(_route_caravan, mk):
 								Net.cmd(_route_caravan, "set_caravan_stop", [_route_stop, mk])
 								game.notify("Stop %d: %s." % [_route_stop + 1, mk.display_name()], Vector2(-1, -1))
 							else:

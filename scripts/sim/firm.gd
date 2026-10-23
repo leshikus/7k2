@@ -272,8 +272,8 @@ func accept_unit(u: Unit) -> bool:
 		return true
 	if not is_military():
 		return false
-	if code != "LAIR" and (not u.is_human() or u.is_civilian()):
-		return false      # FirmCamp::assign_unit: only military units
+	if code != "LAIR" and not u.can_garrison():
+		return false      # FirmCamp::can_accept_assign: fighting land units (soldiers, Fryhtans, machines)
 	if code == "LAIR" and u.home_firm == self:
 		u.home_firm = null      # a raider coming home always fits; it counted toward the brood
 		soldiers.append(u)
@@ -820,13 +820,23 @@ func _train() -> void:
 	var celtic := g.god_worshipped(nation_id, "CELTIC")
 	var lead := int(o.lead_skill())
 	var trained := soldiers.filter(func(x): return x.basic_days <= 0 and x != o)
-	if not trained.is_empty() and o.leadership < 100.0:
-		var inc := 5.0 * trained.size() * o.hp / o.max_hp * (100.0 + o.potential * 2) / 100.0
+	# FirmCamp::advanced_train: the commander's leadership grows with the
+	# number of men under him (recruits too); the computer learns faster when
+	# set to be aggressive (AI_CHEAT)
+	var aggr := int(g.config.get("aggressiveness", GameSetup.MODERATE))
+	var ai_cheat := nation() != null and nation().is_ai and nation_id != g.player_id and aggr > GameSetup.MODERATE
+	var men := soldiers.filter(func(x): return x != o).size()
+	if men > 0 and o.leadership < 100.0:
+		var inc := 5.0 * men * o.hp / o.max_hp * (100.0 + o.potential * 2) / 100.0
+		if ai_cheat:
+			inc += inc * (aggr - GameSetup.MODERATE) / 3.0
 		o.leadership = minf(100.0, o.leadership + inc / 100.0)
 	if o.combat < Defs.MAX_COMBAT_TRAIN:
 		var inc := 10.0 * o.hp / o.max_hp * (100.0 + o.potential * 2) / 100.0
 		if celtic:
 			inc += inc / 2.0 if o.race == "CELTIC" else inc / 5.0
+		if ai_cheat:
+			inc += inc * (aggr - GameSetup.MODERATE) / 5.0
 		o.combat = minf(Defs.MAX_COMBAT_TRAIN, o.combat + inc / 100.0)
 	for s in trained:
 		if s.combat < lead and s.combat < Defs.MAX_COMBAT_TRAIN:

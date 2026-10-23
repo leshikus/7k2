@@ -430,7 +430,9 @@ func _generate_starts(size: int) -> void:
 		# Fort next to the town, commanded by the king.
 		var fort_build := Assets.firm_build("FORT", nat.race)
 		var fw: int = fort_build.get("loc_w", 6)
-		var fpos := _place_near(Rect2i(tpos, Vector2i(6, 6)), fw, fort_build.get("loc_h", 6))
+		var fpos := _place_near(Rect2i(tpos, Vector2i(6, 6)), fw, fort_build.get("loc_h", 6), 8, [Vector2(tpos) + Vector2(3, 3)])
+		if fpos.x < 0:
+			fpos = _place_near(Rect2i(tpos, Vector2i(6, 6)), fw, fort_build.get("loc_h", 6))
 		var fort := spawn_firm("FORT", nat.id, nat.race, fpos, true)
 		# Battle::create_unit: the king has combat and leadership 100
 		var king := spawn_unit(Defs.unit_sprite(nat.race, "INF"), nat.id, Vector2i(fpos.x, fpos.y + fw + 1), 100.0)
@@ -517,7 +519,8 @@ func _start_fryhtan(nat: Nation, at: Vector2i) -> void:
 ## centres) are given, the building's centre must be within linking distance
 ## of every one of them.
 func _place_near(r: Rect2i, fw: int, fh: int, max_gap := 8, anchors: Array = []) -> Vector2i:
-	for gap in range(1, max_gap):
+	# the free band takes INTER_PLACE_SPACE cells of every gap
+	for gap in range(INTER_PLACE_SPACE + 1, max_gap + INTER_PLACE_SPACE):
 		var cands: Array[Vector2i] = []
 		for x in range(r.position.x - fw - gap, r.end.x + gap + 1):
 			cands.append(Vector2i(x, r.position.y - fh - gap))
@@ -527,7 +530,8 @@ func _place_near(r: Rect2i, fw: int, fh: int, max_gap := 8, anchors: Array = [])
 			cands.append(Vector2i(r.end.x + gap, y))
 		_shuffle(cands)
 		for c in cands:
-			if world.can_place(c.x, c.y, fw, fh) and not _overlaps_site(Rect2i(c, Vector2i(fw, fh))):
+			# World::can_build_firm: the free band of INTER_PLACE_SPACE around it too
+			if can_build_firm("", c, fw, fh):
 				var center := Vector2(c) + Vector2(fw, fh) * 0.5
 				if anchors.all(func(a): return _center_dist(center, a) <= Defs.EFFECTIVE_FIRM_TOWN_DISTANCE - 1):
 					return c
@@ -927,8 +931,8 @@ func spawn_town(race: String, nation_id: int, at: Vector2i, pop: int, name := ""
 
 ## World::can_build_town: a free town-sized place with a cell of room around it.
 func can_build_town(at: Vector2i) -> bool:
-	return world.can_place(at.x - 1, at.y - 1, Defs.TOWN_SIZE + 2, Defs.TOWN_SIZE + 2) \
-		and not _overlaps_site(Rect2i(at, Vector2i.ONE * Defs.TOWN_SIZE))
+	# World::can_build_town: the same free band of INTER_PLACE_SPACE as a firm
+	return can_build_firm("", at, Defs.TOWN_SIZE, Defs.TOWN_SIZE)
 
 
 const TOWN_BUILDING_COST := 200.0
@@ -1635,10 +1639,11 @@ func _take(t: Treasure, u: Unit) -> bool:
 			n.items_acquired[t.object_id] = true
 			what = Items.item_name(t.object_id)
 		Treasure.Kind.BLUEPRINT:
+			# the plans let the kingdom research the weapon at a Tower of Science
 			var code := t.tech_code()
-			if code != "" and n.tech_level(code) == 0:
-				n.tech[code] = 1
-			what = "the plans of the %s" % t.tech_name()
+			if code != "":
+				n.mega_plans[code] = true
+			what = "the plans of the %s - it can now be researched at a Tower of Science" % t.tech_name()
 	if t.recno > 0:
 		taken_sites[t.recno] = n.id
 	notify_nation(n.id, "%s has found %s." % [u.display_name(), what], t.center_loc())
@@ -1686,6 +1691,7 @@ func _drop_mega_plans(n: Nation, at: Vector2i) -> void:
 		var c := _free_treasure_cell(at)
 		if row > 0 and c.x >= 0:
 			n.tech.erase(code)
+			n.mega_plans.erase(code)
 			spawn_treasure(Treasure.Kind.BLUEPRINT, row, 0, c)
 		return
 
@@ -2027,7 +2033,7 @@ func next_day() -> void:
 			Espionage.update_unit_loyalty(u)
 		if day % 15 == u.obj_id % 15:
 			Espionage.think_betray(self, u)
-		if u.auto_retreat > 0 or u.auto_reward > 0:
+		if u.auto_retreat > 0 or u.auto_reward > 0 or (u.nation() != null and u.nation().ai != null and u.nation_id != player_id):
 			u.auto_orders()
 	_pay_units()
 	if day % 15 == 0:
@@ -2191,15 +2197,40 @@ func cmd_place_building(nid: int, code: String, race: String, pos: Vector2i, bui
 		return
 	if builder and is_instance_valid(builder) and not Defs.unit_can_build(builder, code):
 		return
-	var f := spawn_firm(code, nid, race, pos, false)
-	if f == null:
+	var plan := {"code": code, "race": race, "pos": [pos.x, pos.y], "cost": cost, "live": live, "species": species}
+	if builder and is_instance_valid(builder) and not builder.dead:
+		# Unit::build_firm: the builder goes there; the site is laid out and
+		# paid for only when he arrives (Unit::execute_build_firm)
+		builder.order_build_site(plan)
 		return
+	build_firm_now(nid, plan, null)
+
+
+## FirmArray::build_firm, when the builder has reached the place: the ground
+## must still be free and the treasury able to pay.
+func build_firm_now(nid: int, plan: Dictionary, builder: Unit) -> Firm:
+	var n := nation(nid)
+	var code: String = plan["code"]
+	var pos := Vector2i(int(plan["pos"][0]), int(plan["pos"][1]))
+	var cost := float(plan["cost"])
+	var live := float(plan["live"])
+	var b := Assets.firm_build(code, plan["race"])
+	if n == null or not can_build_firm(code, pos, b.get("loc_w", 3), b.get("loc_h", 3)):
+		notify_nation(nid, "The %s cannot be built there any more." % Defs.firm_types.get(code, {}).get("name", code), Vector2(pos), true)
+		return null
+	if n.cash < cost or n.live_points < live:
+		notify_nation(nid, "Not enough %s to build the %s." % ["life points" if n.live_points < live else "gold", Defs.firm_types.get(code, {}).get("name", code)], Vector2(pos), true)
+		return null
+	var f := spawn_firm(code, nid, plan["race"], pos, false)
+	if f == null:
+		return null
 	n.add_cash(-cost, "Construction")
 	n.live_points -= live
 	if code == "LAIR":
-		f.monster_code = species
+		f.monster_code = plan["species"]
 	if builder and is_instance_valid(builder) and not builder.dead:
 		builder.order_build(f)
+	return f
 
 
 ## Month of the year, 1-12, as date_string counts it.

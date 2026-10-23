@@ -108,7 +108,17 @@ static func build_neighbor_firm(ai: NationAI, f: Firm, code: String) -> bool:
 	if at.x < 0:
 		f.no_neighbor_space = true
 		return false
+	if code == "MARKET" and not _has_consumers(ai, at):
+		return false       # an addition: no market where no town of ours would buy from it
 	return not ai.add_action(at, Vector2i(f.x1, f.y1), NationAI.BUILD_FIRM, code).is_empty()
+
+
+## A town of the kingdom within a market's reach of a market built at `at`.
+static func _has_consumers(ai: NationAI, at: Vector2i) -> bool:
+	var b := Assets.firm_build("MARKET", ai.n.race)
+	var c := Vector2(at) + Vector2(b.get("loc_w", 4), b.get("loc_h", 4)) * 0.5
+	var reach := Defs.effective_distance("MARKET", "")
+	return ai.my_towns().any(func(t): return Game._center_dist(c, t.center_loc()) <= reach)
 
 
 # ------------------------------------------------------- measurements ---

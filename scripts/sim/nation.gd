@@ -38,6 +38,7 @@ var last_income_by := {}
 var last_expense_by := {}
 var last_income_year := 0.0
 var last_expense_year := 0.0
+var mega_plans := {}             # mega weapon tech -> true: its plans found, so it can be researched (an addition)
 var known_gods := {}             # race -> true: Scrolls of Power held (GodInfo::nation_know_array)
 var items_acquired := {}         # item id -> true, for scenario goals
 var import_year := {}             # nation id -> goods bought from it this year (NationRelation::cur_year_import)

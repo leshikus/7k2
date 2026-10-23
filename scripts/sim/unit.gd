@@ -79,11 +79,12 @@ var frozen_until := -1           # Amaterasu's freeze (frame)
 var waypoints: Array = []       # further places to go after this move (Shift+right-click)
 var weapon_version := 0          # war machine / Fryhtan unit: tech level it was built at (get_weapon_version)
 enum Behavior { AGGRESSIVE = 1, DEFENSIVE, STAND_GROUND }
+var build_plan := {}             # a building to lay out on arrival (Unit::cur_order UNIT_BUILD_FIRM)
 var spy_notify := false         # Spy::notify_cloaked_nation_flag: a disguised spy keeps up his cover against his own side
 var auto_retreat := 0            # Unit::auto_retreat_hit_point: % of hit points to go home at (0 off; any fighting unit here, generals only in the original)
 var auto_reward := 0             # not in the original: rewarded automatically below this loyalty (0 off)
-const AUTO_RETREAT_LEVELS := [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
-const AUTO_REWARD_LEVELS := [0, 30, 40, 50, 60, 70, 80]
+const AUTO_RETREAT_LEVELS := [0, 10, 20, 30]
+const AUTO_REWARD_LEVELS := [0, 30, 40, 50]
 var behavior_mode := Behavior.AGGRESSIVE    # Unit::behavior_mode
 var hero_id := 0                  # HeroRes: which hero of the list he is (0: none)
 var max_combat := 0               # Skill::max_combat_level (heroes and powerful units)
@@ -290,6 +291,7 @@ func speed_loc() -> float:
 # ------------------------------------------------------------------ orders ---
 
 func stop() -> void:
+	build_plan = {}
 	resume_target = null
 	order = Order.IDLE
 	target = null
@@ -380,6 +382,18 @@ func reward(from_nation: int) -> void:
 	n.add_cash(-REWARD_COST, "Rewards")
 
 
+## The share of hit points this unit goes home at: its own setting, else a
+## computer kingdom's standing order (an addition) - generals at 30%, the
+## other fighting men at 20%.
+func retreat_level() -> int:
+	if auto_retreat > 0:
+		return auto_retreat
+	var n := nation()
+	if n and n.ai != null and nation_id != Game.inst.player_id and can_attack() and not is_caravan and not is_wagon():
+		return 30 if rank == Defs.Rank.GENERAL else 20
+	return 0
+
+
 ## UnitArray::process (auto_retreat_hit_point) and the automatic reward,
 ## once a day for a unit in the field (rewards in buildings too).
 func auto_orders() -> void:
@@ -389,7 +403,8 @@ func auto_orders() -> void:
 		var n := nation()
 		if n and n.cash >= REWARD_COST:
 			reward(nation_id)
-	if auto_retreat > 0 and inside_firm == null and not has_meta("hidden") and hp < max_hp * auto_retreat / 100.0 \
+	var ar := retreat_level()
+	if ar > 0 and inside_firm == null and not has_meta("hidden") and hp < max_hp * ar / 100.0 \
 			and order != Order.ENTER and can_attack():
 		return_to_base()
 
@@ -471,7 +486,7 @@ func return_to_base() -> bool:
 			continue
 		if not (f.is_military() or f.code == "FORTRESS") or f.soldiers.size() >= f.capacity():
 			continue
-		if f.code in ["CAMP", "FORT"] and (not is_human() or is_civilian()):
+		if f.code in ["CAMP", "FORT"] and not can_garrison():
 			continue
 		if f.code in ["LAIR", "FORTRESS"] and is_human() and Defs.unit_types.get(sprite_code, {}).get("class", "") == "HUMAN":
 			continue
@@ -568,6 +583,47 @@ func order_build(f: Firm) -> void:
 	order = Order.BUILD
 	order_firm = f
 	_path_to(Game.inst.world.adjacent_to_rect(f.footprint(), cell()))
+
+
+## Unit::execute_build_firm: next to the place, lay the building out.
+func _do_build_site() -> bool:
+	var r := _plan_rect()
+	var c := cell()
+	var dx := maxi(0, maxi(r.position.x - c.x, c.x - (r.end.x - 1)))
+	var dy := maxi(0, maxi(r.position.y - c.y, c.y - (r.end.y - 1)))
+	if maxi(dx, dy) <= 1:
+		var plan := build_plan
+		stop()
+		Game.inst.build_firm_now(nation_id, plan, self)
+		return false
+	if path_i >= path.size():
+		repath_timer -= 1
+		if repath_timer <= 0:
+			repath_timer = 20
+			_path_to(Game.inst.world.adjacent_to_rect(r, c))
+			if path.is_empty():
+				stop()
+		return false
+	_step_move()
+	return true
+
+
+## Unit::build_firm: walk to the place; the building is laid out (and paid
+## for) on arrival.
+func order_build_site(plan: Dictionary) -> void:
+	var n := nation()
+	if dead or inside_firm or not (is_human() or (n and n.is_fryhtan)):
+		return
+	stop()
+	build_plan = plan
+	order = Order.BUILD
+	order_firm = null
+	_path_to(Game.inst.world.adjacent_to_rect(_plan_rect(), cell()))
+
+
+func _plan_rect() -> Rect2i:
+	var b := Assets.firm_build(build_plan["code"], build_plan["race"])
+	return Rect2i(Vector2i(int(build_plan["pos"][0]), int(build_plan["pos"][1])), Vector2i(b.get("loc_w", 3), b.get("loc_h", 3)))
 
 
 func can_attack() -> bool:
@@ -1103,6 +1159,14 @@ func _item_strike(dmg: float) -> void:
 const MAX_NATION_CONTRIBUTION := 10000
 
 
+## FirmCamp::can_accept_assign: a land unit that fights - a soldier, a
+## Fryhtan or a war machine; not a villager, caravan, wagon or Greater Being.
+func can_garrison() -> bool:
+	if is_civilian() or is_caravan or is_god or is_wagon() or utype.get("flying", false):
+		return false
+	return is_human() or is_weapon or SpecialFirms.is_fryhtan_unit(self) or is_monster()
+
+
 ## Unit::is_die_after_attack: one of its attacks costs its life (it starts
 ## defensive, so as not to waste it).
 func is_die_after_attack() -> bool:
@@ -1167,6 +1231,8 @@ func gain_experience() -> void:
 func _do_enter() -> bool:
 	if is_spy and order_firm == null and spy_place != null:
 		return _do_infiltrate()
+	if order == Order.BUILD and order_firm == null and not build_plan.is_empty():
+		return _do_build_site()
 	if order_firm == null or not is_instance_valid(order_firm) or order_firm.dead:
 		stop()
 		return false
@@ -1477,6 +1543,13 @@ func _draw() -> void:
 func render(cv) -> void:
 	if inside_firm:
 		return
+	# the place a builder of yours is on his way to (dashed, until he lays it out)
+	if not build_plan.is_empty() and nation_id == Game.inst.player_id:
+		var r := _plan_rect()
+		var o := -position
+		var pts := [Vector2(r.position.x, r.position.y), Vector2(r.end.x, r.position.y), Vector2(r.end.x, r.end.y), Vector2(r.position.x, r.end.y)]
+		for i in 4:
+			Game.draw_dashes(cv, o + Iso.to_screen(pts[i]), o + Iso.to_screen(pts[(i + 1) % 4]), Color(1, 1, 0.6, 0.8), 1.5, 5.0)
 	var col := nation_color()
 	if selected and not dead:
 		_draw_selection(cv, col)
@@ -1508,12 +1581,17 @@ func render(cv) -> void:
 	# (the Show Unit Identities option, Config::show_all_unit_icon)
 	var show_icon := selected or Game.inst.hovered == self or int(GameOptions.get_opt("show_unit_icons")) == 1
 	if rank >= Defs.Rank.GENERAL and show_icon:
-		var top := Vector2(0, -48)
-		cv.draw_line(top, top + Vector2(0, -14), Color(0.3, 0.2, 0.1), 2.0)
-		var flag := PackedVector2Array([top + Vector2(0, -14), top + Vector2(12, -10), top + Vector2(0, -6)])
-		cv.draw_colored_polygon(flag, col)
-		if rank == Defs.Rank.KING:
-			cv.draw_circle(top + Vector2(0, -16), 3, Color(1, 0.85, 0.2))
+		# a star over a general (gold for the king), edged in the kingdom's colour
+		var sc := Vector2(0, -58)
+		var outer := 8.0 if rank == Defs.Rank.KING else 6.5
+		var star := PackedVector2Array()
+		for i in 10:
+			var a := -PI / 2.0 + i * PI / 5.0
+			var rr := outer if i % 2 == 0 else outer * 0.42
+			star.append(sc + Vector2(cos(a), sin(a)) * rr)
+		cv.draw_colored_polygon(star, Color(1, 0.85, 0.2) if rank == Defs.Rank.KING else Color(1, 1, 0.85))
+		star.append(star[0])
+		cv.draw_polyline(star, col, 1.5)
 	if cloak_id != 0 and nation_id == Game.inst.player_id:
 		# your disguised spy: its true colours in a little diamond over its head
 		var c := Vector2(0, -50)
