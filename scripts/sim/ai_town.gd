@@ -18,6 +18,8 @@ static func process(ai: NationAI, t: Town, day: int) -> void:
 		update_base_town_status(ai, t)
 	if day % 3 == id % 3:
 		think_reward(ai, t)
+	if day % 30 == (id + 10) % 30 and think_merge_small_town(ai, t):
+		return
 	if should_migrate(ai, t):
 		if day % 30 == id % 30:
 			think_migrate(ai, t)
@@ -25,6 +27,10 @@ static func process(ai: NationAI, t: Town, day: int) -> void:
 	if day % 30 == id % 30 and not t.no_neighbor_space and t.population > 1:
 		if think_build_fort(ai, t):
 			return
+	# an addition: every town is walled in early (the first wall level for all
+	# towns, before the original's base-town checks)
+	if day % 30 == (id + 25) % 30 and t.wall_level == 0 and t.target_wall_level == 0:
+		think_build_first_wall(ai, t)
 	if not t.is_base_town:
 		return
 	if day % 30 == (id + 15) % 30:
@@ -113,6 +119,33 @@ static func should_migrate(ai: NationAI, t: Town) -> bool:
 	if t.is_base_town or not ai.my_towns().any(func(o): return o.is_base_town):
 		return false
 	return t.population - t.jobless() <= 0
+
+
+## An addition: a small town with no mine of its own nearby and no town of
+## its kind linked to it packs into wagons and joins the nearest bigger town of
+## the same race (the original merges only its non-base towns into base ones).
+static func think_merge_small_town(ai: NationAI, t: Town) -> bool:
+	if t.population >= 20 or ai.g.day < t.setup_day + 180:
+		return false
+	if t.linked_firms.any(func(f): return f.code == "MINE" and f.nation_id == t.nation_id):
+		return false
+	if t.linked_towns().any(func(o): return o.nation_id == t.nation_id and o.race == t.race):
+		return false
+	var best: Town = null
+	var best_r := 0
+	for o in ai.my_towns():
+		if o == t or o.under_construction or o.race != t.race or o.population < t.population + 10:
+			continue
+		if t.population > MAX_TOWN_POPULATION - o.population:
+			continue
+		var r := 1000 + ai.distance_rating(t.center_loc(), o.center_loc())
+		if r > best_r:
+			best_r = r
+			best = o
+	if best == null or ai.find_action(Vector2i(best.x1, best.y1), Vector2i(t.x1, t.y1), NationAI.SETTLE_TOWN, 0) != null:
+		return false
+	ai.add_action(Vector2i(best.x1, best.y1), Vector2i(t.x1, t.y1), NationAI.SETTLE_TOWN, 0, t.population)
+	return true
 
 
 ## Town::think_ai_migrate
@@ -468,6 +501,15 @@ static func think_scout(ai: NationAI, t: Town) -> void:
 	var dest := Vector2i(int(c.x) + (dx if ai.g.rng.randi() % 2 == 0 else -dx), int(c.y) + (dy if ai.g.rng.randi() % 2 == 0 else -dy))
 	dest = Vector2i(clampi(dest.x, 0, ai.g.world.w - 1), clampi(dest.y, 0, ai.g.world.h - 1))
 	ai.add_action(dest, Vector2i(t.x1, t.y1), NationAI.SCOUT, 0)
+
+
+## The first wall (an addition): any town of the kingdom, its importance
+## raised by 40 - or whenever the treasury holds three times the cost.
+static func think_build_first_wall(ai: NationAI, t: Town) -> void:
+	var imp := 40 + ai.pref("town_defense") / 3 + t.population / 2 + t.linked_firms.size() * 4
+	var cost: float = Town.WALL_COST[1]
+	if ai.should_spend(imp, cost) or ai.n.cash > cost * 3.0:
+		t.target_wall_level = 1
 
 
 ## Town::think_build_wall

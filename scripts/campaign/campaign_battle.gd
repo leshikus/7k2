@@ -122,8 +122,8 @@ func add_game_nation(cnid: int) -> int:
 func new_game_nation(race: String, fryhtan := false) -> int:
 	var id := g.nations.size() + 1
 	var used := g.nations.map(func(x): return x.color)
-	var col: Color = Defs.NATION_COLORS[(id - 1) % Defs.NATION_COLORS.size()]
-	for cc in Defs.NATION_COLORS:
+	var col: Color = Defs.nation_color_at(id - 1)
+	for cc in Defs.NATION_COLORS + Defs.EXTRA_NATION_COLORS:
 		if not cc in used:
 			col = cc
 			break

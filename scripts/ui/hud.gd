@@ -119,7 +119,12 @@ func _build_ui() -> void:
 	top.add_child(hb)
 	top_label = RichTextLabel.new()
 	top_label.bbcode_enabled = true
-	top_label.fit_content = true
+	# no fit_content: a long line (many kingdoms) is clipped instead of pushing
+	# the speed buttons off the screen
+	top_label.fit_content = false
+	top_label.clip_contents = true
+	top_label.custom_minimum_size = Vector2(0, 22)
+	top_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	top_label.scroll_active = false
 	top_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	top_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -838,14 +843,16 @@ func _update_hover_tip() -> void:
 
 func _update_top() -> void:
 	if game.observer():
-		var parts := ["[b]AI vs AI[/b]"]
-		for n in game.nations:
-			if n.alive:
-				parts.append("[color=#%s]■[/color] %s" % [n.color.to_html(false), n.name])
-		var t := "   ".join(parts) + "   [color=#c8c0a8]%s[/color]   [color=#a8b8d0]%s[/color]" % [game.date_string(), game.weather.describe()]
+		# the kingdoms' colours are in the tooltip (and the Kingdoms report, F1)
+		var t := "[b]AI vs AI[/b]   [color=#c8c0a8]%s[/color]   [color=#a8b8d0]%s[/color]" % [game.date_string(), game.weather.describe()]
 		if game.paused:
 			t += "   [color=#ff8060]PAUSED[/color]"
 		top_label.text = t
+		var names: Array = []
+		for n in game.nations:
+			if n.alive:
+				names.append(n.name)
+		top_label.tooltip_text = "Kingdoms: " + ", ".join(names) + " (F1 for the report)"
 		return
 	var p := game.player()
 	var txt := "[color=#%s]■[/color] [b]%s[/b]   Gold [color=#ffd860]%d[/color]   Food [color=#a0e070]%d[/color]   Reputation %d" % [
@@ -1050,7 +1057,7 @@ func _bar(v: float, maxv: float, col: String) -> String:
 
 func _owner_line(o: GameObj) -> String:
 	if o.is_monster():
-		return "[color=#80c060]Fryhtans[/color]"
+		return "[color=#80c060]Wild Fryhtans[/color] (independent, of no kingdom)"
 	var n := o.nation()
 	if n == null:
 		return "Independent"

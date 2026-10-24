@@ -80,6 +80,9 @@ var frozen_until := -1           # Amaterasu's freeze (frame)
 var waypoints: Array = []       # further places to go after this move (Shift+right-click)
 var weapon_version := 0          # war machine / Fryhtan unit: tech level it was built at (get_weapon_version)
 enum Behavior { AGGRESSIVE = 1, DEFENSIVE, STAND_GROUND }
+var _unreachable := {}            # place or unit -> frame until which it is not tried again
+var _stuck_tries := 0             # repaths that led nowhere nearer
+var _home_fails := 0              # times the way home could not be found
 var build_plan := {}             # a building to lay out on arrival (Unit::cur_order UNIT_BUILD_FIRM)
 var spy_notify := false         # Spy::notify_cloaked_nation_flag: a disguised spy keeps up his cover against his own side
 var auto_retreat := 0            # Unit::auto_retreat_hit_point: % of hit points to go home at (0 off; any fighting unit here, generals only in the original)
@@ -330,6 +333,9 @@ func order_attack(obj: GameObj) -> void:
 		Espionage.drop_cloak(self)     # attacking gives a disguised spy away
 	if dead or inside_firm or obj == null or obj == self or not can_attack():
 		return
+	# a computer's unit is not sent again at what it found it cannot reach
+	if is_unreachable(obj) and nation_id != Game.inst.player_id:
+		return
 	stop()
 	order = Order.ATTACK
 	target = obj
@@ -355,6 +361,10 @@ func order_infiltrate(target_obj: GameObj) -> bool:
 
 func order_enter(f: Firm) -> void:
 	if dead or inside_firm:
+		return
+	# a computer's unit is not sent again where it was turned away (full) or
+	# which it could not reach
+	if is_unreachable(f) and nation_id != Game.inst.player_id:
 		return
 	stop()
 	order = Order.ENTER
@@ -433,8 +443,9 @@ func resign() -> void:
 	var n := nation()
 	if n and n.is_fryhtan:
 		var others: Array = g.nations.filter(func(o): return o.alive and o.is_fryhtan and o.id != nation_id)
+		var lp := g.live_points_bonus(self)      # Unit::resign: calc_live_points_bonus, shared
 		for o in others:
-			o.live_points += (10.0 if is_human() else 4.0) / others.size()
+			o.live_points += lp / others.size()
 	if inside_firm:
 		inside_firm.release_unit(self)
 	g._drop_item(self)
@@ -759,14 +770,14 @@ func _idle() -> void:
 	if not can_attack() or sprite_code == "EXPCART":
 		return      # a Porcupine waits for its orders
 	var enemy := Game.inst.find_enemy_near(self, float(utype.get("vis", 5)))
-	if enemy and will_engage(enemy):
+	if enemy and will_engage(enemy) and not is_unreachable(enemy):
 		order_attack(enemy)
 		return
 	if home_firm and (not is_instance_valid(home_firm) or home_firm.dead):
 		home_firm = null
 	if home_town and (not is_instance_valid(home_town) or home_town.dead):
 		home_town = null
-	if home_firm:
+	if home_firm and not is_unreachable(home_firm):
 		order_enter(home_firm)
 	elif home_town:
 		order = Order.RETURN
@@ -931,8 +942,12 @@ func _close_in(att: Dictionary) -> bool:
 		if path_i >= path.size() or moved > 4.0 + far * 0.04:
 			_path_to(dest)
 			if path.is_empty() and dist > float(att["range"]):
-				stop()
+				_give_up(target)
 				return false
+			if path.size() - path_i <= 0 and dist > float(att["range"]):
+				# the nearest place it can stand is still out of reach
+				if _no_progress(target):
+					return false
 	_step_move()
 	return true
 
@@ -1250,6 +1265,33 @@ func gain_experience() -> void:
 			leadership = minf(100.0, leadership + 0.12)
 
 
+## Something that cannot be reached (walled in by rocks, trees or buildings):
+## stop, and leave it alone for twenty days; a home that cannot be reached
+## three times is given up.
+func _give_up(o: GameObj) -> void:
+	if o and is_instance_valid(o):
+		_unreachable[o] = Game.inst.frame + Defs.FRAMES_PER_DAY * 20
+		if o == home_firm:
+			_home_fails += 1
+			if _home_fails >= 3:
+				home_firm = null
+	_stuck_tries = 0
+	stop()
+
+
+func is_unreachable(o: GameObj) -> bool:
+	return o != null and int(_unreachable.get(o, -1)) > Game.inst.frame
+
+
+## The way leads nowhere nearer: count it, and after three tries give up.
+func _no_progress(o: GameObj) -> bool:
+	_stuck_tries += 1
+	if _stuck_tries >= 3:
+		_give_up(o)
+		return true
+	return false
+
+
 func _do_enter() -> bool:
 	if is_spy and order_firm == null and spy_place != null:
 		return _do_infiltrate()
@@ -1265,7 +1307,7 @@ func _do_enter() -> bool:
 		else:
 			ok = order_firm.accept_unit(self)
 		if not ok:
-			stop()
+			_give_up(order_firm)       # full (or no place for it): not straight back
 		return false
 	if path_i >= path.size():
 		repath_timer -= 1
@@ -1273,8 +1315,11 @@ func _do_enter() -> bool:
 			repath_timer = 20
 			_path_to(Game.inst.world.adjacent_to_rect(order_firm.footprint(), cell()))
 			if path.is_empty():
-				stop()
+				_give_up(order_firm)
+			elif path.size() - path_i <= 0:
+				_no_progress(order_firm)
 		return false
+	_stuck_tries = 0
 	_step_move()
 	return true
 

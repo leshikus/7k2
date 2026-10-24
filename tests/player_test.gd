@@ -33,9 +33,16 @@ func _ready() -> void:
 	if mine: soldiers[0].order_build(mine)
 	for d in 120: _day(g)
 	print("day 120: camp built=", not camp.under_construction, " overseer=", camp.overseer != null, " mine built=", mine and not mine.under_construction, " mine workers=", mine.workers() if mine else -1)
-	var fac := g.spawn_firm("FACTORY", p.id, p.race, g._place_near(home.footprint(), 5, 5, 8, [mine.center_loc(), home.center_loc()]), false)
+	# by the town or by the mine (the town may lie near the map's edge)
+	var fat := g._place_near(home.footprint(), 5, 5, 14, [mine.center_loc(), home.center_loc()])
+	if fat.x < 0:
+		fat = g._place_near(mine.footprint(), 5, 5, 14, [mine.center_loc(), home.center_loc()])
+	var fac := g.spawn_firm("FACTORY", p.id, p.race, fat, false)
 	soldiers[0].order_build(fac)
-	var mkt := g.spawn_firm("MARKET", p.id, p.race, g._place_near(home.footprint(), 5, 5, 8, [fac.center_loc(), home.center_loc()]), false)
+	var mat := g._place_near(home.footprint(), 5, 5, 14, [fac.center_loc(), home.center_loc()])
+	if mat.x < 0:
+		mat = g._place_near(fac.footprint(), 5, 5, 14, [fac.center_loc(), home.center_loc()])
+	var mkt := g.spawn_firm("MARKET", p.id, p.race, mat, false)
 	soldiers[1].order_build(mkt)
 	var cash0 := p.cash
 	for d in 900:

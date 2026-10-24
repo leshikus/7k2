@@ -1049,8 +1049,16 @@ func render(cv) -> void:
 					# PlantBitmap::draw_at: centred, base 15px below the slot point
 					cv.draw_texture(tex, at + Vector2(-tex.get_width() / 2, -tex.get_height() + 15))
 			"FLAG":
-				# Animated race flag in the owner's colour (Town::draw_flag); none for independents.
-				if nation_id > 0:
+				# Animated race flag in the owner's colour (Town::draw_flag); none for
+				# independents - but a town paying tribute to a Fryhtan lair flies
+				# the Fryhtan flag (FLAGM00x) in that kingdom's colour (Town::draw)
+				var lord := tribute_to()
+				if lord > 0:
+					var ln = Game.inst.nation(lord)
+					var mflag := Assets.spict("FLAGM00%d" % ((Game.inst.frame / 3 + obj_id) % 10), ln.color if ln else col)
+					if mflag:
+						cv.draw_texture(mflag, at + Vector2(-9, -97))
+				elif nation_id > 0:
 					var flag := Assets.spict("FLAG%02d0%d" % [_race_id(), (Game.inst.frame / 3 + obj_id) % 10], col)
 					if flag:
 						cv.draw_texture(flag, at + Vector2(-9, -97))

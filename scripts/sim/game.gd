@@ -232,11 +232,7 @@ func repair_all(nid: int, on: bool) -> void:
 ## (Town::form_new_nation), neutral to all, in an unused colour.
 func add_nation(race: String) -> Nation:
 	var used := nations.map(func(x): return x.color)
-	var col: Color = Defs.NATION_COLORS[nations.size() % Defs.NATION_COLORS.size()]
-	for cc in Defs.NATION_COLORS:
-		if not cc in used:
-			col = cc
-			break
+	var col: Color = Defs.free_nation_color(used, nations.size())
 	var n := Nation.new(nations.size() + 1, race, col, true)
 	for o in nations:
 		o.relations[n.id] = Defs.Relation.NEUTRAL
@@ -269,7 +265,7 @@ func _create_nations(cfg: Dictionary) -> void:
 		var race: String = humans[i]["race"] if human else race_pool[(i - humans.size()) % race_pool.size()]
 		if not human and cfg.get("random_start", false):
 			race = Defs.races[rng.randi() % Defs.races.size()]["code"]     # Battle::create_ai_nation: any race
-		var n := Nation.new(i + 1, race, Defs.NATION_COLORS[i % Defs.NATION_COLORS.size()], not human or cfg.get("autoplay", false))
+		var n := Nation.new(i + 1, race, Defs.nation_color_at(i), not human or cfg.get("autoplay", false))
 		n.is_player = human
 		player_species = {}
 		for m in Defs.monsters:
@@ -306,7 +302,7 @@ func _create_nations(cfg: Dictionary) -> void:
 		var m: Dictionary = species[i % species.size()]
 		if cfg.get("random_start", false):
 			m = Defs.monsters[rng.randi() % Defs.monsters.size()]
-		var n := Nation.new(nations.size() + 1, m["unit"], Defs.NATION_COLORS[nations.size() % Defs.NATION_COLORS.size()], true)
+		var n := Nation.new(nations.size() + 1, m["unit"], Defs.free_nation_color(nations.map(func(x): return x.color), nations.size()), true)
 		n.is_fryhtan = true
 		n.monster_code = m["unit"]
 		n.name = "%s Fryhtans" % m["name"]
@@ -368,6 +364,10 @@ func can_build_firm(code: String, pos: Vector2i, w: int, h: int) -> bool:
 	if not world.can_place(pos.x, pos.y, w, h, code == "MINE"):
 		return false
 	var r := Rect2i(pos, Vector2i(w, h))
+	# the free band must lie within the map: no building hard against its edge
+	# (an addition - the original lets the band end at the edge)
+	if not Rect2i(0, 0, world.w, world.h).encloses(r.grow(INTER_PLACE_SPACE)):
+		return false
 	var outer := r.grow(INTER_PLACE_SPACE).intersection(Rect2i(0, 0, world.w, world.h))
 	for y in range(outer.position.y, outer.end.y):
 		for x in range(outer.position.x, outer.end.x):
@@ -2622,6 +2622,94 @@ func deselect(o: GameObj) -> void:
 		o.queue_redraw()
 
 
+## BaseObj::calc_live_points_bonus: a person is worth his hit points, a
+## Fryhtan half of them, a Lishorr half its strength; the worth doubles every
+## five years (up to five times).
+func live_points_bonus(o: GameObj) -> float:
+	var v := 0.0
+	if o is Unit:
+		if o.is_human():
+			v = o.max_hp
+		elif o.is_monster() or SpecialFirms.is_fryhtan_unit(o):
+			v = o.max_hp / 2.0
+	elif o is Firm and o.code == "LISHORR":
+		v = o.max_hp / 2.0
+	var inc := minf(4.0, float(day) / (365.0 * 5.0))
+	return v + v * inc
+
+
+## BaseObj::being_killed: half for a killer who is not a Fryhtan himself.
+func _gain_live_points(killer: GameObj, victim: GameObj) -> void:
+	var kn := nation(killer.nation_id)
+	if kn == null or not kn.is_fryhtan:
+		return
+	var v := live_points_bonus(victim)
+	if not (killer is Unit and (killer.is_monster() or SpecialFirms.is_fryhtan_unit(killer))):
+		v /= 2.0
+	kn.live_points += v
+
+
+## Unit::being_killed_leave_money: a king is worth 2000 x (leadership +
+## combat/2) / 150, a general 600, a soldier 300, a villager 20; give or take
+## a fifth by the unit.
+func _kill_money(u: Unit, killer: GameObj) -> void:
+	if killer.nation_id <= 0 or killer.nation_id == GameObj.MONSTER_NATION or killer.nation_id == u.nation_id:
+		return
+	if u.sprite_code == "EXPCART" and u.hp <= 0.0 and killer == u:
+		return
+	var kn := nation(killer.nation_id)
+	if kn == null:
+		return
+	var worth := int(u.lead_skill()) + int(u.combat) / 2
+	var money := 0
+	match u.rank:
+		Defs.Rank.KING:
+			money = 2000 * worth / 150
+		Defs.Rank.GENERAL:
+			money = 600 * worth / 150
+		_:
+			money = 20 if u.is_civilian() else 300 * worth / 150
+	money = money * (80 + u.obj_id % 40) / 100
+	if money > 0:
+		kn.add_cash(float(money), "Treasure")
+
+
+## Unit::being_killed_subordinate_betray: with their general fallen, up to
+## three of his men nearby may go over to the victor - the more so hurt,
+## disloyal and outnumbered - or to the strongest kingdom about.
+func _subordinates_betray(gen: Unit, killer: GameObj) -> void:
+	if killer.nation_id <= 0 or killer.nation_id == GameObj.MONSTER_NATION:
+		return
+	var c := gen.center_loc()
+	var net := net_attacker_power(c, killer.nation_id, gen.nation_id, Defs.EFFECTIVE_LEADING_DISTANCE)
+	var counts := {}
+	for o in units_near(c, Defs.EFFECTIVE_LEADING_DISTANCE):
+		if not o.dead and o.nation_id > 0 and o.nation_id != GameObj.MONSTER_NATION and o.inside_firm == null:
+			counts[o.nation_id] = int(counts.get(o.nation_id, 0)) + 1
+	var most := killer.nation_id
+	var best := -1
+	for k in counts:
+		if int(counts[k]) > best:
+			best = int(counts[k])
+			most = int(k)
+	var allow := 1 + rng.randi() % 3
+	for m in units.duplicate():
+		if m.dead or m == gen or m.leader != gen or m.inside_firm != null or m.race == "" or not m.has_loyalty():
+			continue
+		if maxf(absf(m.center_loc().x - c.x), absf(m.center_loc().y - c.y)) > Defs.EFFECTIVE_LEADING_DISTANCE:
+			continue
+		var chance := 50 + int(net) / 20 - 50 * int(m.hp) / maxi(1, int(m.max_hp)) - int(m.loyalty) / 2
+		if rng.randi() % 100 < chance:
+			Espionage.betray(self, m, killer.nation_id)
+			allow -= 1
+			if allow == 0:
+				return
+		elif most != killer.nation_id and most != m.nation_id:
+			chance = 40 - 50 * int(m.hp) / maxi(1, int(m.max_hp)) - int(m.loyalty) / 2
+			if rng.randi() % 100 < chance:
+				Espionage.betray(self, m, most)
+
+
 func on_unit_died(u: Unit, killer: GameObj) -> void:
 	deselect(u)
 	if u.home_town and is_instance_valid(u.home_town):
@@ -2637,11 +2725,14 @@ func on_unit_died(u: Unit, killer: GameObj) -> void:
 			# a Fryhtan All-high slain may bring a wandering hero to the victor
 			if u.rank == Defs.Rank.KING:
 				HeroRes.induce_hero_join_nation(self, kn.id, (int(u.lead_skill()) + int(u.combat) / 2) / 2)
-	# Fryhtan kingdoms absorb the life of what they kill (Unit::calc_live_points_bonus).
 	if killer and is_instance_valid(killer):
-		var kn := nation(killer.nation_id)
-		if kn and kn.is_fryhtan:
-			kn.live_points += 10.0 if u.is_human() else 4.0
+		# BaseObj::being_killed: a Fryhtan kingdom absorbs the life of what it kills
+		_gain_live_points(killer, u)
+		# Unit::being_killed_leave_money: the victor takes the fallen's money
+		_kill_money(u, killer)
+		# Unit::being_killed_subordinate_betray
+		if u.rank >= Defs.Rank.GENERAL:
+			_subordinates_betray(u, killer)
 	_drop_item(u)
 	var n := nation(u.nation_id)
 	if n and n.king == u:
@@ -2768,6 +2859,8 @@ func _best_heir(n: Nation) -> Unit:
 
 func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 	deselect(f)
+	if killer and is_instance_valid(killer) and not f.has_meta("sold"):
+		_gain_live_points(killer, f)        # BaseObj::being_killed (a Lishorr)
 	f.resign_all_workers()        # FirmWork::free_all_people: the workers go home
 	if Training.is_train_firm(f):
 		Training.free_all(f)

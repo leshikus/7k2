@@ -72,6 +72,29 @@ const NATION_COLORS := [
 	Color(0.85, 0.15, 0.12), Color(0.15, 0.35, 0.95), Color(0.95, 0.80, 0.10), Color(0.60, 0.20, 0.80),
 	Color(0.10, 0.75, 0.75), Color(0.95, 0.50, 0.10), Color(0.95, 0.95, 0.95),
 ]
+## More kingdoms than the original's seven (Fryhtan kingdoms come on top):
+## further colours, unlike the seven, the grey of the independents and the
+## green of the wild Fryhtans.
+const EXTRA_NATION_COLORS := [
+	Color(1.0, 0.50, 0.75), Color(0.55, 0.33, 0.15), Color(0.55, 0.78, 1.0), Color(0.15, 0.15, 0.15),
+	Color(0.55, 0.05, 0.20), Color(0.10, 0.12, 0.50), Color(0.85, 0.75, 0.55), Color(0.0, 0.45, 0.35),
+]
+
+
+## The colour of the i-th kingdom (from 0): the seven, then the extra ones.
+static func nation_color_at(i: int) -> Color:
+	var all: Array = NATION_COLORS + EXTRA_NATION_COLORS
+	return all[i % all.size()]
+
+
+## The first colour no kingdom of `used` has.
+static func free_nation_color(used: Array, fallback_i: int) -> Color:
+	for cc in NATION_COLORS + EXTRA_NATION_COLORS:
+		if not cc in used:
+			return cc
+	return nation_color_at(fallback_i)
+
+
 const INDEPENDENT_COLOR := Color(0.55, 0.55, 0.55)
 const MONSTER_COLOR := Color(0.35, 0.65, 0.20)
 

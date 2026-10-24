@@ -294,5 +294,40 @@ func _ready() -> void:
 	_check(g.firms.size() == nf + 1 and float(p.expense_by.get("Construction", 0.0)) >= 100.0, "on his arrival the site is laid out and paid for (%d gold)" % int(p.expense_by.get("Construction", 0.0)))
 	_check(not g.can_build_town(Vector2i(home.x1 + Defs.TOWN_SIZE + 1, home.y1)), "no town hard by another (the free band)")
 
+	# --- a computer kingdom gathers a small lone town into a bigger one, by wagon
+	var ai := NationAI.new(p, g)
+	var lone_at := Vector2i(-1, -1)
+	for k in 400:
+		var cand := Vector2i(g.rng.randi_range(5, g.world.w - 15), g.rng.randi_range(5, g.world.h - 15))
+		if g.can_build_town(cand) and cand.distance_to(Vector2i(home.center_loc())) > 30.0:
+			lone_at = cand
+			break
+	var lone := g.spawn_town(p.race, p.id, lone_at, 8)
+	lone.setup_day = g.day - 200
+	home.population = maxi(home.population, 30)
+	_check(not lone.linked_towns().any(func(o): return o.nation_id == p.id) and AITown.think_merge_small_town(ai, lone), "a lone town of 8, with no mine, packs up for a bigger town")
+	_check(ai.find_action(Vector2i(home.x1, home.y1), Vector2i(lone.x1, lone.y1), NationAI.SETTLE_TOWN, 0) != null, "the settle action is on the list")
+	lone.population = 25
+	_check(not AITown.think_merge_small_town(ai, lone), "a town of 20 or more stays")
+
+	# --- desertion: below 30 a unit in the field may leave; at 0 it surely goes
+	var des := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(6, 6)), 30.0)
+	des.loyalty = 0.0
+	Espionage.think_betray(g, des)
+	_check(des.dead or des.nation_id != p.id or not g.units.has(des), "a unit at loyalty 0 leaves (or goes over)")
+	var leftn := 0
+	var contact_saved: Dictionary = p.contact.duplicate()
+	p.contact.clear()       # nobody to go over to: only desertion
+	for k in 40:
+		var d2 := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(6, 6)), 30.0)
+		d2.loyalty = 20.0
+		Espionage.think_betray(g, d2)
+		if not g.units.has(d2) or d2.nation_id != p.id:
+			leftn += 1
+		elif not d2.dead:
+			g.remove_unit(d2)
+	_check(leftn > 3 and leftn < 30, "at 20 about a third desert in a check (%d of 40)" % leftn)
+	p.contact = contact_saved
+
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit()

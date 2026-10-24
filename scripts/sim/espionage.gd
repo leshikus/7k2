@@ -448,7 +448,7 @@ static func update_unit_loyalty(u: Unit) -> void:
 
 ## Unit::think_betray (every 15 days): below 30 a unit in the field, or the
 ## commander of a camp with his whole camp, goes over to the kingdom with
-## the best reputation and standing; with none and no loyalty left, he leaves.
+## the best reputation and standing; with none he may desert (certain at 0).
 static func think_betray(g: Game, u: Unit) -> void:
 	if u.dead or u.is_spy or u.sleeper_for > 0 or u.rank == Defs.Rank.KING or not u.has_loyalty() or u.is_civilian():
 		return
@@ -464,7 +464,11 @@ static func think_betray(g: Game, u: Unit) -> void:
 	for o in g.nations:
 		if not o.alive or o == cur or not cur.contact.has(o.id) or o.is_fryhtan != cur.is_fryhtan:
 			continue
-		if not g.towns.any(func(t): return t.nation_id == o.id and not t.dead):
+		# a base in the land: a town, or for a Fryhtan kingdom a lair
+		if o.is_fryhtan:
+			if not g.firms.any(func(f): return f.nation_id == o.id and not f.dead and f.code == "LAIR"):
+				continue
+		elif not g.towns.any(func(t): return t.nation_id == o.id and not t.dead):
 			continue
 		var s := int(o.reputation) + Diplomacy.overall_rank(g, o) - Diplomacy.overall_rank(g, cur)
 		if o.race == u.race:
@@ -474,8 +478,10 @@ static func think_betray(g: Game, u: Unit) -> void:
 			best = o.id
 	if best > 0:
 		betray(g, u, best)
-	elif u.loyalty <= 0.0 and u.inside_firm == null:
-		g.notify_nation(u.nation_id, "%s has left your service." % u.display_name(), u.center_loc())
+	elif u.inside_firm == null and (u.loyalty <= 0.0 or g.rng.randi() % 30 >= int(u.loyalty)):
+		# at 0 he leaves (as in the original); an addition: below 30 he may
+		# desert, the likelier the lower his loyalty - Fryhtans too
+		g.notify_nation(u.nation_id, "%s has deserted your service." % u.display_name(), u.center_loc())
 		g.remove_unit(u)
 
 

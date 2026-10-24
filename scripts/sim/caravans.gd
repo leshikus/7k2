@@ -60,6 +60,7 @@ static func hire(m: Firm) -> Unit:
 	var u := g.spawn_unit("CARAVAN", m.nation_id, c, 10.0)
 	if u:
 		u.loyalty = 100.0
+		u.last_load_day = g.day         # UnitCaravan::init: last_load_goods_date
 		set_stop(u, 0, m)
 	return u
 

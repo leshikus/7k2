@@ -48,7 +48,7 @@ func to_dict() -> Dictionary:
 	return {
 		"actions": actions.map(func(a):
 			var c: Dictionary = a.duplicate()
-			c["unit"] = _oid(a["unit"])
+			c["unit"] = _oid(a["unit"]) if a["unit"] and is_instance_valid(a["unit"]) and not a["unit"].dead else 0
 			return c),
 		"last_action_id": last_action_id,
 		"capture": [_oid(capture_town), capture_plan_day, capture_start_day, capture_use_all],
@@ -526,6 +526,8 @@ func _do_build_firm(a: Dictionary) -> int:
 	var b: Unit = a["unit"] if a["unit"] != null else get_unit(true, race if code in ["BASE", "STABLE", "SPY"] else "", Vector2i(a["x"], a["y"]))
 	if b == null and code in ["CAMP", "FORT"]:
 		b = get_unit(false, "", Vector2i(a["x"], a["y"]))
+	if b == null and n.is_fryhtan:
+		b = get_fryhtan_builder(Vector2i(a["x"], a["y"]))
 	if b == null or not can_ai_build(code):
 		return 0
 	var at := Vector2i(a["x"], a["y"])
@@ -754,6 +756,41 @@ func find_unit_from_camp(race: String, dest: Vector2i) -> Unit:
 	for s in best.soldiers:
 		if s.race == race and s.basic_days <= 0:
 			best.release_unit(s)
+			return s
+	return null
+
+
+## Nation::ai_find_unit for a Fryhtan kingdom (the original asks for a unit
+## of the kingdom's race, which a Fryhtan of its brood is): an idle one in the
+## field, or one sent out of the nearest lair that keeps others.
+func get_fryhtan_builder(dest: Vector2i) -> Unit:
+	var best: Unit = null
+	var best_d := INF
+	for u in g.units:
+		if u.nation_id != n.id or u.dead or u.inside_firm != null or not SpecialFirms.is_fryhtan_unit(u):
+			continue
+		if u.order != Unit.Order.IDLE or u.ai_action_id > 0 or u.attacking or u.home_firm != null or u.rank == Defs.Rank.KING:
+			continue
+		var d := u.center_loc().distance_to(Vector2(dest))
+		if d < best_d:
+			best_d = d
+			best = u
+	if best:
+		return best
+	var lair: Firm = null
+	var best_r := 0
+	for f in my_firms("LAIR"):
+		if f.soldiers.size() < 2 or f.under_construction:
+			continue
+		var r := distance_rating(Vector2(dest), f.center_loc())
+		if r > best_r:
+			best_r = r
+			lair = f
+	if lair == null:
+		return null
+	for s in lair.soldiers:
+		if s.basic_days <= 0:
+			lair.release_unit(s)
 			return s
 	return null
 

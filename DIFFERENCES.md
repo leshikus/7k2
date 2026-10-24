@@ -43,6 +43,8 @@ of the original that are kept on purpose are listed at the end.
   selected people of its race in it; a group of units gets a Settle button.
 
 ### Interface
+- **More kingdom colours**: beyond the original's seven, eight further colours,
+  so that up to fifteen kingdoms (Fryhtan kingdoms included) look different.
 - **Start screen.** One Start button for every kind of game, on tabs; "Play
   as: a human kingdom / Fryhtans" chooses the side for a new game.
 - **A new game starts paused.**
@@ -55,6 +57,9 @@ of the original that are kept on purpose are listed at the end.
   collection takes exactly 10 loyalty (7 under the Norman Greater Being).
   In the original the button can be pressed again at once, taking more each
   time (up to 20).
+- **No building at the map's edge.** The 2-cell free band around a new
+  building or town must lie within the map (the original lets it end at the
+  edge, so buildings can stand against it).
 - **Placement preview.** The building is shown transparent where it would
   stand, with the link lines it would get and the 2-cell free band around it.
 - **Links.** A working link is drawn solid, one switched off dashed and dim
@@ -75,6 +80,17 @@ of the original that are kept on purpose are listed at the end.
   figures are set smaller to fit.
 
 ### Other
+- **Desertion below 30 loyalty**: a unit in the field below 30 with no kingdom
+  to go over to deserts with a chance of (30 - loyalty)/30 every 15 days
+  (the original: only at loyalty 0). Fryhtans can go over to another Fryhtan
+  kingdom that has a lair (the original asks for a base town in the region).
+- **The computer gathers its small towns**: a computer town under 20 people,
+  half a year old, with no mine of its own linked and no town of its race
+  linked, leaves by wagon for the nearest own town of its race at least 10
+  bigger.
+- **The computer walls its towns early**: every town of a computer kingdom
+  considers a first wall level with greater weight (the original considers
+  walls for its base towns only).
 - **The computer builds markets only for buyers, forts only for subjects**:
   a market only where a town of its own would be linked to it, a fort or camp
   only within reach of a town's people (the original builds a market beside
