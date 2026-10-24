@@ -664,6 +664,34 @@ func wagon_count() -> int:
 	return mini(population, Defs.MAX_WAGON_POPULATION)
 
 
+## The destruct button of a town being built (otownif.cpp button_destruct):
+## the settlers come out again - one on foot, more in a wagon - and half the
+## cost comes back (as for a cancelled building).
+func cancel_construction() -> void:
+	if not under_construction or dead:
+		return
+	var g := Game.inst
+	var c := g.exit_cell(footprint(), Vector2i(x1 + 3, y1 + Defs.TOWN_SIZE))
+	var u: Unit
+	if builder_pop > 1:
+		u = g.spawn_unit("WAGON", nation_id, c, 100.0)
+		if u:
+			u.wagon_pop = builder_pop
+			u.wagon_race = race
+	else:
+		u = g.spawn_unit(Defs.unit_sprite(race, "CIV"), nation_id, c, Defs.CITIZEN_COMBAT_LEVEL)
+	if u:
+		u.loyalty = builder_loyalty
+	var n := nation()
+	if n:
+		n.add_cash(Game.TOWN_BUILDING_COST / 2.0, "Construction")
+	builder_pop = 0
+	under_construction = false
+	population = 0
+	dead = true
+	g.on_town_destroyed(self)
+
+
 func recruit_wagon() -> Unit:
 	var count := wagon_count()
 	if count <= 0:

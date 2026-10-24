@@ -531,6 +531,12 @@ func _do_build_firm(a: Dictionary) -> int:
 	var at := Vector2i(a["x"], a["y"])
 	if code == "MINE":
 		at = Vector2i(a["rx"], a["ry"])
+	# World::can_build_firm, checked again when the builder sets to work: the
+	# place may have been taken since the order was given
+	if code != "MINE" and code != "ALCHEMY":
+		var fb := Assets.firm_build(code, race)
+		if not g.can_build_firm(code, at, fb.get("loc_w", 3), fb.get("loc_h", 3)):
+			return -1
 	# an addition: a fort or camp must still reach some town's people, a
 	# market a town of ours (the town it was meant for may be gone)
 	if code in ["CAMP", "FORT", "MARKET"]:

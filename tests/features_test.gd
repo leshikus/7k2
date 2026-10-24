@@ -240,6 +240,25 @@ func _ready() -> void:
 			_check(car.goal == rp or (not car.waypoints.is_empty() and car.path.size() > 0), "a caravan heads for its route point first (goal %s, point %s)" % [car.goal, rp])
 			_check(not car.waypoints.is_empty(), "and then on to its stop")
 
+	# --- a town being built can be cancelled; its settlers come out again
+	var settler := g.spawn_unit(Defs.unit_sprite(p.race, "CIV"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(-16, 10)), 10.0)
+	var tsite := Vector2i(-1, -1)
+	for y in range(4, g.world.h - 10, 3):
+		for x in range(4, g.world.w - 10, 3):
+			if tsite.x < 0 and g.can_build_town(Vector2i(x, y)):
+				tsite = Vector2i(x, y)
+	if tsite.x >= 0:
+		var nt := g.found_town(settler, tsite)
+		if nt:
+			var cash3 := p.cash
+			var nu := g.units.size()
+			nt.cancel_construction()
+			_check(nt.dead and g.units.size() == nu + 1 and is_equal_approx(p.cash - cash3, Game.TOWN_BUILDING_COST / 2.0), "a town under construction is cancelled: its settler is back, half the cost refunded")
+
+	# --- no building site on top of another place
+	var fp2 := fort.footprint()
+	_check(g.spawn_firm("MARKET", p.id, p.race, fp2.position + Vector2i(1, 1), false) == null, "a new site cannot go on top of a fort")
+
 	# --- saves listed newest first
 	SaveGame.save(g, "test_a")
 	OS.delay_msec(1100)

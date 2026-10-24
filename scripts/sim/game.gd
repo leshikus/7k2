@@ -988,6 +988,12 @@ func spawn_firm(code: String, nation_id: int, race: String, at: Vector2i, comple
 		f.raw = s.raw
 		f.reserve = s.reserve
 		s.mine = f
+	# a new building site never goes on top of another place
+	if not complete and not world.can_place(f.x1, f.y1, f.w, f.h, code == "MINE"):
+		if f.site and f.site.mine == f:
+			f.site.mine = null
+		f.free()
+		return null
 	objects.add_child(f)
 	firms.append(f)
 	world.occupy(f, f.x1, f.y1, f.w, f.h)

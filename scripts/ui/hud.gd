@@ -1520,6 +1520,9 @@ func _show_town(t: Town, rebuild: bool) -> void:
 		info_label.text = s + "Being built: %d%%  %s\n%d settlers will move in." % [int(t.build_progress), _bar(t.build_progress, 100, "#c0a060"), t.builder_pop]
 		if rebuild:
 			_clear_actions()
+			if t.nation_id == game.player_id:
+				_add_action("Cancel town (+%d)" % int(Game.TOWN_BUILDING_COST / 2.0), func(): _do(t, "cancel_construction"), true,
+					"Stop building this town: its settlers come out again and half the cost comes back.", Callable(), "✖")
 		return
 	s += "Population %d (%d employed, %d jobless)\n" % [t.population, t.employed, t.jobless()]
 	if t.nation_id > 0:
