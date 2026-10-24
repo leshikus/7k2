@@ -311,6 +311,12 @@ func _build_ui() -> void:
 			["🧠", "Computer's information (cheat)", func():
 				GameOptions.set_opt("show_ai_info", not GameOptions.get_opt("show_ai_info"))
 				game.notify("Computer's information %s." % ("shown" if GameOptions.get_opt("show_ai_info") else "hidden"), Vector2(-1, -1))],
+			["🏳", "Retire (the game is scored for the Hall of Fame)", func():
+				if game.campaign_battle == null and not game.config.get("campaign", false) and not Net.active and not game.observer():
+					toggle_pause_menu()
+					game.retire()
+				else:
+					game.notify("You cannot retire from this game.", Vector2(-1, -1))],
 			["🆕", "New game", func(): menu_new_game.emit()], ["🚪", "Quit", func(): get_tree().quit()]]:
 		var b := Button.new()
 		_icon_button(b, item[0], item[1])
@@ -1054,7 +1060,17 @@ func _owner_line(o: GameObj) -> String:
 # ---------------------------------------------------------------- units ---
 
 func _show_unit(u: Unit, rebuild: bool) -> void:
-	portrait.texture = Assets.unit_icon("I_UNITLI.RES", u.utype.get("icon_ptr", 0)) if u.utype.get("icon_ptr", 0) > 0 else null
+	# people: their portrait (I_UNITLI.RES); Fryhtans, beasts and machines:
+	# their own figure - the game's portraits for them are another set of
+	# creatures altogether (M_SKELET for Kharshuf, M_MAN for the Rhinokeros...)
+	portrait.texture = null
+	if u.is_human():
+		if int(u.utype.get("icon_ptr", 0)) > 0:
+			portrait.texture = Assets.unit_icon("I_UNITLI.RES", u.utype.get("icon_ptr", 0))
+	else:
+		var fr := Assets.sprite_frame(u.sprite_code, "S", Iso.dir_map[4], 0, u.nation_color())
+		if not fr.is_empty():
+			portrait.texture = fr[0]
 	title_label.text = u.display_name()
 	var s := "%s\n%s\n" % [u.type_name(), _owner_line(u)]
 	s += "Hit points %d / %d  %s\n" % [int(u.hp), int(u.max_hp), _bar(u.hp, u.max_hp, "#60d060")]

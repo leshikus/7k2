@@ -1,11 +1,11 @@
 class_name HallOfFame
 extends RefCounted
-## The Hall of Fame (ogamhall.cpp): the ten best games of human and of Fryhtan
+## The Hall of Fame (ogamhall.cpp): the six best games of human and of Fryhtan
 ## rulers. A game's final score is its total ranking score times the difficulty
 ## rating of its settings, divided by 100 (ogamend.cpp disp_score).
 
 const PATH := "user://hall_of_fame.json"
-const SIZE := 10
+const SIZE := 6         # HALL_FAME_NUM
 
 
 ## Config::human_difficulty_rating / monster_difficulty_rating, worked out when
@@ -34,8 +34,8 @@ static func load_all() -> Dictionary:
 ## Records a finished game; returns its place (1..10) or 0.
 static func add(g: Game, final_score: int, rating: int) -> int:
 	var p := g.player()
-	if p == null:
-		return 0
+	if p == null or final_score <= 0:
+		return 0           # GameFileArray::add_hall_of_fame: only above the empty entries' 0
 	var all := load_all()
 	var kind := "fryhtan" if p.is_fryhtan else "human"
 	var list: Array = all.get(kind, [])

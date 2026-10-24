@@ -60,6 +60,9 @@ of the original that are kept on purpose are listed at the end.
 - **Links.** A working link is drawn solid, one switched off dashed and dim
   with a cross; an inn's links (to other inns) are not drawn, as in the
   original.
+- **Fryhtan, beast and machine portraits** are their own figures: the game's
+  portraits for them (I_UNITLI.RES, by the unit table) are a different set of
+  creatures - Kharshuf's is "M_SKELET", the Rhinokeros's "M_MAN".
 - **Fort occupants** are shown by their sprites with a figure under each;
   Alt+1-4 picks combat, leadership, loyalty or hit points.
 - **Town loyalty breakdown.** The town panel lists how its target loyalty is

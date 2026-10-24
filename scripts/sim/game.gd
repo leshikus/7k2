@@ -2937,6 +2937,15 @@ func call_for_help(victim: GameObj, attacker: GameObj) -> void:
 			u.resume_target = building
 
 
+## Game::game_end(retireFlag): the player retires; the game is scored and
+## may enter the Hall of Fame.
+func retire() -> void:
+	if over or player() == null or not player().alive:
+		return
+	over = true
+	game_over.emit(false, "You have retired from the throne of the %s." % player().name)
+
+
 func declare_war(a: int, b: int) -> void:
 	var na := nation(a)
 	var nb := nation(b)
