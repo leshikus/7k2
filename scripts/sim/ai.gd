@@ -523,12 +523,9 @@ func _town_at(x: int, y: int) -> Town:
 func _do_build_firm(a: Dictionary) -> int:
 	var code: String = a["para"]
 	var race: String = a["para2"] if str(a["para2"]) != "" else n.race
-	var b: Unit = a["unit"] if a["unit"] != null else get_unit(true, race if code in ["BASE", "STABLE", "SPY"] else "", Vector2i(a["x"], a["y"]))
-	if b == null and code in ["CAMP", "FORT"]:
-		b = get_unit(false, "", Vector2i(a["x"], a["y"]))
-	if b == null and n.is_fryhtan:
-		b = get_fryhtan_builder(Vector2i(a["x"], a["y"]))
-	if b == null or not can_ai_build(code):
+	# the money and the place are checked before a builder is taken: one
+	# called out of a camp or lair for nothing would only walk back in
+	if not can_ai_build(code):
 		return 0
 	var at := Vector2i(a["x"], a["y"])
 	if code == "MINE":
@@ -547,6 +544,13 @@ func _do_build_firm(a: Dictionary) -> int:
 		var reach := Defs.effective_distance(code, "")
 		if not g.towns.any(func(t): return not t.dead and (code != "MARKET" or t.nation_id == n.id) and Game._center_dist(fc, t.center_loc()) <= reach):
 			return -1
+	var b: Unit = a["unit"] if a["unit"] != null else get_unit(true, race if code in ["BASE", "STABLE", "SPY"] else "", Vector2i(a["x"], a["y"]))
+	if b == null and code in ["CAMP", "FORT"]:
+		b = get_unit(false, "", Vector2i(a["x"], a["y"]))
+	if b == null and n.is_fryhtan:
+		b = get_fryhtan_builder(Vector2i(a["x"], a["y"]))
+	if b == null:
+		return 0
 	var f := g.spawn_firm(code, n.id, race, at, false)
 	if f == null:
 		return -1

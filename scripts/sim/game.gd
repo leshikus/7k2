@@ -2784,6 +2784,17 @@ func succeed_king(n: Nation, u: Unit) -> void:
 	for t in towns:
 		if t.nation_id == n.id and not t.dead and t.population > 0:
 			t.loyalty = clampf(t.loyalty + change + race_change.call(t.race), 0.0, 100.0)
+	# Spy::think_become_king: a bribed man (secretly another kingdom's) on the
+	# throne hands a computer kingdom over to his master when loyal enough to
+	# him - the more so the weaker his new kingdom is - or else keeps it
+	var master := u.sleeper_for
+	if master > 0 and nation(master) != null and nation(master).alive:
+		var accept := 90 + Diplomacy.overall_rank(self, n) - Diplomacy.overall_rank(self, nation(master))
+		u.sleeper_for = 0
+		if u.loyalty >= accept and n.ai != null and n.id != player_id:
+			notify("%s, secretly in the service of the %s, takes the throne and hands the %s over." % [u.unit_name, nation(master).name, n.name], u.center_loc())
+			Diplomacy.surrender(self, n.id, master)
+			return
 	u.rank = Defs.Rank.KING
 	u.leader = null
 	u.loyalty = 100.0

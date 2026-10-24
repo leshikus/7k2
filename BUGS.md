@@ -12,6 +12,12 @@ departs from the original game, in DIFFERENCES.md).
   refuse attack orders on unreachable targets. *Under observation*: report any
   group that still stands still for long.
 
+- **Fryhtan commanders swapping a lair** (found by the long-game audit;
+  likely the stuck groups reported): when a second commander enters a lair,
+  he takes command and the old one comes out (FirmCamp::assign_overseer);
+  the one put out walks back in and the two swap daily, their troops
+  standing at the door. *Not fixed yet.*
+
 ## Fixed
 
 | Report | Status |
