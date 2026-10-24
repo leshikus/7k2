@@ -10,8 +10,9 @@ repository.
 ## Running
 
 1. Install Godot 4.3 (standard build, not .NET).
-2. Run `run.bat` (Windows; set `GODOT` to your Godot executable if it is not on `PATH`),
-   or `godot --path .`, or open the project in the Godot editor and press F5.
+2. Run `run.bat` (Windows, double-click) or `./run.sh` (Linux/macOS/Git Bash). Both
+   use `GODOT` if set, else Godot on `PATH`, else `~/tools/godot/`. Or run
+   `godot --path .`, or open the project in the Godot editor and press F5.
 3. The start screen finds the game automatically in common Steam/GOG folders. If it
    doesn't, paste the install folder (the one containing `Resource`, `Sprite`,
    `Firm`) and press **Load**. The path is remembered.

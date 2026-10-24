@@ -135,7 +135,7 @@ func _build_ui() -> void:
 		b.tooltip_text = s[2]
 		b.toggle_mode = true
 		b.focus_mode = Control.FOCUS_NONE      # Space must reach the pause key, not press a focused button
-		b.custom_minimum_size = Vector2(34, 0)
+		b.custom_minimum_size = Vector2(46, 0)      # all four alike, as wide as ▶▶▶
 		var spd: float = s[1]
 		b.pressed.connect(func(): _set_speed(spd))
 		hb.add_child(b)
@@ -777,6 +777,7 @@ func _process(delta: float) -> void:
 	_refresh_timer = 0.25
 	_update_top()
 	refresh_selection()
+	_update_hover_tip()
 	# the speed buttons follow the game, however it was paused (P, Space, the start)
 	var st := [game.paused, game.speed]
 	if st != _speed_state:
@@ -785,6 +786,48 @@ func _process(delta: float) -> void:
 
 
 var _speed_state := []
+var _hover_tip: Label = null
+
+
+## A unit under the mouse: who it is, and the general it follows (TeamInfo):
+## near him it strikes harder by his leadership.
+static func squad_line(u: Unit) -> String:
+	var lg := u.leading_general()
+	if lg:
+		return "Led by %s: +%d%% damage" % [lg.display_name(), mini(int(lg.lead_skill()), 100)]
+	if u.leader and is_instance_valid(u.leader) and not u.leader.dead:
+		return "Led by %s (too far away to help)" % u.leader.display_name()
+	if u.rank >= Defs.Rank.GENERAL:
+		var men := Game.inst.units.filter(func(m): return m.leader == u and not m.dead).size()
+		if men > 0:
+			return "Leads %d men" % men
+	return ""
+
+
+func _update_hover_tip() -> void:
+	if _hover_tip == null:
+		_hover_tip = Label.new()
+		_hover_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_hover_tip.add_theme_font_size_override("font_size", 13)
+		_hover_tip.add_theme_color_override("font_outline_color", Color.BLACK)
+		_hover_tip.add_theme_constant_override("outline_size", 4)
+		ui_root.add_child(_hover_tip)
+	var u = game.hovered
+	if not (u is Unit) or not is_instance_valid(u) or u.dead or u.inside_firm != null or (u.nation_id != game.player_id and not u.visible):
+		_hover_tip.visible = false
+		return
+	var lines: Array = [u.display_name()]
+	if u.is_human() or SpecialFirms.is_fryhtan_unit(u):
+		var stats := "Combat %d" % int(u.combat)
+		if u.has_loyalty() and u.rank != Defs.Rank.KING and (u.nation_id == game.player_id or GameOptions.get_opt("show_ai_info")):
+			stats += ", loyalty %d" % int(u.loyalty)
+		lines.append(stats)
+	var sq := squad_line(u)
+	if sq != "":
+		lines.append(sq)
+	_hover_tip.text = "\n".join(lines)
+	_hover_tip.position = get_viewport().get_mouse_position() + Vector2(16, 18)
+	_hover_tip.visible = true
 
 
 func _update_top() -> void:
@@ -1185,6 +1228,8 @@ func _unit_actions(sel: Array) -> void:
 					"Then click a market of yours or of a kingdom with a trade treaty, or a mine or factory of yours. The caravan travels between its two stops. Right-click: clear this stop.",
 					func(): _do(u, "del_caravan_stop", [si]), "①" if si == 0 else "②")
 				sb.text = ("①" if si == 0 else "②") + (" ＋" if cur_stop == "none" else " ✎")
+			_add_action("Clear route (%d)" % u.route.size(), func(): _do(u, "clear_route"), not u.route.is_empty(),
+				"Shift+right-click the ground to add places the caravan passes between its two stops (stop 1 to stop 2 in order, back the other way). Click: forget them.", Callable(), "🧭")
 			_add_action("Clone caravan", func(): _do(u, "duplicate_caravan"), Caravans.duplicate_market(u) != null,
 				"Hire another caravan with the same stops and goods (your kingdom keeps one for every ten people).", Callable(), "🐫")
 			for i in u.stops.size():
@@ -1268,7 +1313,7 @@ func _spy_info(place: GameObj) -> String:
 	var mine := Espionage.spies_in(place).filter(func(x): return x.nation_id == game.player_id)
 	if mine.is_empty():
 		return ""
-	var s := "\n[color=#c0a0ff]Your spies here: %s[/color]\n" % ", ".join(mine.map(func(x): return "%s (%d)" % [x.unit_name, int(x.spy_skill)]))
+	var s := "\n[color=#c0a0ff]Your spies here: %s[/color]\n" % ", ".join(mine.map(func(x): return "%s (skill %d, loyalty %d)" % [x.unit_name, int(x.spy_skill), int(x.loyalty)]))
 	if place.nation_id == game.player_id:
 		return s + "They watch for enemy spies.\n"
 	s += "Mission: %s\n" % ("sow dissent" if mine[0].spy_action == "dissent" else "sleep (lie low)")
@@ -1293,6 +1338,13 @@ func _spy_actions(place: GameObj) -> void:
 	var spy: Unit = mine[0]
 	var p := game.player()
 	_add_action("Recall spy", func(): _do(game, "spy_leave", [mine[-1]]), true, "Your least skilled spy here walks out, wearing the place's colours.")
+	# Spy::reward: the least loyal of your spies here
+	var shaky: Unit = mine[0]
+	for x in mine:
+		if x.loyalty < shaky.loyalty:
+			shaky = x
+	_add_action("Reward spy (%d)" % int(Unit.REWARD_COST), func(): _do(shaky, "reward", [game.player_id]), p.cash >= Unit.REWARD_COST,
+		"Give %d gold to your least loyal spy here (%s, loyalty %d): +%d loyalty. A spy whose loyalty falls below %d may go over to those he lives among." % [int(Unit.REWARD_COST), shaky.display_name(), int(shaky.loyalty), int(Unit.REWARD_LOYALTY_INCREASE), Defs.UNIT_BETRAY_LOYALTY])
 	if place.nation_id == game.player_id:
 		return
 	_add_action("Mission: " + ("Dissent" if spy.spy_action == "dissent" else "Sleep"), func():
@@ -1673,7 +1725,6 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				else:
 					_add_action("Upgrade to fort (%d)" % int(fort_cost), func(): _do(f, "start_upgrade", ["FORT"]), p.cash >= fort_cost,
 						"Rebuild this camp as a fort: stronger walls, archers and room for the same troops, who stay inside.")
-			_add_action("Eject all", func(): _do(f, "eject_all"))
 			_add_action("Fill from towns", func(): _fill_camp(f), true, "Villagers from your linked towns join this fort at once (towns need loyalty %d+)." % Defs.MIN_RECRUIT_LOYALTY)
 			# FirmCamp sortie: enabled with a commander or a trained soldier; right-click changes the kind
 			if f.soldiers.any(func(x): return x.is_human()) or (f.overseer and f.overseer.rank != Defs.Rank.KING):
@@ -1689,6 +1740,10 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 						_do(m, "set", ["auto_reward", naw]), true,
 					"Reward the men here (%d gold, +%d loyalty) automatically whenever one's loyalty falls below this." % [int(Unit.REWARD_COST), int(Unit.REWARD_LOYALTY_INCREASE)])
 				awb.text = "💰 " + ("—" if aw == 0 else "<%d" % aw)
+			# of_campi.cpp button_defense: whether the men go out to defend
+			var dfb := _add_action("Defend" + (" ✓" if f.defense_flag else ""), func(): _do(f, "set", ["defense_flag", not f.defense_flag]), true,
+				"On: soldiers come out to fight off whoever attacks this fort or the towns and buildings near it. Off: they stay inside.")
+			dfb.text = "🛡" + (" ✓" if f.defense_flag else " ✗")
 			_sortie_button(f, "Send out soldiers")
 			_occupant_buttons(f)
 		"LAIR":
@@ -1949,7 +2004,10 @@ func _occupant_buttons(f: Firm) -> void:
 		var fr := Assets.sprite_frame(who.sprite_code, "S", Iso.dir_map[4], 0, who.nation_color())
 		var mark := "👑" if who.rank == Defs.Rank.KING else ("★" if who.rank >= Defs.Rank.GENERAL else "")
 		b.text = (mark if mark != "" else "") + _occupant_value(who)
-		b.tooltip_text = lbl + " — combat %d, leadership %d, loyalty %s, hit points %d/%d" % [int(who.combat), int(who.lead_skill()),
+		var led := ""
+		if who != f.overseer and f.overseer != null and f.overseer.rank >= Defs.Rank.GENERAL:
+			led = ". Led by %s: when they go out together, +%d%% damage" % [f.overseer.display_name(), mini(int(f.overseer.lead_skill()), 100)]
+		b.tooltip_text = lbl + led + " — combat %d, leadership %d, loyalty %s, hit points %d/%d" % [int(who.combat), int(who.lead_skill()),
 			"—" if who.rank == Defs.Rank.KING or not who.has_loyalty() else str(int(who.loyalty)), int(who.hp), int(who.max_hp)]
 		b.add_theme_font_size_override("font_size", 13)
 		if not fr.is_empty():

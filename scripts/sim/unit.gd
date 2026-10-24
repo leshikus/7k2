@@ -55,6 +55,7 @@ var sleeper_for := 0             # a bribed general or soldier: the kingdom he s
 var loyalty := 70.0              # a soldier's or general's loyalty to his kingdom (Unit::loyalty)
 var nation_contribution := 0     # Unit::nation_contribution: a point for every blow struck
 var total_reward := 0            # Unit::total_reward: gold he has been rewarded with
+var route: Array = []             # caravan: [x, y] points on the way from stop 1 to stop 2 (an addition)
 var stops: Array = []             # caravan: up to two stops {firm, x, y, pick, picks} (UnitCaravan::stop_array)
 var dest_stop := -1               # caravan: the stop it is heading for (dest_stop_id)
 var journey := "none"             # caravan: none | on_way | surround | inside (journey_status)
@@ -784,6 +785,16 @@ func set_caravan_stop(i: int, f: Firm) -> bool:
 
 func del_caravan_stop(i: int) -> void:
 	Caravans.del_stop(self, i)
+
+
+## A caravan's route (an addition): places it passes between its stops.
+func add_route_point(at: Vector2i) -> void:
+	if is_caravan and route.size() < 8:
+		route.append([at.x, at.y])
+
+
+func clear_route() -> void:
+	route.clear()
 
 
 func set_caravan_pick_up(i: int, what: String) -> void:
@@ -1554,6 +1565,20 @@ func _draw() -> void:
 func render(cv) -> void:
 	if inside_firm:
 		return
+	# a selected caravan of yours: its stops and route (dashed)
+	if selected and is_caravan and nation_id == Game.inst.player_id and stops.size() >= 2:
+		var o2 := -position
+		var chain: Array = []
+		if not stops[0].is_empty() and is_instance_valid(stops[0]["firm"]):
+			chain.append(stops[0]["firm"].center_loc())
+		for rp in route:
+			chain.append(Vector2(int(rp[0]), int(rp[1])) + Vector2(0.5, 0.5))
+		if not stops[1].is_empty() and is_instance_valid(stops[1]["firm"]):
+			chain.append(stops[1]["firm"].center_loc())
+		for i in range(chain.size() - 1):
+			Game.draw_dashes(cv, o2 + Iso.to_screen(chain[i]), o2 + Iso.to_screen(chain[i + 1]), Color(1, 0.85, 0.3, 0.85), 2.0, 7.0)
+		for rp in route:
+			cv.draw_circle(o2 + Iso.to_screen(Vector2(int(rp[0]), int(rp[1])) + Vector2(0.5, 0.5)), 4.0, Color(1, 0.85, 0.3))
 	# the place a builder of yours is on his way to (dashed, until he lays it out)
 	if not build_plan.is_empty() and nation_id == Game.inst.player_id:
 		var r := _plan_rect()
@@ -1611,6 +1636,29 @@ func render(cv) -> void:
 		cv.draw_polyline(PackedVector2Array([c + Vector2(0, -5), c + Vector2(5, 0), c + Vector2(0, 5), c + Vector2(-5, 0), c + Vector2(0, -5)]), Color.BLACK, 1.0)
 	if selected or hp < max_hp:
 		draw_hp_bar_on(cv, Vector2(0, -44), 28)
+
+
+## Unit::draw_selected's hit bar: its colour tells the unit's strength - up to
+## 50 hit points green, up to 100 yellow, more violet - and its length the
+## share of the band's maximum the unit has; the lost part is dark.
+const HIT_BAR_BANDS := [[50.0, Color(0.25, 0.85, 0.25)], [100.0, Color(0.95, 0.85, 0.15)], [200.0, Color(0.75, 0.35, 0.95)]]
+
+
+func draw_hp_bar_on(cv, at: Vector2, width: float) -> void:
+	var band: Array = HIT_BAR_BANDS[-1]
+	for b in HIT_BAR_BANDS:
+		if max_hp <= b[0]:
+			band = b
+			break
+	var bar_max := maxf(max_hp, band[0])
+	var w := maxf(6.0, width * max_hp / bar_max)
+	var f := clampf(hp / maxf(1.0, max_hp), 0.0, 1.0)
+	var x0 := at - Vector2(width * 0.5, 0)
+	var col: Color = band[1]
+	cv.draw_rect(Rect2(x0, Vector2(w, 4)), Color(0.25, 0.25, 0.25, 0.85))
+	cv.draw_rect(Rect2(x0 + Vector2(1, 1), Vector2((w - 2) * f, 2)), col)
+	cv.draw_line(x0 + Vector2(0, 0), x0 + Vector2(w * f, 0), col.lightened(0.35), 1.0)
+	cv.draw_line(x0 + Vector2(0, 3), x0 + Vector2(w * f, 3), col.darkened(0.4), 1.0)
 
 
 func _draw_selection(cv, col: Color) -> void:

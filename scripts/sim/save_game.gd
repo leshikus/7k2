@@ -204,7 +204,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"builder": _id(f.builder), "overseer": _id(f.overseer), "soldiers": f.soldiers.map(func(u): return u.obj_id),
 		"site": g.sites.find(f.site), "raw": f.raw, "reserve": f.reserve, "stock": f.stock, "raw_stock": f.raw_stock,
 		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
-		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "inn_policy": f.inn_policy, "monster": f.monster_code, "raid_timer": f.raid_timer,
+		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "inn_policy": f.inn_policy, "defense": f.defense_flag, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
 		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "repair": f.repair, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress], "upgrade": [f.upgrading, f.upgrade_percent],
 		"ai": [f.should_close, f.no_neighbor_space, f.setup_day, _live_ids(f.patrol_units), _live_ids(f.coming_units),
@@ -224,7 +224,7 @@ static func _unit(u: Unit) -> Dictionary:
 		"item": [u.item_id, u.item_para],
 		"stops": u.stops.map(func(st): return {"firm": _id(st["firm"]), "x": st["x"], "y": st["y"], "pick": st["pick"], "picks": st["picks"]}),
 		"caravan": [u.dest_stop, u.journey, u.wait, u.market_auto, u.last_load_day], "cargo": u.cargo,
-		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action], "merit": [u.nation_contribution, u.total_reward], "hero_id": [u.hero_id, u.max_combat], "behavior": u.behavior_mode, "auto": [u.auto_retreat, u.auto_reward], "spy_notify": u.spy_notify, "plan": u.build_plan,
+		"ai": [u.ai_action_id, u.in_attack_mission, u.ai_no_action], "merit": [u.nation_contribution, u.total_reward], "hero_id": [u.hero_id, u.max_combat], "behavior": u.behavior_mode, "auto": [u.auto_retreat, u.auto_reward], "spy_notify": u.spy_notify, "plan": u.build_plan, "route": u.route,
 	}
 
 
@@ -462,6 +462,7 @@ static func load_path(g: Game, path: String) -> String:
 		f.weapon_queue = int(fd["weapon_queue"])
 		f.heroes = fd["heroes"]
 		f.inn_policy = int(fd.get("inn_policy", 0))
+		f.defense_flag = bool(fd.get("defense", true))
 		f.monster_code = fd["monster"]
 		f.raid_timer = int(fd["raid_timer"])
 		f.max_hp = float(fd.get("max_hp", f.max_hp))
@@ -536,6 +537,7 @@ static func load_path(g: Game, path: String) -> String:
 		u.behavior_mode = int(ud.get("behavior", Unit.Behavior.AGGRESSIVE))
 		u.spy_notify = bool(ud.get("spy_notify", false))
 		u.build_plan = ud.get("plan", {})
+		u.route = ud.get("route", [])
 		var au: Array = ud.get("auto", [0, 0])
 		u.auto_retreat = int(au[0])
 		u.auto_reward = int(au[1])

@@ -182,6 +182,72 @@ static func persian_bonus(nation_id: int) -> int:
 
 # -------------------------------------------------------------- daily ---
 
+## Spy::update_loyalty: towards 50, a quarter of the kingdom's reputation and
+## of its ranking, and 20 more for a spy of the kingdom's own race.
+static func update_spy_loyalty(g: Game, u: Unit) -> void:
+	var n := g.nation(u.nation_id)
+	if n == null:
+		return
+	var t := 50 + int(n.reputation) / 4 + Diplomacy.overall_rank(g, n) / 4
+	if u.race == Unit.kingdom_race(n):
+		t += 20
+	t = mini(t, 100)
+	if u.loyalty > t:
+		u.loyalty -= 1.0
+	elif u.loyalty < t:
+		u.loyalty += 1.0
+
+
+## The kingdom a spy passes for: his disguise in the field, or the colours of
+## the place he has slipped into.
+static func spy_cloaked_nation(u: Unit) -> int:
+	if u.spy_place != null and is_instance_valid(u.spy_place):
+		return u.spy_place.nation_id
+	return cloak_nation(u)
+
+
+## Spy::think_betray: below 30, a spy who passes for another kingdom may turn
+## to it - its reputation, and its race, against his loyalty.
+static func spy_think_betray(g: Game, u: Unit) -> bool:
+	if u.loyalty >= Defs.UNIT_BETRAY_LOYALTY:
+		return false
+	var cn := spy_cloaked_nation(u)
+	if cn == u.nation_id or cn <= 0:
+		return false
+	var n := g.nation(cn)
+	if n == null or not n.alive:
+		return false
+	var score := int(n.reputation)
+	if Unit.kingdom_race(n) == u.race:
+		score += 30
+	if u.loyalty < score or u.loyalty <= 0.0:
+		g.notify_nation(u.nation_id, "Your spy %s has gone over to the %s." % [u.display_name(), n.name], u.center_loc())
+		drop_identity_in_place(g, u, cn)
+		return true
+	return false
+
+
+## Spy::drop_spy_identity for a spy anywhere: in the field he becomes a unit
+## of the side he passes for; in a town he becomes one of its people; in a
+## fort an ordinary man of it.
+static func drop_identity_in_place(g: Game, u: Unit, to: int) -> void:
+	if u.spy_place != null and is_instance_valid(u.spy_place):
+		var place = u.spy_place
+		g.spies.erase(u)
+		u.spy_place = null
+		if place is Town:
+			g.remove_unit(u)           # one of the townspeople now (the town's count already holds him)
+			return
+		u.remove_meta("hidden")
+		u.visible = true
+	u.is_spy = false
+	u.spy_skill = 0.0
+	u.cloak_id = 0
+	u.camouflage_days = 0
+	if to != u.nation_id:
+		g.defect_unit(u, to)
+
+
 static func next_day(g: Game) -> void:
 	var day := g.day
 	# infiltrated spies: actions, skill
@@ -199,6 +265,12 @@ static func next_day(g: Game) -> void:
 		var every := 80 if u.spy_action == "idle" else 40
 		if day % every == u.obj_id % every and u.spy_skill < 100.0:
 			u.spy_skill += 1.0
+	# Spy::next_day: every 60 days a spy's loyalty to his true kingdom moves a
+	# point, and one losing faith may go over to the side he passes for
+	for u in g.units.duplicate():
+		if u.is_spy and not u.dead and u.nation_id > 0 and day % 60 == u.obj_id % 60:
+			update_spy_loyalty(g, u)
+			spy_think_betray(g, u)
 	# counter-espionage: every place looks for intruders once a month
 	for p in places:
 		if day % 30 == p.obj_id % 30:

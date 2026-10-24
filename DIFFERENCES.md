@@ -16,7 +16,7 @@ of the original that are kept on purpose are listed at the end.
     go to command a camp without a commander or with a weaker one.
   Units of combat 100 or more are left to the player. The computer, besides
   the original's hiring of generals and spies, hires good soldiers (combat
-  40-99, leadership at most half of it) for its forts when its military
+  40-99) for its forts when its military
   budget allows.
 - **Auto reward.** Soldiers and generals (selected units, all units with a
   right-click, or the men of a fort) can be rewarded automatically, 30 gold
@@ -35,6 +35,10 @@ of the original that are kept on purpose are listed at the end.
   when its material runs out). Here markets and caravans also take the goods
   of its other products, so a switch strands nothing; in the original they
   wait until the factory switches back.
+- **Caravan routes.** With a caravan selected, Shift+right-click on the
+  ground adds a point it passes between its two stops (in order from stop 1
+  to stop 2, back the other way); the route is drawn while it is selected.
+  The original's caravans go straight between their stops.
 - **Settling by right-click.** Right-clicking one of your towns settles the
   selected people of its race in it; a group of units gets a Settle button.
 

@@ -215,6 +215,31 @@ func _ready() -> void:
 		_check(gk.has_loyalty() and not bz.has_loyalty(), "a Fryhtan has loyalty, a Bheema not")
 		_check(gk.can_garrison(), "a Fryhtan can man a fort")
 
+	# --- a spy's loyalty (Spy::update_loyalty, think_betray)
+	var sp3 := g.spawn_unit(Defs.unit_sprite(p.race, "INF"), p.id, g.free_unit_cell(Vector2i(home.center_loc()) + Vector2i(4, 14)), 30.0)
+	sp3.is_spy = true
+	sp3.spy_skill = 40.0
+	sp3.loyalty = 40.0
+	Espionage.update_spy_loyalty(g, sp3)
+	_check(sp3.loyalty == 41.0, "a spy's loyalty moves a point towards its target (%.0f)" % sp3.loyalty)
+	sp3.cloak_id = foe.id
+	sp3.loyalty = 10.0
+	foe.reputation = 50.0
+	_check(Espionage.spy_think_betray(g, sp3) and not sp3.is_spy and sp3.nation_id == foe.id, "a spy losing faith goes over to those he passes for")
+
+	# --- a caravan's route (an addition): it passes the points between its stops
+	var car := Caravans.hire(mk) if Caravans.can_hire(mk) > 0 else null
+	if car:
+		car.set_caravan_stop(0, mk)
+		var other_mk := g.spawn_firm("MARKET", p.id, p.race, g._place_near(home.footprint(), 5, 5, 14, [home.center_loc()]), true)
+		if other_mk and car.set_caravan_stop(1, other_mk):
+			var rp := Vector2i(car.cell()) + Vector2i(3, 3)
+			car.add_route_point(rp)
+			car.dest_stop = 1
+			Caravans._go(car, other_mk)
+			_check(car.goal == rp or (not car.waypoints.is_empty() and car.path.size() > 0), "a caravan heads for its route point first (goal %s, point %s)" % [car.goal, rp])
+			_check(not car.waypoints.is_empty(), "and then on to its stop")
+
 	# --- saves listed newest first
 	SaveGame.save(g, "test_a")
 	OS.delay_msec(1100)

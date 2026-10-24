@@ -78,6 +78,7 @@ var weapon := ""
 var weapon_progress := 0.0
 var weapon_queue := 0
 var heroes: Array = []              # inn: its guests for hire (FirmInn::inn_unit_array; see Inn)
+var defense_flag := true            # FirmCamp::defense_flag: soldiers go out to defend (on by default)
 var inn_policy := 0                 # inn: Inn.Policy, the player's standing hiring orders
 var trainees: Array = []            # training ground, espionage college: Training records (FirmTrain::trainee_array)
 var monster_code := ""              # lair: monster unit sprite
@@ -854,7 +855,7 @@ func _train() -> void:
 
 ## Send the garrison out against enemies that come close.
 func _defend() -> void:
-	if soldiers.is_empty():
+	if soldiers.is_empty() or not defense_flag:
 		return
 	var enemy := Game.inst.find_enemy_near(self, 7.0)
 	if enemy == null:
@@ -1070,6 +1071,7 @@ func sell_firm() -> void:
 	if n.is_fryhtan:
 		n.live_points += float(ft.get("live_cost", 0)) / 2.0 * k
 	Game.inst.play_sound("F", code, "SELL", center_loc())
+	set_meta("sold", true)      # Firm::sell_firm: simply gone, no ruins (FirmDie is for the destroyed)
 	die(null)
 
 

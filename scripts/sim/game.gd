@@ -2773,7 +2773,7 @@ func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 	world.release(f.x1, f.y1, f.w, f.h)
 	if f.site:
 		f.site.mine = null
-	if not f.under_construction and f.visible:
+	if not f.under_construction and f.visible and not f.has_meta("sold"):
 		spawn_effect(1, Vector2(f.x1, f.y1))
 		# rubble sized to the building (FirmDie parts 6: 3x3, 5: 6x6, 4: others)
 		var part := 6 if f.w <= 3 else (5 if f.w >= 6 else 4)
@@ -2903,6 +2903,8 @@ func invoke_camp_defense(victim: GameObj, attacker: GameObj) -> void:
 	if need <= 0.0:
 		return
 	for f in camps:
+		if not f.defense_flag:
+			continue        # FirmCamp::invoke_defense: only with the defense mode on
 		var power := 0.0
 		for s in f.soldiers.duplicate():
 			if power > need * 2.5:

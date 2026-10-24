@@ -215,7 +215,29 @@ static func _near(u: Unit, f: Firm) -> bool:
 
 
 static func _go(u: Unit, f: Firm) -> void:
-	u.order_move_free(Game.inst.world.adjacent_to_rect(f.footprint(), u.cell()))
+	var dest := Game.inst.world.adjacent_to_rect(f.footprint(), u.cell())
+	if u.route.is_empty() or u.stops.size() < 2:
+		u.order_move_free(dest)
+		return
+	# its route (an addition): stop 1 to stop 2 by the points in order, back
+	# the other way; points it has already passed are skipped
+	var pts: Array = u.route.map(func(p): return Vector2i(int(p[0]), int(p[1])))
+	if u.dest_stop == 0:
+		pts.reverse()
+	var start := 0
+	var best := INF
+	for i in pts.size():
+		var d := Vector2(pts[i]).distance_to(u.center_loc())
+		if d < best:
+			best = d
+			start = i
+	if best <= 3.0:
+		start += 1           # standing at one: on to the next
+	var rest: Array = pts.slice(start)
+	rest.append(dest)
+	u.order_move_free(rest[0])
+	for i in range(1, rest.size()):
+		u.waypoints.append(rest[i])
 
 
 static func _treaty(u: Unit, f: Firm) -> bool:

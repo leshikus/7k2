@@ -1473,7 +1473,12 @@ func _command(force_attack: bool) -> void:
 				return
 	if Input.is_key_pressed(KEY_SHIFT):
 		for u in own:
-			Net.cmd(u, "add_waypoint", [Vector2i(_mouse_loc().floor())])
+			if u.is_caravan and u.stops.size() >= 2:
+				Net.cmd(u, "add_route_point", [Vector2i(_mouse_loc().floor())])      # a caravan: a point on its route
+			else:
+				Net.cmd(u, "add_waypoint", [Vector2i(_mouse_loc().floor())])
+		if own.any(func(u): return u.is_caravan and u.stops.size() >= 2):
+			game.notify("Route point added: the caravan passes it on its way between its stops.", Vector2(-1, -1))
 		return
 	_formation_move(own, Vector2i(_mouse_loc().floor()))
 
