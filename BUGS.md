@@ -74,3 +74,4 @@ departs from the original game, in DIFFERENCES.md).
 | Resistance shown as rising to 45 while it fell from 35 to 34 | fixed: resistance only falls (as in the original); the arrow shows only a lower target, and workers from the town wear it down |
 | News messages not clickable | fixed: a message about a place jumps there |
 | Show soldiers' loyalty drift | done: "loyalty 45 → 60" for units in the field, commanders and soldiers in camps |
+| Health bar looked like two lines | fixed: one solid bar on a dark track |

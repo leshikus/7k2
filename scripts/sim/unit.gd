@@ -1708,10 +1708,9 @@ func draw_hp_bar_on(cv, at: Vector2, width: float) -> void:
 	var f := clampf(hp / maxf(1.0, max_hp), 0.0, 1.0)
 	var x0 := at - Vector2(width * 0.5, 0)
 	var col: Color = band[1]
-	cv.draw_rect(Rect2(x0, Vector2(w, 4)), Color(0.25, 0.25, 0.25, 0.85))
-	cv.draw_rect(Rect2(x0 + Vector2(1, 1), Vector2((w - 2) * f, 2)), col)
-	cv.draw_line(x0 + Vector2(0, 0), x0 + Vector2(w * f, 0), col.lightened(0.35), 1.0)
-	cv.draw_line(x0 + Vector2(0, 3), x0 + Vector2(w * f, 3), col.darkened(0.4), 1.0)
+	# one solid bar on a dark track (the edge lines read as two bars)
+	cv.draw_rect(Rect2(x0, Vector2(w, 3)), Color(0.15, 0.15, 0.15, 0.85))
+	cv.draw_rect(Rect2(x0, Vector2(w * f, 3)), col)
 
 
 func _draw_selection(cv, col: Color) -> void:
