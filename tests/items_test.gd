@@ -120,6 +120,34 @@ func _ready() -> void:
 				g.next_day()
 				_check(goal[0]["met"] or (not res.is_empty() and res[0][0]), "%s: taking it meets the goal %s" % [sc, res])
 		g.queue_free()
+	# --- Site::ai_get_site_object, building over items, blocked items
+	var ga := _game({"seed": 9, "size": 100, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "lairs": 0, "reveal": true})
+	for n0 in ga.nations:
+		if n0.id != ga.player_id:
+			ga.make_peace(ga.player_id, n0.id)
+	var an: Nation = ga.nations.filter(func(x): return x.id != ga.player_id and x.ai != null)[0]
+	var ac := ga.free_unit_cell(Vector2i(40, 40))
+	var fighter: Unit = ga.spawn_unit(Defs.unit_sprite(an.race, "INF"), an.id, ac, 40.0)
+	var ic := ga.free_unit_cell(ac + Vector2i(6, 0))
+	var it := ga.spawn_treasure(Treasure.Kind.ITEM, 3, 0, ic)
+	for d in 12:
+		for f in Defs.FRAMES_PER_DAY:
+			ga.sim_frame()
+		if fighter.item_id != 0:
+			break
+	_check(fighter.item_id == 3 and not it in ga.treasures, "a computer's fighter goes for an item lying near and takes it (%s)" % Items.item_name(3))
+	var ic2 := ga.free_unit_cell(Vector2i(70, 30))
+	ga.spawn_treasure(Treasure.Kind.ITEM, 5, 0, ic2)
+	_check(not ga.can_build_firm("MARKET", ic2 - Vector2i(1, 1), 4, 4), "nothing is built over an item")
+	# an item whose cell is blocked is taken from beside it
+	var ic3 := ga.free_unit_cell(Vector2i(30, 70))
+	var it3 := ga.spawn_treasure(Treasure.Kind.ITEM, 6, 0, ic3)
+	ga.world.set_plant(ic3, true)
+	var pu: Unit = ga.spawn_unit("NO_INF", ga.player_id, ic3 + Vector2i(1, 0), 40.0)
+	for f in 20:
+		ga.sim_frame()
+	_check(pu.item_id == 6 and not it3 in ga.treasures, "a blocked item is taken from the next cell")
+
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit(0 if fails == 0 else 2)
 

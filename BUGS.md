@@ -6,11 +6,7 @@ departs from the original game, in DIFFERENCES.md).
 
 ## Open
 
-- **Fryhtans stuck near impassable ground** (Kerassos that cannot pick up a
-  sword; a group of Kerassos; a group of Kharshuf piled on one cell). Units now
-  remember targets they cannot reach and give up on them, and computer units
-  refuse attack orders on unreachable targets. *Under observation*: report any
-  group that still stands still for long.
+Nothing open. Report anything new; a saved game of the moment helps most.
 
 ## Fixed
 
@@ -75,3 +71,4 @@ departs from the original game, in DIFFERENCES.md).
 | News messages not clickable | fixed: a message about a place jumps there |
 | Show soldiers' loyalty drift | done: "loyalty 45 → 60" for units in the field, commanders and soldiers in camps |
 | Health bar looked like two lines | fixed: one solid bar on a dark track |
+| Fryhtans stuck: a Kerassos unable to take a sword, groups standing at lairs, a Kharshuf pile | fixed: units give up on what they cannot reach; nothing is built over an item, and an item on a blocked cell is taken from beside it; commanders no longer take turns ousting each other from a lair; the computer now fetches items as in the original (Site::ai_get_site_object). Two-year all-AI games show no stuck units |

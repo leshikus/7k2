@@ -399,6 +399,11 @@ func can_build_firm(code: String, pos: Vector2i, w: int, h: int) -> bool:
 			continue
 		if not (on_raw and sf.intersects(r)):       # its own deposit
 			return false
+	# an item, gold, a scroll or plans on the ground is a site too: nothing is
+	# built over it (World::can_build_firm, locPtr->has_site())
+	for t in treasures:
+		if is_instance_valid(t) and r.has_point(t.cell):
+			return false
 	return true
 
 
@@ -1634,11 +1639,56 @@ func _generate_items() -> void:
 ## SiteArray::next_day: a unit standing on a treasure takes it (Site::get_site_object).
 func _pick_up_treasures() -> void:
 	for t in treasures.duplicate():
+		# SiteArray::next_day takes it for the unit standing on it; one that
+		# cannot be stood on (built over, blocked) is taken from beside it
+		var blocked := not world.is_walkable(t.cell)
 		for u in units_near(t.center_loc(), 1.5):
-			if u.dead or u.inside_firm or u.cell() != t.cell:
+			if u.dead or u.inside_firm:
+				continue
+			if u.cell() != t.cell and not (blocked and maxi(absi(u.cell().x - t.cell.x), absi(u.cell().y - t.cell.y)) <= 1):
 				continue
 			if _take(t, u):
 				break
+	if day % 5 == 0 and frame % Defs.FRAMES_PER_DAY == 0:
+		for t in treasures.duplicate():
+			if is_instance_valid(t):
+				_ai_get_site_object(t)
+
+
+## Site::ai_get_site_object (every 5 days): the computer's fighters near an
+## item, gold, a scroll (of their race) or plans on the ground go for it - the
+## nearest five, from 10 cells away at first to 30 after three years.
+const MAX_NOTIFY_GET_RANGE := 30
+const MAX_UNIT_TO_ORDER := 5
+
+
+func _ai_get_site_object(t: Treasure) -> void:
+	var rng_cells := mini(MAX_NOTIFY_GET_RANGE, 10 + day / 60)
+	var cands: Array = []
+	for u in units_near(t.center_loc(), float(rng_cells)):
+		if u.dead or u.inside_firm != null or u.race == "" or u.is_civilian() or u.is_weapon or u.is_caravan:
+			continue
+		if u.item_id != 0 or u.ai_action_id > 0:
+			continue
+		var n: Nation = u.nation()
+		if n == null or n.ai == null or u.nation_id == player_id:
+			continue
+		if t.kind == Treasure.Kind.SCROLL and u.race != t.race():
+			continue
+		if t.kind == Treasure.Kind.ITEM and not Items.can_pick(u):
+			continue
+		if u.attacking or u.order == Unit.Order.ATTACK:
+			continue
+		cands.append(u)
+	cands.sort_custom(func(a, b): return a.center_loc().distance_to(t.center_loc()) < b.center_loc().distance_to(t.center_loc()))
+	var ordered := 0
+	for u in cands:
+		u.order_move(t.cell)
+		if maxi(absi(u.cell().x - t.cell.x), absi(u.cell().y - t.cell.y)) <= 1:
+			return              # one standing next to it will do
+		ordered += 1
+		if ordered >= MAX_UNIT_TO_ORDER:
+			return
 
 
 func _take(t: Treasure, u: Unit) -> bool:
