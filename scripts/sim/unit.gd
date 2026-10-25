@@ -1279,6 +1279,14 @@ func _give_up(o: GameObj) -> void:
 	stop()
 
 
+## Put out of the command of `f` within the last 60 days (see Firm.accept_unit).
+func ousted_from(f: Firm) -> bool:
+	if not has_meta("ousted"):
+		return false
+	var m: Array = get_meta("ousted")
+	return m[0] == f and Game.inst.day - int(m[1]) < 60
+
+
 func is_unreachable(o: GameObj) -> bool:
 	return o != null and int(_unreachable.get(o, -1)) > Game.inst.frame
 

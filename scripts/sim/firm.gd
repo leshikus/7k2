@@ -80,6 +80,7 @@ var weapon_queue := 0
 var heroes: Array = []              # inn: its guests for hire (FirmInn::inn_unit_array; see Inn)
 var defense_flag := true            # FirmCamp::defense_flag: soldiers go out to defend (on by default)
 var inn_policy := 0                 # inn: Inn.Policy, the player's standing hiring orders
+var inn_max_price := 1000           # inn: the standing orders hire no one dearer (Inn.PRICE_CAPS)
 var trainees: Array = []            # training ground, espionage college: Training records (FirmTrain::trainee_array)
 var monster_code := ""              # lair: monster unit sprite
 var raid_timer := 0
@@ -289,6 +290,9 @@ func accept_unit(u: Unit) -> bool:
 		_hide_unit(u)
 		if old:
 			release_unit(old)
+			# remembered, so that the computer does not send him straight
+			# back to take command again (two commanders ousting each other)
+			old.set_meta("ousted", [self, Game.inst.day])
 		return true
 	elif soldiers.size() < capacity():
 		soldiers.append(u)

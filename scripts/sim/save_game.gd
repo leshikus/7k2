@@ -204,7 +204,7 @@ static func _firm(g: Game, f: Firm) -> Dictionary:
 		"builder": _id(f.builder), "overseer": _id(f.overseer), "soldiers": f.soldiers.map(func(u): return u.obj_id),
 		"site": g.sites.find(f.site), "raw": f.raw, "reserve": f.reserve, "stock": f.stock, "raw_stock": f.raw_stock,
 		"goods": f.goods, "market_sales": f.market_sales, "research_tech": f.research_tech, "weapon": f.weapon, "weapon_progress": f.weapon_progress,
-		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "inn_policy": f.inn_policy, "defense": f.defense_flag, "monster": f.monster_code, "raid_timer": f.raid_timer,
+		"weapon_queue": f.weapon_queue, "heroes": f.heroes, "inn_policy": f.inn_policy, "inn_max": f.inn_max_price, "defense": f.defense_flag, "monster": f.monster_code, "raid_timer": f.raid_timer,
 		"max_hp": f.max_hp, "charge": f.cast_charge, "extra": f.extra_units.map(func(u): return u.obj_id),
 		"animals": f.animals, "alchemy": f.alchemy_mode, "propagate": f.propagate, "rally": [f.rally.x, f.rally.y], "revealed": f.revealed_to.keys(), "trainees": f.trainees, "workers": f.worker_towns.map(func(t): return t.obj_id), "needed_workers": f.needed_workers, "repair": f.repair, "raws": f.raws, "demand": f.demand, "backup": f.backup, "auto_switch": f.auto_switch, "out_idx": f._out_idx, "archers": [f.archers, f.target_archers, f.archer_progress], "upgrade": [f.upgrading, f.upgrade_percent],
 		"ai": [f.should_close, f.no_neighbor_space, f.setup_day, _live_ids(f.patrol_units), _live_ids(f.coming_units),
@@ -462,6 +462,7 @@ static func load_path(g: Game, path: String) -> String:
 		f.weapon_queue = int(fd["weapon_queue"])
 		f.heroes = fd["heroes"]
 		f.inn_policy = int(fd.get("inn_policy", 0))
+		f.inn_max_price = int(fd.get("inn_max", 1000))
 		f.defense_flag = bool(fd.get("defense", true))
 		f.monster_code = fd["monster"]
 		f.raid_timer = int(fd["raid_timer"])

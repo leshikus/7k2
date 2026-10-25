@@ -418,6 +418,15 @@ static func update_unit_loyalty(u: Unit) -> void:
 	var n := u.nation()
 	if n == null or u.rank == Defs.Rank.KING or not u.has_loyalty() or u.is_civilian() or u.is_weapon:
 		return
+	_approach(u, field_target_loyalty(u))
+
+
+## The loyalty a unit in the field drifts to (Unit::update_loyalty): a
+## general by the men he leads, a soldier by his general - nothing without one.
+static func field_target_loyalty(u: Unit) -> float:
+	var n := u.nation()
+	if n == null:
+		return u.loyalty
 	var t := 0.0
 	if u.rank >= Defs.Rank.GENERAL:
 		var led := Game.inst.units.filter(func(m): return m.leader == u and not m.dead and m.inside_firm == null).size()
@@ -443,7 +452,32 @@ static func update_unit_loyalty(u: Unit) -> void:
 			t = clampf(t, 0.0, 100.0)
 		else:
 			t = 0.0
-	_approach(u, t)
+	return t
+
+
+## Where a unit's loyalty is heading (shown as "loyalty a -> b"), or -1 when
+## it does not drift (a king, a villager, a war machine, a spy's cover).
+static func target_loyalty_of(u: Unit) -> float:
+	if u.dead or u.rank == Defs.Rank.KING or not u.has_loyalty() or u.is_civilian() or u.is_weapon or u.nation() == null:
+		return -1.0
+	var f := u.inside_firm
+	if f != null:
+		if f.code == "LAIR" and (f.nation_id <= 0 or f.nation_id == GameObj.MONSTER_NATION):
+			return -1.0
+		if f.overseer == u:
+			return general_target_loyalty(f, u)
+		if u in f.soldiers:
+			return soldier_target_loyalty(f, u)
+		return -1.0
+	return field_target_loyalty(u)
+
+
+## "45" or "45 → 60": a unit's loyalty and where it is heading.
+static func loyalty_text(u: Unit) -> String:
+	var t := target_loyalty_of(u)
+	if t < 0.0 or int(t) == int(u.loyalty):
+		return "%d" % int(u.loyalty)
+	return "%d → %d" % [int(u.loyalty), int(t)]
 
 
 ## Unit::think_betray (every 15 days): below 30 a unit in the field, or the

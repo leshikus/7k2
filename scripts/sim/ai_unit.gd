@@ -204,6 +204,8 @@ static func think_leader_action(ai: NationAI, u: Unit) -> bool:
 	for c in ai.camps():
 		if c.should_close or c.overseer == ai.n.king:
 			continue
+		if c.overseer != null and u.ousted_from(c):
+			continue       # just put out of it: not straight back
 		var r := AIFirm.new_commander_leadership(ai, c, u.race, int(u.lead_skill())) - AIFirm.cur_commander_leadership(ai, c)
 		if c.overseer == null:
 			r = int(u.lead_skill())
@@ -261,6 +263,10 @@ static func think_assign_soldier_to_camp(ai: NationAI, u: Unit) -> bool:
 	var skill := int(u.combat)
 	for c in ai.camps():
 		if not _can_accept(c, u):
+			continue
+		# a general sent in as a soldier would take command and put the
+		# commander out, who then does the same (two of them taking turns)
+		if u.rank >= Defs.Rank.GENERAL and c.overseer != null:
 			continue
 		var r := 0
 		if c.soldiers.size() + c.patrol_units.size() + c.coming_units.size() >= NationAI.MAX_SOLDIER:

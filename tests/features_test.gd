@@ -98,6 +98,22 @@ func _ready() -> void:
 	Inn.run_policy(inn)
 	_check(inn.heroes.size() == 1, "the reserve is kept: nobody hired below %d gold" % int(Inn.POLICY_RESERVE))
 	p.cash = 50000.0
+	# the price limit (right-click: 600, 800, 1000) and never a spy
+	inn.heroes.clear()
+	inn.heroes.append({"sprite": Defs.unit_sprite(p.race, "SPU"), "race": p.race, "name": "Test Costly", "combat": 90, "max_combat": 0,
+		"leadership": 10, "spy_skill": 0, "hp": -1, "item_id": 0, "item_para": 0, "hero_id": 0, "spy_of": 0, "spy_loyalty": 0, "stay": 12, "cost": 700})
+	inn.heroes.append({"sprite": Defs.unit_sprite(p.race, "SPU"), "race": p.race, "name": "Test Sneak", "combat": 80, "max_combat": 0,
+		"leadership": 10, "spy_skill": 60, "hp": -1, "item_id": 0, "item_para": 0, "hero_id": 0, "spy_of": 0, "spy_loyalty": 0, "stay": 12, "cost": 300})
+	inn.inn_policy = Inn.Policy.SOLDIERS
+	inn.inn_max_price = 600
+	_check(Inn.next_price_cap(600) == 800 and Inn.next_price_cap(800) == 1000 and Inn.next_price_cap(1000) == 600, "the price limit cycles 600, 800, 1000")
+	Inn.run_policy(inn)
+	_check(inn.heroes.size() == 2, "nobody dearer than the limit is hired (%d left)" % inn.heroes.size())
+	inn.inn_max_price = 800
+	Inn.run_policy(inn)
+	_check(inn.heroes.size() == 1 and inn.heroes[0]["name"] == "Test Sneak", "under 800 the fighter of %d is hired, the spy never" % Inn.price(inn, 0, p.id) if inn.heroes.size() > 0 else "")
+	inn.heroes.clear()
+	inn.inn_policy = Inn.Policy.OFF
 
 	# --- a spy passing for an independent slips in among the guests
 	_check(Espionage.cloak_choices(spu).has(0), "a spy can pass for an independent")
@@ -328,6 +344,45 @@ func _ready() -> void:
 			g.remove_unit(d2)
 	_check(leftn > 3 and leftn < 30, "at 20 about a third desert in a check (%d of 40)" % leftn)
 	p.contact = contact_saved
+
+	# --- migration between linked towns (Town::draw_detect_link_line, move_pop)
+	var nb_at := Vector2i(-1, -1)
+	for k in 2000:
+		var cand := Vector2i(home.x1 + g.rng.randi_range(-12, 12), home.y1 + g.rng.randi_range(-12, 12))
+		var cc := Vector2(cand) + Vector2(Defs.TOWN_SIZE, Defs.TOWN_SIZE) * 0.5
+		if g.world.can_place(cand.x, cand.y, Defs.TOWN_SIZE, Defs.TOWN_SIZE) and Game._center_dist(cc, home.center_loc()) <= Defs.effective_distance("", ""):
+			nb_at = cand
+			break
+	_check(nb_at.x >= 0, "a place for a neighbouring town")
+	if nb_at.x >= 0:
+		var nb := g.spawn_town(p.race, p.id, nb_at, 5)
+		home.population = 40
+		g.select_only(home)
+		_check(nb in home.linked_towns() and nb.migrate_source() == home, "the selected town's neighbour shows the migrate icon")
+		_check(home.migrate_source() == null, "the selected town itself shows none")
+		var h0 := home.population
+		home.cmd_migrate(nb, 1)
+		_check(home.population == h0 - 1 and nb.population == 6, "a click moves one villager (%d -> %d)" % [h0, home.population])
+		home.cmd_migrate(nb, Defs.MAX_WAGON_POPULATION)
+		_check(nb.population == 16 and home.population == h0 - 11, "a right click moves a wagonload of ten (%d)" % nb.population)
+		# with nobody jobless a worker moves home and keeps his job when in reach
+		var wf: Firm = null
+		for f in home.linked_firms:
+			if f.is_work_firm() and Game._center_dist(f.center_loc(), nb.center_loc()) <= Defs.effective_distance(f.code, ""):
+				wf = f
+				break
+		if wf != null:
+			home.population = home.employed if home.employed > 0 else home.population
+			if home.employed == 0:
+				wf.worker_towns.append(home)
+				home.employed = 1
+				home.population = 1
+			var wk0 := wf.workers()
+			var e0 := nb.employed
+			home.migrate_to(nb)
+			_check(wf.workers() == wk0 and nb.employed == e0 + 1, "an employed man moves and keeps his job")
+		g.deselect(home)
+		_check(nb.migrate_source() == null, "no icon once the town is deselected")
 
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit()

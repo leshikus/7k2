@@ -2613,6 +2613,9 @@ func select_only(o: GameObj) -> void:
 	selected = [o]
 	o.selected = true
 	o.queue_redraw()
+	if o is Town:
+		for t in (o as Town).linked_towns():
+			t.queue_redraw()       # their migrate icons
 
 
 func deselect(o: GameObj) -> void:
@@ -2620,6 +2623,9 @@ func deselect(o: GameObj) -> void:
 		selected.erase(o)
 		o.selected = false
 		o.queue_redraw()
+		if o is Town:
+			for t in (o as Town).linked_towns():
+				t.queue_redraw()
 
 
 ## BaseObj::calc_live_points_bonus: a person is worth his hit points, a

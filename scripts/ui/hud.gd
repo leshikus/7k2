@@ -688,7 +688,7 @@ func _talk_options(p: Nation, n: Nation) -> Array:
 	return out
 
 
-func _on_message(text: String, _loc: Vector2) -> void:
+func _on_message(text: String, loc: Vector2) -> void:
 	if reports:
 		reports.add_news(game.date_string(), text)
 	# NewsArray::disp: major news only, as chosen (and always in a tutorial)
@@ -700,6 +700,15 @@ func _on_message(text: String, _loc: Vector2) -> void:
 	l.add_theme_color_override("font_shadow_color", Color.BLACK)
 	l.add_theme_constant_override("shadow_offset_x", 1)
 	l.add_theme_constant_override("shadow_offset_y", 1)
+	# NewsArray: a message about a place - a click shows it
+	if loc.x >= 0.0:
+		l.mouse_filter = Control.MOUSE_FILTER_STOP
+		l.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		l.tooltip_text = "Click to go there."
+		var go := func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				center_on.emit(loc)
+		l.gui_input.connect(go)
 	log_box.add_child(l)
 	_messages.append([l, 12.0])
 	while log_box.get_child_count() > 7:
@@ -831,7 +840,7 @@ func _update_hover_tip() -> void:
 	if u.is_human() or SpecialFirms.is_fryhtan_unit(u):
 		var stats := "Combat %d" % int(u.combat)
 		if u.has_loyalty() and u.rank != Defs.Rank.KING and (u.nation_id == game.player_id or GameOptions.get_opt("show_ai_info")):
-			stats += ", loyalty %d" % int(u.loyalty)
+			stats += ", loyalty %s" % Espionage.loyalty_text(u)
 		lines.append(stats)
 	var sq := squad_line(u)
 	if sq != "":
@@ -1109,7 +1118,9 @@ func _show_unit(u: Unit, rebuild: bool) -> void:
 			s += "Camouflaged: unseen for %d days\n" % u.camouflage_days
 		s += "[color=#b0a890]Right-click a town, fort or camp to infiltrate it. A kingdom's place needs its colours, put on automatically when no enemy is near. In your own places spies hunt enemy spies.[/color]\n"
 	elif (u.nation_id == game.player_id or GameOptions.get_opt("show_ai_info")) and u.has_loyalty() and not u.is_civilian() and u.rank != Defs.Rank.KING:
-		s += "Loyalty %d\n" % int(u.loyalty)
+		s += "Loyalty %s\n" % Espionage.loyalty_text(u)
+		if u.inside_firm == null and u.rank < Defs.Rank.GENERAL and not (u.leader and is_instance_valid(u.leader) and not u.leader.dead):
+			s += "[color=#ff9060]Without a general his loyalty drifts down; below %d he may desert.[/color]\n" % Defs.UNIT_BETRAY_LOYALTY
 	if u.item_id > 0:
 		s += "[color=#ffd860]%s[/color]: %s\n" % [Items.item_name(u.item_id), Items.description(u.item_id, u.item_para)]
 	if u.life_frames > 0:
@@ -1548,12 +1559,17 @@ func _show_town(t: Town, rebuild: bool) -> void:
 		for n in game.nations:
 			if not n.alive:
 				continue
-			var tr: String = (" → %d" % int(t.target_resistance[n.id])) if t.target_resistance.has(n.id) else ""
+			# resistance only falls (Town::update_resistance): an arrow only
+			# toward a lower target; a higher one does nothing
+			var tr := ""
+			if t.target_resistance.has(n.id):
+				var tv := int(t.target_resistance[n.id])
+				tr = (" → %d" % tv) if tv < int(t.resistance_to(n.id)) else (" (camps' influence %d: no further fall)" % tv)
 			s += "[color=#%s]%s[/color] %d%s\n" % [n.color.to_html(false), n.name, int(t.resistance_to(n.id)), tr]
 		var trib := t.tribute_to()
 		if trib > 0:
 			s += "[color=#ff9060]Pays tribute to the %s.[/color] It cannot join you while their lair stands.\n" % game.nation(trib).name
-		s += "\n[color=#b0a890]Build a camp nearby with a general inside. A general of the town's own race has far more influence; gold grants lower resistance further. Below %d the town joins you.[/color]\n" % Defs.SURRENDER_RESISTANCE
+		s += "\n[color=#b0a890]Build a camp nearby with a general inside: resistance falls toward what his influence allows (it never rises). A general of the town's own race has far more influence; gold grants lower resistance further, and each of the town's people working in your buildings wears it down a little. Below %d the town joins you.[/color]\n" % Defs.SURRENDER_RESISTANCE
 	var links := t.linked_firms.filter(func(f): return f.nation_id == game.player_id)
 	if not links.is_empty():
 		s += "Linked: " + ", ".join(links.map(func(f): return f.display_name())) + "\n"
@@ -1613,7 +1629,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 			"CAMP", "FORT", "LAIR":
 				if f.overseer:
 					s += "Commander: %s (leadership %d%s)\n" % [f.overseer.display_name(), int(f.overseer.lead_skill()),
-						", loyalty %d" % int(f.overseer.loyalty) if f.overseer.rank != Defs.Rank.KING and f.overseer.has_loyalty() else ""]
+						", loyalty %s" % Espionage.loyalty_text(f.overseer) if f.overseer.rank != Defs.Rank.KING and f.overseer.has_loyalty() else ""]
 					# FirmCamp::advanced_train: his leadership grows monthly with the men under him
 					var om := f.soldiers.filter(func(x): return x != f.overseer).size()
 					if f.code != "LAIR" and f.overseer.leadership < 100.0:
@@ -1628,7 +1644,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					s += "Archers %d%s\n" % [f.archers, (" (training %d of %d days)" % [f.archer_progress, Firm.MAX_TRAIN_ARCHER_PROGRESS]) if f.target_archers > f.archers else ""]
 				for u in f.soldiers:
 					s += "  %s — combat %d, leadership %d, HP %d%s\n" % [u.display_name() if u.is_human() else u.type_name(), int(u.combat), int(u.lead_skill()), int(u.hp),
-						", loyalty %d" % int(u.loyalty) if u.has_loyalty() else ""]
+						", loyalty %s" % Espionage.loyalty_text(u) if u.has_loyalty() else ""]
 				if f.code != "LAIR":
 					var towns := f.linked_towns.map(func(t): return t.town_name)
 					s += "Influences: %s\n" % (", ".join(towns) if not towns.is_empty() else "no towns in range")
@@ -1701,14 +1717,18 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 				if f.weapon != "":
 					s += "Building %s: %d%% (%d queued)\n" % [Defs.unit_types[f.weapon]["name"], int(f.weapon_progress), f.weapon_queue]
 			"INN":
-				s += "Guests for hire (%d / %d):\n" % [f.heroes.size(), Inn.MAX_INN_UNIT]
-				for gi in f.heroes.size():
-					var hdef: Dictionary = f.heroes[gi]
-					var what := ("spy %d" % int(hdef["spy_skill"])) if int(hdef["spy_skill"]) > 0 else ("combat %d, leadership %d" % [int(hdef["combat"]), int(hdef["leadership"])])
-					s += "  %s%s (%s) %s%s — %d gold\n" % ["★ " if int(hdef.get("hero_id", 0)) > 0 else "", hdef["name"], Defs.race_name(hdef["race"]), what,
-						(", " + Items.item_name(int(hdef["item_id"]))) if int(hdef["item_id"]) > 0 else "", Inn.price(f, gi, game.player_id)]
-				if f.heroes.is_empty():
-					s += "  nobody at the moment\n"
+				s += "Guests (%d / %d)\n" % [f.heroes.size(), Inn.MAX_INN_UNIT]
+				# soldiers and heroes first, the spies apart
+				for spies in [false, true]:
+					var idxs: Array = range(f.heroes.size()).filter(func(gi): return (int(f.heroes[gi]["spy_skill"]) > 0) == spies)
+					s += ("Spies for hire:\n" if spies else "Soldiers and heroes for hire:\n")
+					for gi in idxs:
+						var hdef: Dictionary = f.heroes[gi]
+						var what := ("spying %d, combat %d" % [int(hdef["spy_skill"]), int(hdef["combat"])]) if spies else ("combat %d, leadership %d" % [int(hdef["combat"]), int(hdef["leadership"])])
+						s += "  %s%s (%s) %s%s — %d gold\n" % ["★ " if int(hdef.get("hero_id", 0)) > 0 else "", hdef["name"], Defs.race_name(hdef["race"]), what,
+							(", " + Items.item_name(int(hdef["item_id"]))) if int(hdef["item_id"]) > 0 else "", Inn.price(f, gi, game.player_id)]
+					if idxs.is_empty():
+						s += "  nobody at the moment\n"
 			"BASE":
 				var g: Dictionary = Defs.gods.get(game.player().race, {})
 				s += "Worshippers %d / %d\nPrayer points %d (Greater Being %d, Special Blessing %d)\n" % [f.workers(), Defs.MAX_WORKER, int(game.player().prayer_points), int(f.god_cost()), int(Wishes.FULL)]
@@ -1819,7 +1839,7 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 					"Version %d (from the tech level)." % maxi(1, p.tech_level(Defs.unit_tech(sc))))
 		"ANIMAL":
 			for i in f.animals.size():
-				var idx := i
+				var idx: int = i
 				var a: Dictionary = f.animals[i]
 				_add_action("Hire %s (%d)" % [Defs.unit_types.get(a["unit"], {}).get("name", a["unit"]), int(a["cost"])], func(): _do(SpecialFirms, "hire_animal", [f, idx]),
 					SpecialFirms.can_hire_animal(f, idx), "Also costs %d life points." % int(a["live"]))
@@ -1849,13 +1869,16 @@ func _show_firm(f: Firm, rebuild: bool) -> void:
 						spell_target_requested.emit(f, spc), SpecialFirms.can_cast(f, spc), _spell_tip(spc))
 		"INN":
 			var pol: int = f.inn_policy
-			_add_action("Auto-hire: %s" % Inn.POLICY_NAMES[pol], func(): _do(f, "set", ["inn_policy", (pol + 1) % Inn.POLICY_NAMES.size()]), true,
-				"Standing orders, checked every 5 days while %d gold stays in the treasury. Soldiers: men whose leadership is at most half their combat (special units too) are hired and sent to the nearest fort or camp with room. Generals: men who lead better than they fight (leadership 40 or more) are hired to command a camp without a commander or with a weaker one." % int(Inn.POLICY_RESERVE),
-				func(): _do(f, "set", ["inn_policy", 0]), "🤝")
-			# FirmInn: one button per guest; right-click buys what he carries
-			for i in f.heroes.size():
+			var cap: int = f.inn_max_price
+			_add_action("Auto-hire: %s, under %d" % [Inn.POLICY_NAMES[pol], cap], func(): _do(f, "set", ["inn_policy", (pol + 1) % Inn.POLICY_NAMES.size()]), true,
+				"Standing orders, checked every 5 days while %d gold stays in the treasury; no one dearer than %d is hired, and never a spy. Soldiers: men whose leadership is at most half their combat (special units too) are hired and sent to the nearest fort or camp with room. Generals: men who lead better than they fight (leadership 40 or more) are hired to command a camp without a commander or with a weaker one. Click: change the orders. Right-click: the price limit (600, 800, 1000)." % [int(Inn.POLICY_RESERVE), cap],
+				func(): _do(f, "set", ["inn_max_price", Inn.next_price_cap(cap)]), "🤝")
+			# FirmInn: one button per guest, the spies after the others; right-click buys what he carries
+			var order: Array = range(f.heroes.size()).filter(func(gi): return int(f.heroes[gi]["spy_skill"]) == 0) \
+					+ range(f.heroes.size()).filter(func(gi): return int(f.heroes[gi]["spy_skill"]) > 0)
+			for i in order:
 				var hdef: Dictionary = f.heroes[i]
-				var idx := i
+				var idx: int = i
 				var price := Inn.price(f, i, p.id)
 				var kind: String = "spy" if int(hdef["spy_skill"]) > 0 else ("hero" if int(hdef.get("hero_id", 0)) > 0 else Defs.unit_types.get(hdef["sprite"], {}).get("name", "soldier"))
 				var tip := "%s, %s %s: combat %d, leadership %d%s%s. Stays %d more updates." % [hdef["name"], Defs.race_adj(hdef["race"]), kind,

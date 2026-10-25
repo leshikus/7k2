@@ -43,6 +43,12 @@ of the original that are kept on purpose are listed at the end.
   selected people of its race in it; a group of units gets a Settle button.
 
 ### Interface
+- **Inn auto-hire price limit**: the standing orders hire no one dearer than
+  600, 800 or 1000 (right-click on the button), and never a spy; spies are
+  listed apart from the other guests.
+- **Clickable news**: a message about a place moves the view there.
+- **Loyalty drift shown**: a unit's loyalty is shown with the value it is
+  heading for ("45 → 60").
 - **More kingdom colours**: beyond the original's seven, eight further colours,
   so that up to fifteen kingdoms (Fryhtan kingdoms included) look different.
 - **Start screen.** One Start button for every kind of game, on tabs; "Play

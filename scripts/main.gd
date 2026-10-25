@@ -859,6 +859,22 @@ func _on_lightning(world_pos: Vector2) -> void:
 			p.play()
 
 
+## Town::draw_detect_link_line: a click on the migrate icon over a linked
+## town moves one villager there, a right click a wagonload (ten).
+func _migrate_click(count: int) -> bool:
+	var wm := _world_mouse()
+	for t in game.towns:
+		if t.dead:
+			continue
+		var src: Town = t.migrate_source()
+		if src == null:
+			continue
+		if Rect2(Iso.to_screen(t.center_loc()) + Town.MIGRATE_ICON_OFFSET, Town.MIGRATE_ICON_SIZE).has_point(wm):
+			Net.cmd(src, "cmd_migrate", [t, count])
+			return true
+	return false
+
+
 func _world_mouse() -> Vector2:
 	return Iso.to_screen(camera.screen_to_loc(_mouse_pos))
 
@@ -1087,6 +1103,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						if not hud.editor.place(_editor_tool, Vector2i(floori(l.x), floori(l.y))):
 							game.notify("Cannot place it there.", Vector2(-1, -1))
 						return
+					if _migrate_click(1):
+						return
 					_left_down = true
 					_drag_from = mb.position
 					_dragging = false
@@ -1121,6 +1139,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_cast_god = null
 					elif not _editor_tool.is_empty():
 						_editor_tool = {}
+					elif _migrate_click(Defs.MAX_WAGON_POPULATION):
+						pass
 					else:
 						_command(mb.ctrl_pressed)
 	elif event is InputEventMouseMotion and _orbiting:

@@ -12,12 +12,6 @@ departs from the original game, in DIFFERENCES.md).
   refuse attack orders on unreachable targets. *Under observation*: report any
   group that still stands still for long.
 
-- **Fryhtan commanders swapping a lair** (found by the long-game audit;
-  likely the stuck groups reported): when a second commander enters a lair,
-  he takes command and the old one comes out (FirmCamp::assign_overseer);
-  the one put out walks back in and the two swap daily, their troops
-  standing at the door. *Not fixed yet.*
-
 ## Fixed
 
 | Report | Status |
@@ -74,3 +68,9 @@ departs from the original game, in DIFFERENCES.md).
 | A unit changes colour when its commander is killed | the original's rule (Unit::die): his men nearby may go over to the killer |
 | Fryhtan kingdoms never built their special structures | fixed: the computer found builders among humans only; now a Fryhtan of the brood builds |
 | Towns paying tribute to Fryhtans showed no Fryhtan flag | fixed: they fly the Fryhtan flag in the lair kingdom's colour, as in the original |
+| Fryhtan commanders taking turns at a lair (found by a two-year all-AI audit) | fixed: a general is no longer sent in as a soldier where there is a commander, nor straight back where he was put out |
+| Cannot move people between linked villages | fixed: the migrate icon over a linked town of the same race, as in the original - click one villager, right-click ten |
+| Inn auto-hire: price limit; no spies; spies listed apart | done: right-click sets the limit 600/800/1000; spies never hired by the orders and listed separately |
+| Resistance shown as rising to 45 while it fell from 35 to 34 | fixed: resistance only falls (as in the original); the arrow shows only a lower target, and workers from the town wear it down |
+| News messages not clickable | fixed: a message about a place jumps there |
+| Show soldiers' loyalty drift | done: "loyalty 45 → 60" for units in the field, commanders and soldiers in camps |

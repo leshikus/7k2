@@ -102,12 +102,64 @@ func linked_towns() -> Array:
 	return out
 
 
-## Town::move_pop: a villager moves to another of the kingdom's towns of the same race.
+## Town::can_migrate: one villager may move to another of the kingdom's
+## towns of the same race with room.
+func can_migrate(dest: Town) -> bool:
+	return dest != null and dest != self and not dest.dead and not dead and dest.nation_id == nation_id \
+			and dest.race == race and not dest.under_construction and not under_construction \
+			and dest.population < Defs.MAX_TOWN_POPULATION and population > 0
+
+
+const MIGRATE_ICON_OFFSET := Vector2(-23, -25)
+const MIGRATE_ICON_SIZE := Vector2(48, 48)
+
+
+## The player's order (Town::draw_detect_link_line): a click on the migrate
+## icon over a linked town moves one villager, a right click a wagonload.
+func cmd_migrate(dest: Town, count: int) -> void:
+	count = mini(count, Defs.MAX_TOWN_POPULATION - dest.population)
+	for i in count:
+		if not migrate_to(dest):
+			break
+
+
+## The town of the player's selected one that a migrate icon would send
+## people to: this one, when linked, of its race and with room.
+func migrate_source() -> Town:
+	var g := Game.inst
+	if g == null or g.selected.size() != 1 or not (g.selected[0] is Town):
+		return null
+	var src: Town = g.selected[0]
+	if src.nation_id != g.player_id or g.observer() or not (self in src.linked_towns()) or not src.can_migrate(self):
+		return null
+	return src
+
+
+## Town::migrate_to / move_pop: a villager moves over, his loyalty with him.
+## With nobody jobless a worker moves and keeps his job if his building is in
+## reach of the new town; otherwise he leaves it.
 func migrate_to(dest: Town) -> bool:
-	if dest == self or dest.nation_id != nation_id or dest.race != race or jobless() <= 0 \
-			or dest.population >= Defs.MAX_TOWN_POPULATION or dest.under_construction:
+	if not can_migrate(dest):
 		return false
+	if jobless() <= 0:
+		var moved := false
+		for f in linked_firms:
+			var idx: int = f.worker_towns.find(self)
+			if idx < 0:
+				continue
+			if Game._center_dist(f.center_loc(), dest.center_loc()) > Defs.effective_distance(f.code, ""):
+				continue
+			f.worker_towns[idx] = dest
+			employed -= 1
+			dest.employed += 1
+			moved = true
+			break
+		if not moved:
+			Game.inst._unjob(self)
+	var l := loyalty
 	population -= 1
+	# Town::inc_pop: the newcomer's loyalty averages into the town's
+	dest.loyalty = (dest.loyalty * dest.population + l) / (dest.population + 1)
 	dest.population += 1
 	_check_empty()
 	queue_redraw()
@@ -1025,6 +1077,9 @@ func render(cv) -> void:
 		cv.draw_polyline(p, col.lightened(0.3), 2.0)
 		for f in linked_firms:
 			Game.draw_link(cv, Vector2.ZERO, Iso.to_screen(f.center_loc()) - position, f.nation_color().lightened(0.3), Game.inst.link_on(f, self))
+		# Town::draw_detect_link_line: the lines to linked towns too
+		for t in linked_towns():
+			Game.draw_link(cv, Vector2.ZERO, Iso.to_screen(t.center_loc()) - position, col.lightened(0.3), true)
 	var slots: Array = layout.get("slots", [])
 	_pick_layout()
 	var wall_origin := Iso.to_screen(Vector2(x1, y1)) - position
@@ -1068,6 +1123,12 @@ func render(cv) -> void:
 	_draw_planned_wall(cv, wall_origin, "F")
 	if selected and wall_level > 0:
 		draw_hp_bar_on(cv, Vector2(0, -56), 60)
+	# the animated migrate icon (MIGRATE1-8) when the player's selected town
+	# can send people here
+	if migrate_source() != null:
+		var mi := Assets.picture("I_ICON.RES", "MIGRATE%d" % (1 + Game.inst.frame % 8))
+		if mi:
+			cv.draw_texture(mi, Iso.to_screen(center_loc()) - position + MIGRATE_ICON_OFFSET)
 	var font := ThemeDB.fallback_font
 	var label := "%s (%d)" % [town_name, population]
 	var size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_CENTER, -1, 13)

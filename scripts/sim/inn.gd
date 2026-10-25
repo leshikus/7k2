@@ -337,6 +337,18 @@ static func buy_item(f: Firm, i: int, nid := -1) -> bool:
 enum Policy { OFF, SOLDIERS, GENERALS, BOTH }
 const POLICY_NAMES := ["off", "soldiers", "generals", "soldiers and generals"]
 const POLICY_RESERVE := 1000.0
+const PRICE_CAPS := [600, 800, 1000]     # the standing orders' price limits (right-click)
+
+
+## A spy among the guests - one for hire or another kingdom's sneaked in.
+## Standing orders never hire one.
+static func is_spy_guest(h: Dictionary) -> bool:
+	return int(h["spy_skill"]) > 0 or int(h.get("spy_of", 0)) > 0
+
+
+static func next_price_cap(cur: int) -> int:
+	var i := PRICE_CAPS.find(cur)
+	return PRICE_CAPS[(i + 1) % PRICE_CAPS.size()]
 
 
 ## (Units of combat or leadership 100 or more - heroes and their like, dear
@@ -372,7 +384,12 @@ static func run_policy(f: Firm) -> void:
 		if i >= f.heroes.size():
 			continue
 		var h: Dictionary = f.heroes[i]
-		if n.cash - float(h["cost"]) < POLICY_RESERVE:
+		if is_spy_guest(h):
+			continue
+		var cost := float(price(f, i, f.nation_id))
+		if n.cash - cost < POLICY_RESERVE:
+			continue
+		if not ai_hire and cost > float(f.inn_max_price):
 			continue
 		var as_soldier: bool = policy in [Policy.SOLDIERS, Policy.BOTH] and fits_soldier(h)
 		if ai_hire:
