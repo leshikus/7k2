@@ -95,7 +95,7 @@ func load_install(p: String = "") -> String:
 	_pal_std = SK2Files.palette_at(_file(_res_path("PAL_STD.RES")), 0)
 	_pal_spr_buf = _file(_res_path("PAL_SPR.RES"))
 	_pal_firm_buf = _file(_res_path("PAL_FIRM.RES"))
-	_pal_ter = SK2Files.palette_at(_file(_res_path("PAL_TER1.RES")), 0)
+	_pal_ter = SK2Files.palette_at(_file(_res_path("PAL_TER%d.RES" % terrain_set)), 0)
 	_build_sprites()
 	_build_firms()
 	_build_towns()
@@ -428,11 +428,34 @@ func item_bitmap(name: String) -> Texture2D:
 	return tex
 
 
+# ----------------------------------------------------------- terrain set ---
+
+var terrain_set := 1          # Config::terrain_set: 1 fertile, 2 badlands
+
+
+## The land's look (Config::terrain_set): its own terrain palette and
+## textures, plants and rocks (*1.RES or *2.RES), reloaded for a new game.
+func use_terrain_set(n: int) -> void:
+	n = clampi(n, 1, 2)
+	if n == terrain_set or _pal_std.is_empty():
+		terrain_set = n
+		return
+	terrain_set = n
+	_pal_ter = SK2Files.palette_at(_file(_res_path("PAL_TER%d.RES" % terrain_set)), 0)
+	terrain_textures.clear()
+	_build_terrain()
+	town_plants.clear()
+	plant_bitmaps.clear()
+	plant_variant_of_row.clear()
+	_build_plants()
+	rock_types.clear()
+
+
 # ---------------------------------------------------------------- plants ---
 
 func _build_plants() -> void:
-	var data := _file(_res_path("I_PLANT1.RES"))
-	var rows := SK2Files.parse_dbf(_file(_res_path("PLANTBM1.RES")))
+	var data := _file(_res_path("I_PLANT%d.RES" % terrain_set))
+	var rows := SK2Files.parse_dbf(_file(_res_path("PLANTBM%d.RES" % terrain_set)))
 	for ri in rows.size():
 		var r: Dictionary = rows[ri]
 		var img := SK2Files.decode_bitmap(data, r["BITMAPPTR"] + 4, _pal_std, true)
@@ -452,8 +475,8 @@ func _build_plants() -> void:
 ## Builds one seamless 512x512 texture per terrain type from the 16x16 grid of
 ## 32x32 texture cells in TERTEX1/I_TERX1 (cell id = (y&15)<<4 | (x&15)).
 func _build_terrain() -> void:
-	var data := _file(_res_path("I_TERX1.RES"))
-	var rows := SK2Files.parse_dbf(_file(_res_path("TERTEX1.RES")))
+	var data := _file(_res_path("I_TERX%d.RES" % terrain_set))
+	var rows := SK2Files.parse_dbf(_file(_res_path("TERTEX%d.RES" % terrain_set)))
 	var imgs := {}
 	for r in rows:
 		var t: String = r["TERA_TYPE"]
@@ -668,9 +691,9 @@ var rock_types: Array = []    # {id, type, w, h, t1, t2, tex, ofs}
 func load_rocks() -> Array:
 	if not rock_types.is_empty():
 		return rock_types
-	var infos := SK2Files.parse_dbf(_file(_res_path("ROCK1.RES")))
-	var bmps := SK2Files.parse_dbf(_file(_res_path("ROCKBMP1.RES")))
-	var data := _file(_res_path("I_ROCK1.RES"))
+	var infos := SK2Files.parse_dbf(_file(_res_path("ROCK%d.RES" % terrain_set)))
+	var bmps := SK2Files.parse_dbf(_file(_res_path("ROCKBMP%d.RES" % terrain_set)))
+	var data := _file(_res_path("I_ROCK%d.RES" % terrain_set))
 	var codes := {"G": 0, "F": 1, "D": 2}
 	for ri in infos.size():
 		var r: Dictionary = infos[ri]

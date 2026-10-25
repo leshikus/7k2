@@ -128,7 +128,8 @@ func _ready() -> void:
 
 	# --- the computer trains spies and special units by itself
 	var ai_n := g.nation(2)
-	ai_n.cash = 50000.0
+	ai_n.cash = 45000.0
+	ai_n.add_cash(5000.0, "Taxes")      # a kingdom in profit (Nation::ai_should_spend spends nothing at a loss)
 	var ai_home: Town = g.towns.filter(func(t): return t.nation_id == ai_n.id)[0]
 	ai_home.population = 60
 	ai_home.loyalty = 90.0

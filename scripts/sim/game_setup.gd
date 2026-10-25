@@ -48,6 +48,7 @@ static func defaults() -> Dictionary:
 		"goal_destroy_monster": false, "goal_population_flag": false, "goal_economic_flag": false,
 		"goal_total_flag": false, "goal_year_flag": false, "goal_alliance_flag": false,
 		"goal_population": 300, "goal_economic": 1200, "goal_total": 1800, "goal_years": 20,
+		"terrain_set": 1, "color": 0,
 	}
 	apply_difficulty(s, 1)
 	return s
@@ -111,6 +112,8 @@ static func to_config(s: Dictionary, cfg: Dictionary) -> Dictionary:
 			"goal_destroy_monster", "goal_population_flag", "goal_economic_flag", "goal_total_flag",
 			"goal_year_flag", "goal_alliance_flag", "goal_population", "goal_economic", "goal_total", "goal_years"]:
 		cfg[k] = s[k]
+	cfg["terrain_set"] = int(s.get("terrain_set", 1))
+	cfg["color"] = int(s.get("color", 0))
 	cfg["setup"] = true
 	cfg["ai_count"] = int(s["ai_humans"])
 	cfg["fryhtan_count"] = int(s["ai_fryhtans"])

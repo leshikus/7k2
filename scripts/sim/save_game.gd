@@ -266,6 +266,7 @@ static func load_path(g: Game, path: String) -> String:
 		return "Save file is from an incompatible version."
 	Defs.load_from_assets()
 	g.config = d.get("config", {})
+	g._apply_terrain_set()
 	var wd: Dictionary = d["world"]
 	g.world = WorldMap.new(int(wd["w"]), int(wd["h"]))
 	g.world.corners = Marshalls.base64_to_raw(wd["corners"])

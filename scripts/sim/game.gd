@@ -95,9 +95,29 @@ var config := {}
 var last_winner := ""
 
 
+## Config::terrain_set and its latitude (ogamsing.cpp: 45, 20, 70).
+const TERRAIN_LATITUDE := [45, 20, 70]
+
+
+func _apply_terrain_set() -> void:
+	var ts := clampi(int(config.get("terrain_set", 1)), 1, 2)
+	Assets.use_terrain_set(ts)
+	weather.init_latitude(TERRAIN_LATITUDE[ts - 1])
+
+
+## The colours at the start (Config::player_nation_color): the player's
+## chosen one first, the others in their order.
+func _start_color(i: int, _human: bool, cfg: Dictionary) -> Color:
+	var all: Array = Defs.NATION_COLORS + Defs.EXTRA_NATION_COLORS
+	var c: Color = all[clampi(int(cfg.get("color", 0)), 0, Defs.NATION_COLORS.size() - 1)]
+	var order: Array = [c] + all.filter(func(x): return x != c)
+	return order[i % order.size()]
+
+
 func start(cfg: Dictionary) -> void:
 	Defs.load_from_assets()
 	config = cfg.duplicate()
+	_apply_terrain_set()
 	rng.seed = cfg.get("seed", randi())
 	HeroRes.init(self)
 	if cfg.get("campaign_battle") != null:
@@ -265,7 +285,7 @@ func _create_nations(cfg: Dictionary) -> void:
 		var race: String = humans[i]["race"] if human else race_pool[(i - humans.size()) % race_pool.size()]
 		if not human and cfg.get("random_start", false):
 			race = Defs.races[rng.randi() % Defs.races.size()]["code"]     # Battle::create_ai_nation: any race
-		var n := Nation.new(i + 1, race, Defs.nation_color_at(i), not human or cfg.get("autoplay", false))
+		var n := Nation.new(i + 1, race, _start_color(i, human, cfg), not human or cfg.get("autoplay", false))
 		n.is_player = human
 		player_species = {}
 		for m in Defs.monsters:

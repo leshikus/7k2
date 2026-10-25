@@ -384,5 +384,25 @@ func _ready() -> void:
 		g.deselect(home)
 		_check(nb.migrate_source() == null, "no icon once the town is deselected")
 
+	# --- the terrain type and the player's colour (Config::terrain_set, player_nation_color)
+	var plants1 := Assets.plant_bitmaps.size()
+	var g2 := Game.new()
+	add_child(g2)
+	g2.start({"seed": 3, "size": 80, "race": "NORMAN", "ai_count": 2, "fryhtan_count": 0, "lairs": 0, "terrain_set": 2, "color": 3})
+	_check(Assets.terrain_set == 2 and not Assets.plant_bitmaps.is_empty() and not Assets.load_rocks().is_empty(), "badlands: their own plants (%d, fertile %d) and rocks" % [Assets.plant_bitmaps.size(), plants1])
+	_check(g2.weather.avg_temp == 26 and g2.weather.temp_amp == 5, "and a hotter climate at latitude 20 (%d, swing %d)" % [g2.weather.avg_temp, g2.weather.temp_amp])
+	_check(g2.player().color == Defs.NATION_COLORS[3], "the player's chosen colour")
+	var cols2 := {}
+	for n2 in g2.nations:
+		cols2[n2.color.to_html()] = true
+	_check(cols2.size() == g2.nations.size(), "every kingdom a colour of its own")
+	g2.queue_free()
+	var g3 := Game.new()
+	add_child(g3)
+	g3.start({"seed": 3, "size": 60, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "lairs": 0})
+	_check(Assets.terrain_set == 1 and g3.weather.avg_temp == 15, "a new game is fertile again, at latitude 45 (%d)" % g3.weather.avg_temp)
+	g3.queue_free()
+	Game.inst = g
+
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL")
 	get_tree().quit()

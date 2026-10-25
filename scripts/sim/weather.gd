@@ -19,6 +19,13 @@ var wind_dir := 0
 var wind_spd := 10
 
 
+## Weather::init_date: the average temperature and its seasonal swing from
+## the latitude (45 for fertile land, 20 for badlands).
+func init_latitude(latitude: int) -> void:
+	avg_temp = int(35.0 - absf(latitude / 90.0 * 40.0))
+	temp_amp = int(17.0 * sin(latitude * PI / 180.0))
+
+
 func base_temp() -> int:
 	return int(avg_temp + temp_amp * sin(season_phase / 365.0 * TAU))
 
