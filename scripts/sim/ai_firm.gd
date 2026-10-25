@@ -127,7 +127,8 @@ static func _has_consumers(ai: NationAI, at: Vector2i) -> bool:
 ## power), lifted by the commander's leadership, plus his own.
 static func total_combat_level(f: Firm) -> int:
 	if not Espionage.is_camp(f) and f.code != "LAIR":
-		if f.code.ends_with("LISHORR") or f.code == "OFFENSIV":
+		# FirmLishorr / FirmOffensive2 (the Testudo, OFF_BLD3)::obj_power
+		if f.code.ends_with("LISHORR") or f.code == "OFF_BLD3":
 			return int(f.hp) * 2
 		return 0
 	var total := 0
