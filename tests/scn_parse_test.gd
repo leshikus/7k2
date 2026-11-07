@@ -3,6 +3,8 @@ extends Node
 func _ready() -> void:
 	Assets.load_install()
 	for info in ScenarioFile.list_premade():
+		if str(info["path"]).get_extension().to_lower() == "json":
+			continue        # an editor scenario: a saved game, not a .scn file
 		var s := ScenarioFile.new()
 		var t0 := Time.get_ticks_msec()
 		var ok := s.load_file(info["path"])
