@@ -6,7 +6,13 @@ departs from the original game, in DIFFERENCES.md).
 
 ## Open
 
-Nothing open. Report anything new; a saved game of the moment helps most.
+- **Fryhtans stuck (a Kerassos unable to take a sword, groups at lairs, a
+  Kharshuf pile)** - *under observation*. Causes found and fixed: units now
+  give up on what they cannot reach; nothing is built over an item, and an
+  item on a blocked cell is taken from beside it; commanders no longer take
+  turns ousting each other from a lair; the computer fetches items as in the
+  original. Two-year all-AI games show no stuck units, but the reported
+  moment itself was never reproduced: a saved game of it would settle it.
 
 ## Fixed
 
