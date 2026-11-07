@@ -67,5 +67,44 @@ func _ready() -> void:
 		ok = ok and cast
 		g.queue_free()
 		await get_tree().process_frame
+	# --- UnitGod::think_viking_god: a computer's fighting god joins the
+	# weightiest attack of its kingdom, and goes when long at peace and hurt
+	var gv := Game.new()
+	add_child(gv)
+	gv.start({"seed": 4, "size": 90, "race": "NORMAN", "ai_count": 1, "fryhtan_count": 0, "lairs": 0})
+	var vk := gv.nation(2)
+	vk.race = "VIKING"
+	gv.declare_war(1, 2)
+	var phome: Town = gv.towns.filter(func(t): return t.nation_id == 1)[0]
+	var fort := gv.spawn_firm("FORT", 1, "NORMAN", gv._place_near(phome.footprint(), 6, 6, 10), true)
+	var vc := gv.free_unit_cell(Vector2i(fort.center_loc()) + Vector2i(14, 0))
+	var vgod := gv.spawn_unit(Defs.gods["VIKING"]["unit"], 2, vc, 100.0)
+	var raider := gv.spawn_unit("VI_INF", 2, gv.free_unit_cell(vc + Vector2i(1, 1)), 40.0)
+	raider.order_attack(fort)
+	var joined := false
+	for d in 9:
+		for f in Defs.FRAMES_PER_DAY:
+			gv.sim_frame()
+		if vgod.target == fort:
+			joined = true
+			break
+	print("viking god joins the attack on the fort: ", joined)
+	ok = ok and joined
+	vgod.stop()
+	raider.die(null)
+	vgod.hp = 1.0
+	vk.last_war_day = gv.day - 200
+	var gone := false
+	for d in 120:
+		for f in Defs.FRAMES_PER_DAY:
+			gv.sim_frame()
+		vk.last_war_day = gv.day - 200
+		if vgod.dead or not gv.units.has(vgod):
+			gone = true
+			break
+	print("hurt and long at peace, it goes: ", gone)
+	ok = ok and gone
+	gv.queue_free()
+	await get_tree().process_frame
 	print("RESULT: ", "PASS" if ok else "FAIL")
 	get_tree().quit()

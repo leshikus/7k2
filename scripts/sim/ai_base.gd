@@ -41,12 +41,75 @@ func _aggressiveness() -> int:
 
 
 func _use_gods() -> void:
-	for u in g.units:
-		if not u.is_god or u.nation_id != n.id or u.dead or not u.can_cast_power() or u.cast_target.x >= 0:
+	for u in g.units.duplicate():
+		if not u.is_god or u.nation_id != n.id or u.dead:
+			continue
+		if u.god_info().get("race", "") in ATTACK_GODS:
+			if g.day % 7 == u.obj_id % 7 and u.order == Unit.Order.IDLE and not u.attacking:
+				_think_attack_god(u)
+			continue
+		if not u.can_cast_power() or u.cast_target.x >= 0:
 			continue
 		var at := _god_target(u)
 		if at.x >= 0:
 			u.order_cast_power(at)
+
+
+## UnitGod::think_norman/viking/celt/chinese_god: these Greater Beings fight.
+const ATTACK_GODS := ["NORMAN", "VIKING", "CELTIC", "CHINESE"]
+
+
+## UnitGod::think_*_god for a fighting god: join the weightiest attack of the
+## kingdom's units - or, long at peace and hurt, go (resign).
+func _think_attack_god(god: Unit) -> void:
+	var target := _god_attack_target(god)
+	if target != null:
+		god.order_attack(target)
+	elif int(god.hp) / 2 < int(god.max_hp) and n.peaceful_days() > 100 \
+			and g.rng.randi() % maxi(1, int(god.max_hp)) > 2 * int(god.hp):
+		god.die(null)
+		g.remove_unit(god)
+
+
+## UnitGod::think_god_attack_target: among the kingdom's units on the attack,
+## the target weighing most - an enemy troop by its men's hit points, a
+## building by its own (a camp twice), a town by its wall and defenders - less
+## distance/8, a general's target 10% and a king's 20% heavier; 50 at least.
+func _god_attack_target(god: Unit) -> GameObj:
+	var best: GameObj = null
+	var best_w := 0
+	for u in g.units:
+		if u.nation_id != n.id or u.dead or u.inside_firm != null or u == god:
+			continue
+		if u.order != Unit.Order.ATTACK or u.target == null or not is_instance_valid(u.target) or u.target.dead:
+			continue
+		var t: GameObj = u.target
+		var w := 0
+		if t is Unit:
+			var tu := t as Unit
+			var lead: Unit = tu if tu.rank >= Defs.Rank.GENERAL else tu.leader
+			if lead != null and is_instance_valid(lead) and not lead.dead:
+				for m in g.units:
+					if not m.dead and (m == lead or m.leader == lead):
+						w += int(m.hp)
+			else:
+				w -= int(tu.hp)
+		elif t is Firm:
+			w = int(t.hp)
+			if Espionage.is_camp(t):
+				w += int(t.hp)
+		elif t is Town:
+			var tt := t as Town
+			w += int(tt.wall_hp) + (tt.jobless() + tt.defenders.size()) * 2
+		w -= int(god.distance_to(t)) / 8
+		if u.rank == Defs.Rank.GENERAL:
+			w += w / 10
+		elif u.rank == Defs.Rank.KING:
+			w += w / 5
+		if w > best_w:
+			best_w = w
+			best = t
+	return best if best_w >= 50 else null
 
 
 func _god_target(god: Unit) -> Vector2i:

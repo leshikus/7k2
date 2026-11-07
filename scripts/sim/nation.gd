@@ -120,6 +120,14 @@ func is_hostile_to(other_id: int) -> bool:
 
 
 ## Money in (v > 0) or out, of a kind such as "Taxes" or "Buildings".
+var last_war_day := 0              # NationBase::last_war_date: the last day it fought
+
+
+## NationBase::peaceful_days
+func peaceful_days() -> int:
+	return Game.inst.day - last_war_day
+
+
 func add_cash(v: float, kind := "Other") -> void:
 	cash += v
 	if v >= 0:

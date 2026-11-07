@@ -167,7 +167,7 @@ static func _nation(n: Nation) -> Dictionary:
 		"relations": _int_keys_to_str(n.relations), "prayer_points": n.prayer_points,
 		"income_year": n.income_year, "expense_year": n.expense_year,
 		"last_income_year": n.last_income_year, "last_expense_year": n.last_expense_year,
-		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score,
+		"income_by": n.income_by, "expense_by": n.expense_by, "last_income_by": n.last_income_by, "last_expense_by": n.last_expense_by, "kill_monster_score": n.kill_monster_score, "last_war": n.last_war_day,
 		"is_fryhtan": n.is_fryhtan, "monster_code": n.monster_code, "live_points": n.live_points, "had_base": n.had_base, "homeless_days": n.homeless_days,
 		"known_gods": n.known_gods.keys(), "mega_plans": n.mega_plans.keys(), "items_acquired": n.items_acquired.keys(),
 		"contact": n.contact.keys(), "imports": [_int_keys_to_str(n.import_year), _int_keys_to_str(n.last_import_year)], "trade_treaty": _int_keys_to_str(n.trade_treaty), "ai_rel": _int_keys_to_str(n.ai_rel),
@@ -340,6 +340,7 @@ static func load_path(g: Game, path: String) -> String:
 		n.last_expense_by = nd.get("last_expense_by", {})
 		n.last_expense_year = float(nd.get("last_expense_year", 0.0))
 		n.kill_monster_score = float(nd.get("kill_monster_score", 0.0))
+		n.last_war_day = int(nd.get("last_war", 0))
 		var imp: Array = nd.get("imports", [{}, {}])
 		for k in imp[0]:
 			n.import_year[int(k)] = float(imp[0][k])

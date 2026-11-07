@@ -95,6 +95,12 @@ func take_damage(amount: float, attacker: GameObj) -> void:
 			d = 1.0
 		amount = minf(d, amount)
 	hp -= amount / Defs.ATTACK_SLOW_DOWN
+	# NationBase::set_at_war_today: both sides of a fight are at war today
+	if attacker and is_instance_valid(attacker) and Game.inst:
+		for nid in [nation_id, attacker.nation_id]:
+			var wn = Game.inst.nation(nid) if nid > 0 else null
+			if wn:
+				wn.last_war_day = Game.inst.day
 	# BaseObj::being_attack_hit: every blow struck at a Fryhtan adds to the
 	# attacking kingdom's Fryhtan battling score
 	if attacker and is_instance_valid(attacker) and attacker.nation_id > 0 and attacker.nation_id != nation_id:
