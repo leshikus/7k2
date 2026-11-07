@@ -1655,7 +1655,11 @@ func _pick_up_treasures() -> void:
 		for u in units_near(t.center_loc(), 1.5):
 			if u.dead or u.inside_firm:
 				continue
-			if u.cell() != t.cell and not (blocked and maxi(absi(u.cell().x - t.cell.x), absi(u.cell().y - t.cell.y)) <= 1):
+			# beside it: when its cell cannot be stood on, or for a unit sent for
+			# it that found someone standing there
+			var beside := maxi(absi(u.cell().x - t.cell.x), absi(u.cell().y - t.cell.y)) <= 1
+			var sent_for: bool = u.has_meta("fetch") and u.get_meta("fetch") == t
+			if u.cell() != t.cell and not (beside and (blocked or sent_for)):
 				continue
 			if _take(t, u):
 				break
