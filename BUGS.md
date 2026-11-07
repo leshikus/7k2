@@ -11,8 +11,11 @@ departs from the original game, in DIFFERENCES.md).
   give up on what they cannot reach; nothing is built over an item, and an
   item on a blocked cell is taken from beside it; commanders no longer take
   turns ousting each other from a lair; the computer fetches items as in the
-  original. Two-year all-AI games show no stuck units, but the reported
-  moment itself was never reproduced: a saved game of it would settle it.
+  original. Piles reproduced in Fryhtan-heavy test games: attackers all
+  struck from the one location nearest their target, and idle units with odd
+  ids never stepped aside; now one unit keeps a location and the others make
+  room (49 piles of 10+ days in four games down to 11, those in mid-blow).
+  The sword moment itself was never reproduced: a saved game would settle it.
 
 ## Fixed
 

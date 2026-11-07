@@ -1842,6 +1842,25 @@ func free_unit_cell(c: Vector2i) -> Vector2i:
 	return c
 
 
+## A free cell (walkable, no unit on it) from which a unit can strike `target`
+## within `rng` cells, the nearest to `from`; or (-1, -1). One unit to a
+## location, as in the original, so attackers spread round what they attack.
+func free_attack_cell(target: GameObj, from: Vector2i, rng: int) -> Vector2i:
+	var r := target.footprint().grow(maxi(1, rng))
+	var best := Vector2i(-1, -1)
+	var best_d := 1 << 30
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			var p := Vector2i(x, y)
+			if target.footprint().has_point(p) or not world.is_walkable(p) or unit_cells.get(p, 0) > 0:
+				continue
+			var d := (p - from).length_squared()
+			if d < best_d:
+				best_d = d
+				best = p
+	return best
+
+
 func site_at_rect(r: Rect2i) -> Site:
 	for s in sites:
 		if s.footprint().intersects(r):

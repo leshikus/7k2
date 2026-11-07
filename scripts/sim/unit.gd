@@ -761,7 +761,8 @@ func _idle() -> void:
 	scan_timer = 10 + (obj_id % 7)
 	# Step aside when sharing a location with another unit.
 	var c := cell()
-	if Game.inst.unit_cells.get(c, 0) > 1 and obj_id % 2 == 0 and not is_god:
+	# (the first there - lowest id - keeps it; the others make room)
+	if Game.inst.unit_cells.get(c, 0) > 1 and not is_god 			and Game.inst.units_near(center_loc(), 1.0).any(func(o): return o != self and not o.dead and o.inside_firm == null and o.cell() == c and o.obj_id < obj_id):
 		var free := Game.inst.free_unit_cell(c)
 		if free != c:
 			order = Order.MOVE
@@ -911,6 +912,8 @@ func _do_attack() -> bool:
 		stop()
 		return false
 	var dist := distance_to(target)
+	if dist <= float(att["range"]) and not attacking and _spread_out(int(att["range"])):
+		return true
 	if dist <= float(att["range"]):
 		path.clear()
 		path_i = 0
@@ -923,6 +926,38 @@ func _do_attack() -> bool:
 			anim_frame = 0
 		return false
 	return _close_in(att)
+
+
+## Sharing its location with others of its side while in reach of the target:
+## every 20 frames or so half of them step to a free location still in reach
+## (the original keeps one unit to a location, so a siege does not heap up).
+func _spread_out(rng: int) -> bool:
+	if _spreading:
+		if path_i < path.size() and goal != cell():
+			_step_move()
+			return true             # on its way to a free place
+		_spreading = false
+	var g := Game.inst
+	if int(g.unit_cells.get(cell(), 0)) < 2 or (g.frame + obj_id) % 20 != 0:
+		return false
+	# the first one there (lowest id) keeps the place; the others make room
+	var c := cell()
+	if not g.units_near(center_loc(), 1.0).any(func(o): return o != self and not o.dead and o.inside_firm == null and o.cell() == c and o.obj_id < obj_id):
+		return false
+	if utype.get("flying", false) or is_god:
+		return false
+	var p := g.free_attack_cell(target, cell(), rng)
+	if p.x < 0 or (p - cell()).length_squared() > 36:
+		return false
+	_path_to(p)
+	if path_i >= path.size():
+		return false
+	_spreading = true
+	_step_move()
+	return true
+
+
+var _spreading := false
 
 
 func _close_in(att: Dictionary) -> bool:
