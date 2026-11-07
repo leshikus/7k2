@@ -3037,6 +3037,21 @@ func on_firm_destroyed(f: Firm, killer: GameObj) -> void:
 			if not b.is_empty():
 				rubble.append([b[0], Iso.to_screen(Vector2(f.x1, f.y1)) + b[1], frame + Defs.FRAMES_PER_DAY * 60])
 		play_sound("F", f.code, "DIE", f.center_loc())
+	# nothing may keep the building once it is freed: caravans drop it as a
+	# stop (one inside it dies with it), the computer's attack plans forget it
+	for cu in units.duplicate():
+		if not cu.is_caravan or cu.dead or not cu.stops.any(func(s): return not s.is_empty() and s.get("firm") == f):
+			continue
+		if cu.has_meta("hidden") and cu.dest_stop >= 0 and cu.dest_stop < cu.stops.size() and cu.stops[cu.dest_stop].get("firm") == f:
+			cu.remove_meta("hidden")
+			cu.die(null)
+			continue
+		Caravans.update_stops(cu)
+	for an in nations:
+		if an.ai is NationAI:
+			an.ai.attack_camps = an.ai.attack_camps.filter(func(a): return a["firm"] != f)
+			if an.ai.lead_attack_camp == f:
+				an.ai.lead_attack_camp = null
 	firms.erase(f)
 	if f.code == "LAIR" and killer and killer.nation_id > 0 and killer.nation_id != GameObj.MONSTER_NATION:
 		var kn := nation(killer.nation_id)

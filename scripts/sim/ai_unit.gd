@@ -31,7 +31,7 @@ static func process(ai: NationAI, u: Unit, day: int) -> void:
 	if leader_race and u.rank == Defs.Rank.GENERAL and day % 7 == id % 7 and think_general_flee(ai, u):
 		return
 	# stop attacking a village that has no resistance left
-	if u.order == Unit.Order.ATTACK and u.target is Town and u.target.nation_id == 0 and u.target.resistance_to(ai.n.id) < 1.0:
+	if u.order == Unit.Order.ATTACK and is_instance_valid(u.target) and u.target is Town and u.target.nation_id == 0 and u.target.resistance_to(ai.n.id) < 1.0:
 		u.stop()
 		return
 	if u.order != Unit.Order.IDLE:

@@ -1180,7 +1180,8 @@ func _unit_actions(sel: Array) -> void:
 			for u in own:
 				if u.rank != Defs.Rank.KING:
 					_do(u, "resign"), true, "Let the selected units go. People let go wander the land; they may settle a new village.", Callable(), "✖")
-		# auto retreat (oun_if.cpp disp_auto_menu; for every fighting unit here)
+	# auto retreat (oun_if.cpp disp_auto_menu): only with a fighting unit selected
+	if not fighters.is_empty():
 		var ar: int = fighters[0].auto_retreat
 		var nar: int = Unit.AUTO_RETREAT_LEVELS[(Unit.AUTO_RETREAT_LEVELS.find(ar) + 1) % Unit.AUTO_RETREAT_LEVELS.size()]
 		var rb := _add_action("Auto retreat: %s" % ("off" if ar == 0 else "%d%%" % ar), func():
