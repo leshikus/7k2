@@ -86,6 +86,13 @@ of the original that are kept on purpose are listed at the end.
   figures are set smaller to fit.
 
 ### Other
+- **The computer fetches items daily, once per unit**: the scan for items on
+  the ground (Site::ai_get_site_object) runs every day rather than every
+  five, assigns each unit only its nearest item, and a unit that finds no way
+  to an item leaves it alone for 30 days (the original re-sends it). Random
+  maps place items only where a path leads.
+- **One unit to a location**: attackers in reach spread to free locations
+  round their target, and idle units sharing one step apart.
 - **Desertion below 30 loyalty**: a unit in the field below 30 with no kingdom
   to go over to deserts with a chance of (30 - loyalty)/30 every 15 days
   (the original: only at loyalty 0). Fryhtans can go over to another Fryhtan

@@ -1630,10 +1630,20 @@ func _generate_items() -> void:
 		var id := Items.random_id(rng, Items.MIN_RARITY, Items.MIN_RARITY + 1)
 		if id == 0:
 			break
-		var r := _random_free_rect(3, 3, 4, [], 0.0)
-		if r.x < 0:
+		# on land the kingdoms can reach (the original's region check), not
+		# in a pocket shut in by rocks or water
+		var at := Vector2i(-1, -1)
+		for k in 20:
+			var r := _random_free_rect(3, 3, 4, [], 0.0)
+			if r.x < 0:
+				break
+			var c := r + Vector2i.ONE
+			if start_points.is_empty() or not world.find_path(world.nearest_walkable(Vector2i(start_points[0]), 8), c).is_empty():
+				at = c
+				break
+		if at.x < 0:
 			break
-		spawn_treasure(Treasure.Kind.ITEM, id, Items.random_para(id, rng), r + Vector2i.ONE)
+		spawn_treasure(Treasure.Kind.ITEM, id, Items.random_para(id, rng), at)
 
 
 ## SiteArray::next_day: a unit standing on a treasure takes it (Site::get_site_object).
@@ -1649,46 +1659,79 @@ func _pick_up_treasures() -> void:
 				continue
 			if _take(t, u):
 				break
-	if day % 5 == 0 and frame % Defs.FRAMES_PER_DAY == 0:
-		for t in treasures.duplicate():
-			if is_instance_valid(t):
-				_ai_get_site_object(t)
+	# daily (the original every 5 days, by when a fighter near an item has
+	# often been sent home past its reach)
+	if frame % Defs.FRAMES_PER_DAY == 0:
+		_ai_get_site_objects()
 
 
-## Site::ai_get_site_object (every 5 days): the computer's fighters near an
+## Site::ai_get_site_object (daily here): the computer's fighters near an
 ## item, gold, a scroll (of their race) or plans on the ground go for it - the
 ## nearest five, from 10 cells away at first to 30 after three years.
 const MAX_NOTIFY_GET_RANGE := 30
 const MAX_UNIT_TO_ORDER := 5
 
 
-func _ai_get_site_object(t: Treasure) -> void:
+## One pass over every item on the ground: the pairs of a computer's fighter
+## and an item in reach, nearest first; each unit is sent once (to its nearest
+## item) and each item gets up to five - so no one is sent to one item and
+## then another in the same pass, nor pulled off an item it is walking to.
+func _ai_get_site_objects() -> void:
 	var rng_cells := mini(MAX_NOTIFY_GET_RANGE, 10 + day / 60)
-	var cands: Array = []
-	for u in units_near(t.center_loc(), float(rng_cells)):
-		if u.dead or u.inside_firm != null or u.race == "" or u.is_civilian() or u.is_weapon or u.is_caravan:
+	var pairs: Array = []
+	for t in treasures:
+		if not is_instance_valid(t):
 			continue
-		if u.item_id != 0 or u.ai_action_id > 0:
+		for u in units_near(t.center_loc(), float(rng_cells)):
+			if not _may_fetch(u, t):
+				continue
+			var d := Vector2(u.cell()).distance_to(Vector2(t.cell))
+			if d <= float(rng_cells):
+				pairs.append([d, u, t])
+	pairs.sort_custom(func(a, b): return a[0] < b[0])
+	var sent := {}
+	var per_item := {}
+	var done := {}
+	for pr in pairs:
+		var u: Unit = pr[1]
+		var t: Treasure = pr[2]
+		if sent.has(u) or done.has(t) or int(per_item.get(t, 0)) >= MAX_UNIT_TO_ORDER:
 			continue
-		var n: Nation = u.nation()
-		if n == null or n.ai == null or u.nation_id == player_id:
+		sent[u] = true
+		# already on its way to this one: let it go on
+		if u.has_meta("fetch") and u.get_meta("fetch") == t and u.order == Unit.Order.MOVE and u.goal == t.cell:
+			per_item[t] = int(per_item.get(t, 0)) + 1
 			continue
-		if t.kind == Treasure.Kind.SCROLL and u.race != t.race():
-			continue
-		if t.kind == Treasure.Kind.ITEM and not Items.can_pick(u):
-			continue
-		if u.attacking or u.order == Unit.Order.ATTACK:
-			continue
-		cands.append(u)
-	cands.sort_custom(func(a, b): return a.center_loc().distance_to(t.center_loc()) < b.center_loc().distance_to(t.center_loc()))
-	var ordered := 0
-	for u in cands:
 		u.order_move(t.cell)
-		if maxi(absi(u.cell().x - t.cell.x), absi(u.cell().y - t.cell.y)) <= 1:
-			return              # one standing next to it will do
-		ordered += 1
-		if ordered >= MAX_UNIT_TO_ORDER:
-			return
+		if u.path.is_empty() and u.cell() != t.cell:
+			# no way there (shut in by rocks, water or buildings): not tried
+			# again for 30 days - it stood there trying for ever
+			var nf: Dictionary = u.get_meta("no_fetch", {})
+			nf[t.get_instance_id()] = frame + Defs.FRAMES_PER_DAY * 30
+			u.set_meta("no_fetch", nf)
+			u.stop()
+			continue
+		u.set_meta("fetch", t)
+		per_item[t] = int(per_item.get(t, 0)) + 1
+		if float(pr[0]) <= 1.5:
+			done[t] = true          # one standing next to it will do
+
+
+func _may_fetch(u: Unit, t: Treasure) -> bool:
+	if u.dead or u.inside_firm != null or u.race == "" or u.is_civilian() or u.is_weapon or u.is_caravan:
+		return false
+	if u.item_id != 0 or u.ai_action_id > 0 or u.attacking or u.order == Unit.Order.ATTACK:
+		return false
+	var n: Nation = u.nation()
+	if n == null or n.ai == null or u.nation_id == player_id:
+		return false
+	if t.kind == Treasure.Kind.SCROLL and u.race != t.race():
+		return false
+	if t.kind == Treasure.Kind.ITEM and not Items.can_pick(u):
+		return false
+	if u.has_meta("no_fetch") and int(u.get_meta("no_fetch").get(t.get_instance_id(), -1)) > frame:
+		return false
+	return true
 
 
 func _take(t: Treasure, u: Unit) -> bool:
@@ -2089,7 +2132,9 @@ func sim_frame() -> void:
 		rubble = rubble.filter(func(r): return r[2] > frame)
 		if rubble.size() != before:
 			_ground_dirty = true
-	if frame % 10 == 0 and not treasures.is_empty():
+	# every frame: a unit passing over an item, or sent off the moment it
+	# arrives, must not miss it (once every 10 frames it often did)
+	if not treasures.is_empty():
 		_pick_up_treasures()
 	if frame % Defs.FRAMES_PER_DAY == 0:
 		next_day()

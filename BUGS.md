@@ -6,16 +6,7 @@ departs from the original game, in DIFFERENCES.md).
 
 ## Open
 
-- **Fryhtans stuck (a Kerassos unable to take a sword, groups at lairs, a
-  Kharshuf pile)** - *under observation*. Causes found and fixed: units now
-  give up on what they cannot reach; nothing is built over an item, and an
-  item on a blocked cell is taken from beside it; commanders no longer take
-  turns ousting each other from a lair; the computer fetches items as in the
-  original. Piles reproduced in Fryhtan-heavy test games: attackers all
-  struck from the one location nearest their target, and idle units with odd
-  ids never stepped aside; now one unit keeps a location and the others make
-  room (49 piles of 10+ days in four games down to 11, those in mid-blow).
-  The sword moment itself was never reproduced: a saved game would settle it.
+Nothing open. Report anything new; a saved game of the moment helps most.
 
 ## Fixed
 
@@ -81,3 +72,5 @@ departs from the original game, in DIFFERENCES.md).
 | Show soldiers' loyalty drift | done: "loyalty 45 → 60" for units in the field, commanders and soldiers in camps |
 | Health bar looked like two lines | fixed: one solid bar on a dark track |
 | Fryhtans stuck: a Kerassos unable to take a sword, groups standing at lairs, a Kharshuf pile | fixed: units give up on what they cannot reach; nothing is built over an item, and an item on a blocked cell is taken from beside it; commanders no longer take turns ousting each other from a lair; the computer now fetches items as in the original (Site::ai_get_site_object). Two-year all-AI games show no stuck units |
+| (reproduced) A Kerassos trying to get a sword and never getting it | reproduced in a test of 138 swords by rocks: units were sent after items no path reaches, again and again; sent from one item to another in the same pass; and the pickup check ran only every 10th frame. Now a unit with no way to an item leaves it for 30 days, each unit is sent to its nearest item only, the check runs every frame, and random maps place items only where a path leads: every reachable sword is taken |
+| (reproduced) Kharshuf piled on one cell | reproduced in Fryhtan-heavy test games: attackers all struck from one location, and idle units with odd ids never stepped aside; now one unit keeps a location and the others spread (49 long piles in four games down to 11, those mid-blow) |
